@@ -11,8 +11,8 @@ new Azure resource must be justified against that budget before it lands in `/in
 
 ```
 /infra                       IaC Bicep: main.bicep + modules/ + main.<env>.bicepparam
-/db                          SQL: schema.sql, seed.sql, migrations, Entra user bootstrap
-/api                         Azure Functions v4 (TypeScript, Node 20) — shared by both frontends
+/db                          SQL: versioned migrations, seed data, Entra user bootstrap
+/api                         Azure Functions v4 (TypeScript, Node 22) — shared by both frontends
 /frontend/lehub.ms           Public SPA (React 19 + Vite)
 /frontend/admin.lehub.ms     Admin backoffice SPA (React 19 + Vite)
 /docs                        Technical docs: local dev, deployment, ADRs
@@ -35,7 +35,7 @@ the maintainer first — propose it, do not create it.
 | Icons | Lucide React | only icon library; never emojis as UI icons |
 | Routing | React Router | v7 |
 | Auth (client) | `oidc-client-ts` | Entra External ID, PKCE |
-| API | Azure Functions v4 | Node 20, TypeScript, Linux, FC1 Flex Consumption |
+| API | Azure Functions v4 | Node 22, TypeScript, Linux, FC1 Flex Consumption |
 | SQL driver | `mssql` | Managed Identity in cloud, SQL auth locally only |
 | JWT validation | `jose` | remote JWKS, cached |
 | Database | Azure SQL Database | Basic (prod) / `GP_S_Gen5_1` serverless auto-pause 60 min (dev) |
@@ -65,13 +65,13 @@ npm --prefix api run build                    # tsc
 npm --prefix api test                         # vitest run
 
 # Local full stack
-docker compose up -d                          # SQL Server 2022, persisted volume
-./scripts/db-init.sh local                    # apply db/schema.sql + db/seed.sql
-./scripts/dev-up.sh                           # idempotent bootstrap (docker + deps + db)
-./scripts/dev-start.sh                        # run api + both frontends
+./scripts/dev-up.sh                           # idempotent bootstrap (toolchain + env + deps + db)
+./scripts/dev-start.sh                        # run api (7071) + web (5173) + admin (5174)
+./scripts/dev-down.sh [--volumes]             # stop the DB; --volumes wipes it
 
-# Database (cloud)
-./scripts/db-init.sh dev|prod                 # schema + seed via Entra auth (sqlcmd -G)
+# Database (any environment)
+./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
+./scripts/db-seed.sh local|dev [--demo]       # reference data, + demo data on request
 ./scripts/db-bootstrap-mi.sh dev|prod         # CREATE USER for the managed identity
 
 # Infrastructure
@@ -81,11 +81,17 @@ az deployment group create -g rg-lehub-<env> \
   --template-file infra/main.bicep --parameters infra/main.<env>.bicepparam
 ```
 
-Requires: Docker, Node 20, `func` (Core Tools 4), Azure CLI 2.60+, `az bicep`, `sqlcmd`, `gh`,
-membership in the `sg-lehub-sql-admins` Entra group for any cloud DB operation.
+Requires: Docker, Node 22 via `fnm` (pinned in `.nvmrc`), `func` (Core Tools 4), Azure CLI 2.60+,
+`az bicep`, `go-sqlcmd`, `gh`, membership in the `sg-lehub-sql-admins` Entra group for any cloud
+DB operation. Setup instructions live in `docs/local-dev.md`.
 
-TODO — to establish in this repo: the local `swa start` proxy configuration for two SWA sharing
-one Function App, and the `npm run` aggregator scripts at the root (if any).
+Two deliberate absences, both settled — do not reintroduce either:
+
+- **No root `package.json`.** `/scripts` orchestrates; `concurrently` is consumed from
+  `api/node_modules` rather than installed globally.
+- **No `swa start` proxy and no Vite dev proxy.** A Function App can only be linked to one
+  Static Web App, so both front-ends call the API cross-origin in every environment, and the
+  local loop must exercise that same path rather than hide it.
 
 ## Workflow
 
@@ -95,10 +101,10 @@ one Function App, and the `npm run` aggregator scripts at the root (if any).
    change, any new page or multi-file frontend feature, any dependency addition, anything
    touching CI/CD. Go straight to implementation for: single-file bug fixes, copy/label
    changes, test additions, doc edits, dependency version bumps already discussed.
-3. **Implement** on a branch dedicated to the issue.
+3. **Implement** on a branch dedicated to the **Feature**, one commit per Story.
 4. **Test.** `vitest` in `/api` and in the touched frontend must pass before pushing.
 5. **Review.** Run `/code-review` on the diff and resolve findings before opening the PR.
-6. **PR** linked to the issue, CI green, then merge. `main` is protected — never commit to it.
+6. **PR** linked to the Feature, CI green, then merge. `main` is protected — never commit to it.
 
 The design system and the UI mockup workflow are not defined yet — they will be added to this
 file when that work starts. Until then, do not introduce a `/design` directory, a design skill,
@@ -141,7 +147,8 @@ issues are never `qualified`.
 - **Bug**: concise, precise title. Body describes the bug, the affected screen, the observed
   vs. expected behavior, and the reproduction steps.
 
-**Branch**: `<type>/<issue-number>-<slug>` — e.g. `feat/42-filtre-par-techno`, `fix/57-jwt-audience`.
+**Branch**: `<type>/<issue-number>-<slug>`, numbered after the **Feature** it delivers (or the
+Bug it fixes) — e.g. `feat/42-filtre-par-techno`, `fix/57-jwt-audience`.
 
 **Commits**: Conventional Commits, subject in English, with a `Refs #<n>` trailer and a DCO
 sign-off:
@@ -168,8 +175,13 @@ gh pr create --fill --base develop --title "..." --body "Closes #<n>"
 gh pr checks
 ```
 
-**Rule: one issue → one branch → one PR.** No batching several issues in one PR, no direct
-commit on `main` or `develop`.
+**Rule: one Feature → one branch → one PR, one commit per Story.** The Feature is the unit of
+delivery; Stories remain the unit of specification and carry the acceptance criteria. Order the
+commits along the Stories' real dependencies so the PR stays reviewable commit by commit, and
+give each one a `Refs #<story>` trailer while the PR carries `Closes #<feature>`.
+
+A `Bug` is its own branch and its own PR, since it has no Stories under it. Never batch two
+Features in one PR, and never commit directly on `main` or `develop`.
 
 ## Non-negotiables
 
