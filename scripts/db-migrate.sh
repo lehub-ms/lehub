@@ -28,8 +28,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --dry-run) DRY_RUN=true; shift ;;
-    local|dev) ENV_NAME="$1"; shift ;;
-    *) usage >&2; die "Unexpected argument '$1'" ;;
+    -*) usage >&2; die "Unknown option '$1'" ;;
+    # The environment name is validated by sql_configure, the single place that
+    # knows which environments exist.
+    *) [[ -z "$ENV_NAME" ]] || { usage >&2; die "Unexpected argument '$1'"; }
+       ENV_NAME="$1"; shift ;;
   esac
 done
 
