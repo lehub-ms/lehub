@@ -56,7 +56,9 @@ anywhere. That is why the API declares `Host.CORS` in `api/local.settings.json` 
 Vite ports are strict — an unexpected origin would simply be refused.
 
 `dev-start.sh` stops everything if any one process fails, so a half-running stack never hides
-a problem.
+a problem. To stop the whole thing — the three processes *and* the database — run
+`./scripts/dev-down.sh`; Ctrl+C in the `dev-start.sh` terminal stops the processes but leaves
+the database up, which is usually what you want between two runs.
 
 ## Environment files
 
@@ -124,7 +126,7 @@ Same scripts in `frontend/admin.lehub.ms`.
 | `The Docker daemon is not reachable` | Docker Desktop is not running | Start it, then rerun `dev-up.sh` |
 | `Node 22 is required, found v20.x` / `v25.x` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
 | Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a different password | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
-| `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `lsof -ti:7071 \| xargs kill` |
+| `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `./scripts/dev-down.sh` |
 | Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | check `Host.CORS` in `api/local.settings.json` lists 5173 and 5174, and that Vite really bound those ports |
 | Page shows `Aucune réponse de http://localhost:7071` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |

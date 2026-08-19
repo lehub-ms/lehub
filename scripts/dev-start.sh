@@ -28,24 +28,15 @@ docker inspect -f '{{.State.Running}}' lehub-sql 2>/dev/null | grep -q true \
 CONCURRENTLY="$ROOT_DIR/api/node_modules/.bin/concurrently"
 [[ -x "$CONCURRENTLY" ]] || die "concurrently not found — run ./scripts/dev-up.sh to install dependencies."
 
-PORTS=(7071 5173 5174)
-
-for port in "${PORTS[@]}"; do
+for port in "${DEV_PORTS[@]}"; do
   if lsof -ti:"$port" >/dev/null 2>&1; then
-    die "Port $port is already in use. Stop the process holding it, or close a previous ./scripts/dev-start.sh."
+    die "Port $port is already in use. Run ./scripts/dev-down.sh, or stop whatever else is holding it."
   fi
 done
 
-# Anything still listening once concurrently returns is an orphan: npm spawns each
-# tool as a child of its own, so killing the npm wrapper does not always take the
-# tool with it. Reaping by port is the only reliable way back to a clean slate.
-cleanup() {
-  for port in "${PORTS[@]}"; do
-    # shellcheck disable=SC2046  # word splitting is intended: possibly several pids
-    kill $(lsof -ti:"$port" 2>/dev/null) 2>/dev/null || true
-  done
-}
-trap cleanup EXIT INT TERM
+# Anything still listening once concurrently returns is an orphan — see
+# stop_dev_processes in lib/common.sh for why signalling the wrappers is not enough.
+trap stop_dev_processes EXIT INT TERM
 
 # Two things this layout works around:
 #

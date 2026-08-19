@@ -36,6 +36,39 @@ sha256_of() {
   fi
 }
 
+# ─── Local processes ─────────────────────────────────────────────────────────
+# The ports the local stack listens on, in the order dev-start.sh names them.
+DEV_PORTS=(7071 5173 5174)
+
+# Stop whatever is listening on those ports.
+#
+# Killing by port rather than by pid tree is deliberate: npm spawns each tool as a
+# child of its own, and `func start` ignores SIGTERM — it restarts its language
+# worker instead of exiting. Signalling the wrapper is therefore not enough.
+stop_dev_processes() {
+  local port pids stopped=0
+  for port in "${DEV_PORTS[@]}"; do
+    pids="$(lsof -ti:"$port" 2>/dev/null || true)"
+    [[ -n "$pids" ]] || continue
+    # shellcheck disable=SC2086  # word splitting is intended: possibly several pids
+    kill $pids 2>/dev/null || true
+    stopped=$((stopped + 1))
+  done
+
+  # Give them a moment to go down on their own, then insist.
+  if [[ $stopped -gt 0 ]]; then
+    sleep 2
+    for port in "${DEV_PORTS[@]}"; do
+      pids="$(lsof -ti:"$port" 2>/dev/null || true)"
+      [[ -n "$pids" ]] || continue
+      # shellcheck disable=SC2086
+      kill -9 $pids 2>/dev/null || true
+    done
+  fi
+
+  return 0
+}
+
 # ─── SQL connection ──────────────────────────────────────────────────────────
 # One sqlcmd code path for every environment. Local uses SQL authentication — the
 # only place it is allowed; Azure SQL is Entra-only and reuses the current `az`

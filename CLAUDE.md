@@ -67,7 +67,7 @@ npm --prefix api test                         # vitest run
 # Local full stack
 ./scripts/dev-up.sh                           # idempotent bootstrap (toolchain + env + deps + db)
 ./scripts/dev-start.sh                        # run api (7071) + web (5173) + admin (5174)
-./scripts/dev-down.sh [--volumes]             # stop the DB; --volumes wipes it
+./scripts/dev-down.sh [--volumes]             # stop everything; --volumes wipes the DB
 
 # Database (any environment)
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
