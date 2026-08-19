@@ -35,7 +35,7 @@ done
 # Applications first: they hold connections to the database.
 running=()
 for port in "${DEV_PORTS[@]}"; do
-  lsof -ti:"$port" >/dev/null 2>&1 && running+=("$port")
+  [[ -n "$(port_listeners "$port")" ]] && running+=("$port")
 done
 
 if [[ ${#running[@]} -gt 0 ]]; then

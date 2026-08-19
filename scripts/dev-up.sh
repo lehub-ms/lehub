@@ -47,6 +47,14 @@ dim "docker running"
 
 need_cmd func "Install the Core Tools: npm install -g azure-functions-core-tools@4"
 need_cmd sqlcmd "Install go-sqlcmd: brew install sqlcmd"
+
+# Checked here even though they are used further down or by dev-start/dev-down, so a
+# missing one fails at the toolchain gate with guidance rather than as a bare
+# "command not found" halfway through. All three ship with macOS; a slim Linux
+# container is where they go missing.
+need_cmd openssl "Install OpenSSL — needed to generate the local SQL password."
+need_cmd perl "Install Perl — needed to template api/local.settings.json."
+need_cmd lsof "Install lsof — needed by dev-start.sh and dev-down.sh to manage ports."
 ok "Toolchain ready"
 
 # ─── 2. Environment files ────────────────────────────────────────────────────

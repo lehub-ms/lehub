@@ -94,7 +94,9 @@ sql_configure() {
   case "$env_name" in
     local)
       if [[ -z "${MSSQL_SA_PASSWORD:-}" ]]; then
-        [[ -f "$ROOT_DIR/.env" ]] || die ".env not found. Run: cp .env.example .env"
+        # Not `cp .env.example .env`: the template carries no password, dev-up.sh
+        # generates one.
+        [[ -f "$ROOT_DIR/.env" ]] || die ".env not found. Run ./scripts/dev-up.sh"
         set -a; . "$ROOT_DIR/.env"; set +a
       fi
       [[ -n "${MSSQL_SA_PASSWORD:-}" ]] || die "MSSQL_SA_PASSWORD is not set — see .env.example"
@@ -118,8 +120,10 @@ sql_configure() {
 }
 
 # Run a statement and return its rows, one per line, unformatted.
+# `-r 1` matters most here: callers capture this in "$(...)", so without it a SQL error
+# would be captured as if it were data — and silently discarded when the caller aborts.
 sql_query() {
-  sqlcmd "${SQL_ARGS[@]}" -d "$SQL_DB_NAME" -b -h -1 -W -s '|' -Q "SET NOCOUNT ON; $1" \
+  sqlcmd "${SQL_ARGS[@]}" -d "$SQL_DB_NAME" -b -r 1 -h -1 -W -s '|' -Q "SET NOCOUNT ON; $1" \
     | sed '/^$/d'
 }
 
