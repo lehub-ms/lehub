@@ -1,0 +1,46 @@
+# Local development — SQL Server 2022, the closest engine to Azure SQL.
+#
+#   docker compose up -d       start (data survives restarts via the named volume)
+#   docker compose down        stop, keep the data
+#   docker compose down -v     stop and wipe the data
+#
+# MSSQL_SA_PASSWORD comes from .env — see .env.example. Note that SQL Server only
+# applies it when it initialises an empty data directory: changing the password in
+# .env against an existing volume yields "Login failed for user 'sa'" and a container
+# stuck unhealthy. Recreate the volume (`docker compose down -v`) to pick up a new one.
+#
+# Cloud environments never use SQL authentication: Azure SQL is Entra-only and the
+# API connects with a managed identity. This container is the sole exception.
+
+# Pinned so the project — and therefore the volume name — does not depend on the
+# directory the repository happens to be cloned into.
+name: lehub
+
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: lehub-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env — see .env.example}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - lehub-sql-data:/var/opt/mssql
+    healthcheck:
+      # $$ escapes Compose interpolation so the container's own shell expands the
+      # variable — the password is never baked into the resolved config, and a
+      # password containing quotes or $ cannot break the command.
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' > /dev/null 2>&1",
+        ]
+      interval: 10s
+      retries: 10
+      start_period: 30s
+      timeout: 5s
+
+volumes:
+  lehub-sql-data:
