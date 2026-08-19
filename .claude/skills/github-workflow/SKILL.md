@@ -115,23 +115,29 @@ sont livrées par la même PR.
 
 ### Mettre à jour le statut
 
-Prérequis : `gh auth refresh -s project` (le scope `project` n'est pas dans le token par
-défaut ; sans lui toutes les commandes ci-dessous échouent en `INSUFFICIENT_SCOPES`).
+Prérequis : `gh auth refresh -h github.com -s project` (le scope `project` n'est pas dans le
+token par défaut ; sans lui toutes les commandes ci-dessous échouent en `INSUFFICIENT_SCOPES`).
+Le flux device-code exige un vrai TTY : à lancer dans un terminal, pas via `!` dans Claude Code.
 
-Résous les identifiants une fois par session — ce ne sont pas des flags `gh` classiques :
+Le Project est **`LeHub.ms`, numéro 4** sur l'organisation `lehub-ms`
+(`PVT_kwDOEpAVBs4Bguvh`). Résous les IDs en début de session — ils changent dès qu'on touche
+au champ, ne les code jamais en dur :
 
 ```bash
-# 1. numéro et ID du Project
-gh project list --owner lehub-ms --format json
-
-# 2. ID du champ Status et de ses options
-gh project field-list <project-number> --owner lehub-ms --format json \
+# ID du champ Status et de ses options
+gh project field-list 4 --owner lehub-ms --format json \
   --jq '.fields[] | select(.name=="Status") | {id, options}'
 
-# 3. ID de l'item correspondant à l'issue
-gh project item-list <project-number> --owner lehub-ms --format json --limit 200 \
+# ID de l'item correspondant à l'issue
+gh project item-list 4 --owner lehub-ms --format json --limit 200 \
   --jq '.items[] | select(.content.number==<n>) | {id, title}'
 ```
+
+⚠️ **Ne touche jamais aux options du champ `Status` sans sauvegarde.** La mutation
+`updateProjectV2Field(singleSelectOptions:)` ne fusionne pas par nom : elle **recrée toutes les
+options avec de nouveaux IDs et vide le statut de tous les items du Project**. Si c'est
+inévitable, dumpe `gh project item-list 4 --owner lehub-ms --format json --limit 100` avant, et
+rejoue les statuts après.
 
 Puis écris le statut, pour chaque issue du lot :
 
