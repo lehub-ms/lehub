@@ -19,10 +19,12 @@ frontend/*/dist/
 frontend/*/.vite/
 infra/*.json
 
-# Environment files — never committed, templates only
+# Environment files — never committed, templates and test fixtures only
 .env
 .env.*
 !.env.example
+# Vite ignores .env.local in test mode, so tests need their own committed fixture.
+!.env.test
 frontend/*/.env.local
 infra/*.local.bicepparam
 
