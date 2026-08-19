@@ -1,0 +1,11 @@
+.vscode
+__blobstorage__
+__queuestorage__
+local.settings.json
+local.settings.json.example
+test
+src
+tsconfig.json
+vitest.config.mts
+*.ts
+*.map

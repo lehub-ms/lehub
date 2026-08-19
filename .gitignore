@@ -1,0 +1,41 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# Node
+node_modules/
+*.tsbuildinfo
+coverage/
+
+# Build output — never committed (CLAUDE.md)
+api/dist/
+frontend/*/dist/
+frontend/*/.vite/
+infra/*.json
+
+# Environment files — never committed, templates and test fixtures only
+.env
+.env.*
+!.env.example
+# Vite ignores .env.local in test mode, so tests need their own committed fixture.
+!.env.test
+frontend/*/.env.local
+infra/*.local.bicepparam
+
+# Azure Functions local settings — contains the local SQL password
+api/local.settings.json
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# Docker local overrides
+docker-compose.override.yml
+
+# Logs
+*.log

@@ -1,0 +1,31 @@
+{
+  "name": "@lehub/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LeHub API — Azure Functions v4, shared by both front-ends",
+  "main": "dist/functions/*.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "concurrently --names \"tsc,func\" --prefix-colors \"gray,magenta\" --kill-others-on-fail \"tsc --watch --preserveWatchOutput\" \"func start\"",
+    "start": "func start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.7.0",
+    "jose": "^6.2.2",
+    "mssql": "^11.0.1"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.5",
+    "@types/node": "^22.19.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  }
+}
