@@ -100,10 +100,15 @@ Two deliberate absences, both settled — do not reintroduce either:
    change, any new page or multi-file frontend feature, any dependency addition, anything
    touching CI/CD. Go straight to implementation for: single-file bug fixes, copy/label
    changes, test additions, doc edits, dependency version bumps already discussed.
-3. **Implement** on a branch dedicated to the **Feature**, one commit per Story.
+3. **Implement** on a branch dedicated to the **Feature**, one commit per sub-issue.
 4. **Test.** `vitest` in `/api` and in the touched frontend must pass before pushing.
 5. **Review.** Run `/code-review` on the diff and resolve findings before opening the PR.
-6. **PR** linked to the Feature, CI green, then merge. `main` is protected — never commit to it.
+6. **Ship.** PR → `develop` → recette → release PR `develop` → `main`. `main` is
+   protected — never commit to it.
+
+Branches, commits, PR bodies, GitHub Project statuses, releases and hotfixes are **owned by
+the `github-workflow` skill** (`.claude/skills/github-workflow/SKILL.md`) — read it before any
+git or `gh` operation. Do not restate its rules here.
 
 The design system and the UI mockup workflow are not defined yet — they will be added to this
 file when that work starts. Until then, do not introduce a `/design` directory, a design skill,
@@ -128,6 +133,10 @@ not use custom classification labels.
 Set both the type and the parent when an issue is created — a `Feature` left without its
 epic as parent, or an issue left with the default (no) type, is incomplete.
 
+**Tracking** — every work issue lives in the `lehub-ms` GitHub Project; its `Status` field is
+the single view of where a change stands, from `Todo` to `Done`. The transitions and the `gh
+project` commands belong to the `github-workflow` skill.
+
 **Qualified issues (specs)** — an `Epic`, `Feature`, or `Story` also carries the `qualified`
 label once its description is complete enough to serve as a spec. "Spécifier X" / "amender la
 spec de X" always means working on a `qualified` issue of one of these three types. `Bug`
@@ -146,21 +155,10 @@ issues are never `qualified`.
 - **Bug**: concise, precise title. Body describes the bug, the affected screen, the observed
   vs. expected behavior, and the reproduction steps.
 
-**Branch**: `<type>/<issue-number>-<slug>`, numbered after the **Feature** it delivers (or the
-Bug it fixes) — e.g. `feat/42-filtre-par-techno`, `fix/57-jwt-audience`.
+Branch naming, commit format and PR rules live in the `github-workflow` skill.
 
-**Commits**: Conventional Commits, subject in English, with a `Refs #<n>` trailer and a DCO
-sign-off:
-
-```
-feat(api): add technology filter to /api/events
-
-Refs #42
-Signed-off-by: Name <email>
-```
-
-**Canonical `gh` commands** (issue type and parent are not `gh` flags — set them via the
-`lehub-spec` skill, which wraps the GraphQL calls in
+**Canonical `gh` commands for issues** (issue type and parent are not `gh` flags — set them
+via the `lehub-spec` skill, which wraps the GraphQL calls in
 `.claude/skills/lehub-spec/scripts/set-issue-hierarchy.sh`):
 
 ```bash
@@ -170,17 +168,11 @@ gh issue list --state open
 gh issue view <n>
 gh issue comment <n> --body "..."
 gh issue close <n>
-gh pr create --fill --base develop --title "..." --body "Closes #<n>"
-gh pr checks
 ```
 
-**Rule: one Feature → one branch → one PR, one commit per Story.** The Feature is the unit of
-delivery; Stories remain the unit of specification and carry the acceptance criteria. Order the
-commits along the Stories' real dependencies so the PR stays reviewable commit by commit, and
-give each one a `Refs #<story>` trailer while the PR carries `Closes #<feature>`.
-
-A `Bug` is its own branch and its own PR, since it has no Stories under it. Never batch two
-Features in one PR, and never commit directly on `main` or `develop`.
+The Feature is the **unit of delivery**; Stories and Bugs remain the unit of specification and
+carry the acceptance criteria. One Feature → one branch → one PR grouping its sub-issues — a
+lone `Bug` ships under its parent Feature too. See the `github-workflow` skill.
 
 ## Non-negotiables
 
@@ -214,8 +206,8 @@ These are enforceable rules; a PR violating one does not merge.
   `asp-lehub-<env>-func`. Globally-unique names append a hash:
   `kv-lehub-<env>-<uniqueString:5>`, `stlehub<env><uniqueString:6>`. Resource groups:
   `rg-lehub-<env>`. Tags `env` and `project=lehub` on everything.
-- **Branches**: `main` = production, `develop` = development environment. Feature branches
-  target `develop`; `develop` → `main` is a release PR.
+- **Branches**: `main` = production (CD → Azure prod), `develop` = integration (CD → Azure
+  dev). Naming and flow: `github-workflow` skill.
 - **TypeScript strict** everywhere, both frontends and the API. No `any`, no `@ts-ignore`.
 - **Language**: code, comments, technical docs, commit messages in English. Issues, PR
   descriptions, reviews, and UI copy in French.
