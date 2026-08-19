@@ -72,7 +72,6 @@ npm --prefix api test                         # vitest run
 # Database (any environment)
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
 ./scripts/db-seed.sh local|dev [--demo]       # reference data, + demo data on request
-./scripts/db-bootstrap-mi.sh dev|prod         # CREATE USER for the managed identity
 
 # Infrastructure
 az deployment group what-if -g rg-lehub-<env> \

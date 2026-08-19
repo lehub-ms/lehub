@@ -26,11 +26,15 @@ describe('buildSqlConfig', () => {
     expect(result.config.authentication).toBeUndefined()
   })
 
-  it('trusts the server certificate only for localhost', () => {
-    const local = buildSqlConfig(LOCAL)
+  it('trusts the server certificate only for a loopback host', () => {
     const cloud = buildSqlConfig(CLOUD)
-    expect(local.ok && local.config.options?.trustServerCertificate).toBe(true)
     expect(cloud.ok && cloud.config.options?.trustServerCertificate).toBe(false)
+
+    // Every spelling a contributor may reasonably put in SQL_SERVER for the container.
+    for (const server of ['localhost', 'localhost,1433', '127.0.0.1', 'LOCALHOST']) {
+      const result = buildSqlConfig({ ...LOCAL, SQL_SERVER: server })
+      expect(result.ok && result.config.options?.trustServerCertificate, server).toBe(true)
+    }
   })
 
   it('always encrypts', () => {

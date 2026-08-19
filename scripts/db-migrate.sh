@@ -73,7 +73,14 @@ fi
 # Reject duplicate numeric prefixes before touching the database: two files sharing
 # a number means two branches picked the same slot, and the apply order would then
 # depend on the rest of the file name.
-DUPES="$(printf '%s\n' "${MIGRATIONS[@]}" | xargs -n1 basename | cut -d_ -f1 | sort | uniq -d)"
+# basename is computed in-shell rather than piped through xargs, which would re-split
+# on whitespace and mangle a clone living under a path containing a space.
+PREFIXES=()
+for path in "${MIGRATIONS[@]}"; do
+  name="$(basename "$path")"
+  PREFIXES+=("${name%%_*}")
+done
+DUPES="$(printf '%s\n' "${PREFIXES[@]}" | sort | uniq -d)"
 [[ -z "$DUPES" ]] || die "Duplicate migration prefixes: $(echo "$DUPES" | tr '\n' ' ')"
 
 PENDING=()

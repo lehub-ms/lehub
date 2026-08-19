@@ -40,6 +40,13 @@ sha256_of() {
 # The ports the local stack listens on, in the order dev-start.sh names them.
 DEV_PORTS=(7071 5173 5174)
 
+# PIDs listening on a port. `-sTCP:LISTEN` is essential: without it lsof also matches
+# every *client* of that port, so a browser holding Vite's HMR websocket on 5173 would
+# be reported — and killed.
+port_listeners() {
+  lsof -ti:"$1" -sTCP:LISTEN 2>/dev/null || true
+}
+
 # Stop whatever is listening on those ports.
 #
 # Killing by port rather than by pid tree is deliberate: npm spawns each tool as a
@@ -48,7 +55,7 @@ DEV_PORTS=(7071 5173 5174)
 stop_dev_processes() {
   local port pids stopped=0
   for port in "${DEV_PORTS[@]}"; do
-    pids="$(lsof -ti:"$port" 2>/dev/null || true)"
+    pids="$(port_listeners "$port")"
     [[ -n "$pids" ]] || continue
     # shellcheck disable=SC2086  # word splitting is intended: possibly several pids
     kill $pids 2>/dev/null || true
@@ -59,7 +66,7 @@ stop_dev_processes() {
   if [[ $stopped -gt 0 ]]; then
     sleep 2
     for port in "${DEV_PORTS[@]}"; do
-      pids="$(lsof -ti:"$port" 2>/dev/null || true)"
+      pids="$(port_listeners "$port")"
       [[ -n "$pids" ]] || continue
       # shellcheck disable=SC2086
       kill -9 $pids 2>/dev/null || true
@@ -117,13 +124,15 @@ sql_query() {
 }
 
 # Run a statement for its effect only.
+# `-r 1` routes SQL error text to stderr; sqlcmd writes it to stdout by default, which
+# the redirection below would swallow, leaving a failure with no message at all.
 sql_exec() {
-  sqlcmd "${SQL_ARGS[@]}" -d "$SQL_DB_NAME" -b -Q "SET NOCOUNT ON; $1" >/dev/null
+  sqlcmd "${SQL_ARGS[@]}" -d "$SQL_DB_NAME" -b -r 1 -Q "SET NOCOUNT ON; $1" >/dev/null
 }
 
 # Run a statement against master (used to create the local database).
 sql_exec_master() {
-  sqlcmd "${SQL_ARGS[@]}" -d master -b -Q "SET NOCOUNT ON; $1" >/dev/null
+  sqlcmd "${SQL_ARGS[@]}" -d master -b -r 1 -Q "SET NOCOUNT ON; $1" >/dev/null
 }
 
 # Run a whole file.

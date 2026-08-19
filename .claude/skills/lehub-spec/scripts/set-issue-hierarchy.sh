@@ -18,16 +18,19 @@ ISSUE_NUM="$1"
 TYPE_NAME="$2"
 PARENT_NUM="${3:-}"
 
+# A missing issue is not an error for GitHub: it answers 200 with issue == null, and
+# jq then prints the string "null". Both emptiness and that literal must be rejected,
+# otherwise the mutations below run with id:"null" and fail with a raw GraphQL error.
 issue_node_id() {
   gh api graphql -f query='
     query($owner:String!,$name:String!,$num:Int!) {
       repository(owner:$owner, name:$name) { issue(number:$num) { id } }
     }' -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F num="$1" \
-    --jq '.data.repository.issue.id'
+    --jq '.data.repository.issue.id // empty'
 }
 
 ISSUE_ID=$(issue_node_id "$ISSUE_NUM")
-[ -n "$ISSUE_ID" ] || { echo "Issue #$ISSUE_NUM not found" >&2; exit 1; }
+[ -n "$ISSUE_ID" ] && [ "$ISSUE_ID" != null ] || { echo "Issue #$ISSUE_NUM not found" >&2; exit 1; }
 
 TYPE_ID=$(gh api graphql -f query='
   query($owner:String!,$name:String!) {
@@ -46,7 +49,7 @@ echo "#$ISSUE_NUM -> type $TYPE_NAME"
 
 if [ -n "$PARENT_NUM" ]; then
   PARENT_ID=$(issue_node_id "$PARENT_NUM")
-  [ -n "$PARENT_ID" ] || { echo "Parent issue #$PARENT_NUM not found" >&2; exit 1; }
+  [ -n "$PARENT_ID" ] && [ "$PARENT_ID" != null ] || { echo "Parent issue #$PARENT_NUM not found" >&2; exit 1; }
 
   gh api graphql -f query='
     mutation($parentId:ID!, $childId:ID!) {

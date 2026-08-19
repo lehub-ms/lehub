@@ -25,6 +25,14 @@ export function describeSqlConfigError(error: SqlConfigError): string {
   return CONFIG_ERROR_MESSAGES[error.kind]
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+
+/** `SQL_SERVER` may carry a port, as in `localhost,1433`. */
+function isLoopbackHost(server: string): boolean {
+  const host = server.split(',')[0]?.trim().toLowerCase() ?? ''
+  return LOOPBACK_HOSTS.has(host)
+}
+
 /**
  * Exported so it can be unit-tested without a database: it is pure, it only reads
  * `env`.
@@ -44,8 +52,10 @@ export function buildSqlConfig(env: NodeJS.ProcessEnv = process.env): SqlConfigR
     options: {
       encrypt: true,
       // The local container serves a self-signed certificate; every other target is
-      // a real Azure SQL endpoint whose chain must be validated.
-      trustServerCertificate: server === 'localhost',
+      // a real Azure SQL endpoint whose chain must be validated. Matching on a host
+      // list rather than the literal 'localhost' so that 127.0.0.1 — or the
+      // 'localhost,1433' form the scripts use — does not silently fail TLS.
+      trustServerCertificate: isLoopbackHost(server),
     },
     connectionTimeout: 30_000,
   }

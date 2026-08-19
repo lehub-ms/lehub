@@ -6,9 +6,9 @@
 # Idempotent: safe on a fresh clone and on an already-configured workspace. It never
 # overwrites a file you have edited.
 #
-#   1. checks the toolchain (Node 20, Docker, func, sqlcmd)
-#   2. creates the missing environment files from their templates
-#   3. installs dependencies for api and both front-ends
+#   1. checks the toolchain (Node per .nvmrc, Docker, func, sqlcmd)
+#   2. creates the missing environment files, generating the local SQL password
+#   3. installs dependencies for api and both front-ends, and builds the API
 #   4. starts SQL Server and waits for it to report healthy
 #   5. applies the migrations, then the reference and demonstration data
 #
@@ -30,7 +30,7 @@ info "Checking the toolchain"
 
 REQUIRED_NODE="$(tr -d '[:space:]' < .nvmrc)"
 need_cmd node "Install Node ${REQUIRED_NODE} — see docs/local-dev.md"
-CURRENT_NODE="$(node --version)"           # v20.20.2
+CURRENT_NODE="$(node --version)"           # e.g. v22.23.2
 CURRENT_MAJOR="${CURRENT_NODE#v}"; CURRENT_MAJOR="${CURRENT_MAJOR%%.*}"
 
 if [[ "$CURRENT_MAJOR" != "$REQUIRED_NODE" ]]; then
@@ -54,9 +54,15 @@ ok "Toolchain ready"
 if [[ -f .env ]]; then
   dim ".env already present, left untouched"
 else
-  cp .env.example .env
-  ok "Created .env from .env.example"
-  warn "It carries the default password — change it before sharing this workspace."
+  # Generated rather than copied from the template: a working password committed to
+  # the repository would be the real one on every default workspace, which the
+  # "no plaintext secret in a commit" rule forbids even for test values.
+  # The suffix guarantees SQL Server's complexity requirement whatever rand produces.
+  GENERATED_PW="$(LC_ALL=C openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)aA1!"
+  PW="$GENERATED_PW" perl -pe 's|^MSSQL_SA_PASSWORD=.*$|"MSSQL_SA_PASSWORD=$ENV{PW}"|e' \
+    .env.example > .env
+  chmod 600 .env
+  ok "Created .env with a freshly generated local SQL password"
 fi
 
 set -a
@@ -102,6 +108,18 @@ for pkg in "${PACKAGES[@]}"; do
     ok "$pkg ready"
   fi
 done
+
+# The Functions host resolves dist/functions/*.js at start-up and reports "No job
+# functions found" if the directory is not there yet. tsc --watch would produce it a
+# few seconds later, but the host only picks it up on its next worker restart, which
+# leaves /api answering 404 for about a minute on a fresh clone.
+if [[ -d api/dist/functions ]]; then
+  dim "api already built"
+else
+  info "Building the API"
+  npm --prefix api run build --silent
+  ok "api built"
+fi
 
 # ─── 4. Database container ───────────────────────────────────────────────────
 

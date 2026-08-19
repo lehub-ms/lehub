@@ -7,8 +7,13 @@ SET NOCOUNT ON;
 -- entered through the backoffice.
 --
 -- Event dates are relative to execution time, so there is always something upcoming
--- and something already past to exercise the listing. Identifiers are fixed so the
--- link tables stay valid across replays.
+-- and something already past to exercise the listing. Replaying the file therefore
+-- refreshes the dates of the events it owns — otherwise they would stay frozen at the
+-- first seed and the whole set would drift into the past within weeks, leaving the
+-- public site empty. Only the dates are updated: titles, descriptions and links are
+-- left as they are, so a local edit survives.
+--
+-- Identifiers are fixed so the link tables stay valid across replays.
 --
 -- Single batch, no GO: the guard below must be able to abort the whole file.
 
@@ -139,7 +144,11 @@ ON target.Id = source.Id
 WHEN NOT MATCHED THEN
   INSERT (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImageUrl)
   VALUES (source.Id, source.Title, source.Description, source.StartDate, source.EndDate,
-          source.FormatTypeId, source.EventModeId, source.BannerImageUrl);
+          source.FormatTypeId, source.EventModeId, source.BannerImageUrl)
+WHEN MATCHED THEN
+  -- Dates only: see the note at the top of this file.
+  UPDATE SET target.StartDate = source.StartDate,
+             target.EndDate   = source.EndDate;
 
 -- ─── Event ↔ Community ───────────────────────────────────────────────────────
 

@@ -68,7 +68,8 @@ data must never be able to.
 
 `bootstrap/create-mi-user.sql` creates the contained database user for the API's managed
 identity, granting `db_datareader` and `db_datawriter`. It is templated on `<MI_NAME>` and
-`<MI_SID>` and applied by the infrastructure tooling, not by the local loop.
+`<MI_SID>` and belongs to the cloud setup, not the local loop — the script that applies it
+lands with `/infra`.
 
 It creates the user `WITH SID = ...` rather than `FROM EXTERNAL PROVIDER` on purpose: the
 latter would require the SQL server's own identity to hold Microsoft Graph application

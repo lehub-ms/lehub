@@ -29,7 +29,7 @@ CONCURRENTLY="$ROOT_DIR/api/node_modules/.bin/concurrently"
 [[ -x "$CONCURRENTLY" ]] || die "concurrently not found — run ./scripts/dev-up.sh to install dependencies."
 
 for port in "${DEV_PORTS[@]}"; do
-  if lsof -ti:"$port" >/dev/null 2>&1; then
+  if [[ -n "$(port_listeners "$port")" ]]; then
     die "Port $port is already in use. Run ./scripts/dev-down.sh, or stop whatever else is holding it."
   fi
 done
@@ -49,7 +49,7 @@ trap stop_dev_processes EXIT INT TERM
 "$CONCURRENTLY" \
   --names "tsc,api,web,admin" \
   --prefix-colors "gray,magenta,cyan,yellow" \
-  --kill-others-on-fail \
+  --kill-others \
   --kill-signal SIGKILL \
   "npm --prefix api run watch" \
   "cd api && exec func start" \

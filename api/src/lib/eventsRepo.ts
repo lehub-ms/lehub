@@ -35,9 +35,12 @@ interface EventRow {
 /**
  * Upcoming events, soonest first.
  *
+ * Filtered on EndDate, not StartDate: issue #18 asks for past events to be excluded,
+ * and a two-day conference is not past on its opening morning. Ordering stays on
+ * StartDate, which IX_Event_StartDate backs.
+ *
  * The two link collections come back as JSON rather than a delimited string so a
- * name containing the delimiter cannot corrupt the result. IX_Event_StartDate backs
- * the filter and the ordering.
+ * name containing the delimiter cannot corrupt the result.
  */
 const UPCOMING_EVENTS_QUERY = `
 SELECT
@@ -64,7 +67,7 @@ SELECT
 FROM dbo.Event e
 JOIN dbo.FormatType ft ON ft.Id = e.FormatTypeId
 JOIN dbo.EventMode  em ON em.Id = e.EventModeId
-WHERE e.StartDate > SYSUTCDATETIME()
+WHERE e.EndDate > SYSUTCDATETIME()
 ORDER BY e.StartDate
 `
 
