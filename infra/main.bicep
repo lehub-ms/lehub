@@ -111,3 +111,12 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
+module appServicePlan 'modules/appServicePlan.bicep' = {
+  name: 'appServicePlan'
+  params: {
+    name: appServicePlanName
+    location: location
+    tags: tags
+  }
+}
+
