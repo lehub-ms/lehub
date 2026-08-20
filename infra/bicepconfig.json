@@ -1,0 +1,36 @@
+{
+  // Bicep linter rules, at the level the CI will enforce.
+  //
+  // Everything the project actually relies on is an error rather than a warning: a
+  // warning nobody reads is the same as a rule nobody wrote.
+  "analyzers": {
+    "core": {
+      "enabled": true,
+      "verbose": false,
+      "rules": {
+        "no-hardcoded-location": { "level": "error" },
+        "secure-parameter-default": { "level": "error" },
+        "outputs-should-not-contain-secrets": { "level": "error" },
+        "secure-secrets-in-params": { "level": "error" },
+        "no-unused-params": { "level": "error" },
+        "no-unused-vars": { "level": "error" },
+        "prefer-interpolation": { "level": "error" },
+        "simplify-interpolation": { "level": "error" },
+        "no-hardcoded-env-urls": { "level": "error" },
+        "explicit-values-for-loc-params": { "level": "error" },
+
+        // Off, deliberately. The rule wants resourceGroup().location behind a parameter,
+        // and main.bicep refuses to make the region overridable at all: westeurope is the
+        // only authorised region, so a parameter would only create a way to get it wrong.
+        // What the rule is really protecting against — a group created elsewhere — is now
+        // checked by scripts/infra-deploy.sh before any deployment starts.
+        "no-loc-expr-outside-params": { "level": "off" },
+
+        // Off, and not negotiable upward: Microsoft.Insights/components has had no API
+        // version newer than 2020-02-02, so this rule can never go green. Turning it on
+        // would mean a permanently red build, which teaches everyone to ignore the build.
+        "use-recent-api-versions": { "level": "off" }
+      }
+    }
+  }
+}

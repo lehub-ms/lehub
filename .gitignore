@@ -18,6 +18,8 @@ api/dist/
 frontend/*/dist/
 frontend/*/.vite/
 infra/*.json
+# The linter configuration is source, not output, and the rule above would swallow it.
+!infra/bicepconfig.json
 
 # Environment files — never committed, templates and test fixtures only
 .env

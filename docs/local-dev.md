@@ -26,7 +26,7 @@ echo 'eval "$(fnm env --use-on-cd --shell zsh)"' >> ~/.zshrc && exec zsh
 Without that line, run `fnm use` yourself in each new terminal.
 
 Only cloud work needs more: an Azure CLI login and membership in the `sg-lehub-sql-admins`
-Entra group. See `docs/deployment.md` when it exists.
+Entra group. See [docs/deployment.md](deployment.md).
 
 ## Getting started
 
