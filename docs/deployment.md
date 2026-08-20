@@ -259,15 +259,20 @@ SP_ID="$(az ad sp create --id "$APP_ID" --query id -o tsv)"
 
 # 2. One federated credential per environment, never one per branch or pull request:
 #    access to Azure always goes through a GitHub environment. The subject must be
-#    exactly `repo:<org>/<repo>:environment:<env>` — a malformed subject only shows up
-#    at run time as AADSTS70021, which does not say what subject it expected.
-az ad app federated-credential create --id "$APP_ID" --parameters '{
-  "name": "github-env-dev",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:lehub-ms/lehub:environment:dev",
-  "audiences": ["api://AzureADTokenExchange"],
-  "description": "GitHub Actions deployments to the dev environment"
-}'
+#    exactly what GitHub puts in the token: since 15 July 2026 that is the *immutable*
+#    format `repo:<org>@<org_id>/<repo>@<repo_id>:environment:<env>` for every
+#    repository created, renamed or transferred after that date — this one included.
+#    Never type the IDs by hand: read the prefix GitHub itself emits, and append the
+#    environment. A wrong subject only shows up at run time as AADSTS700213, whose
+#    message quotes the subject GitHub presented — copy it from there if in doubt.
+SUB_PREFIX="$(gh api repos/lehub-ms/lehub/actions/oidc/customization/sub --jq .sub_claim_prefix)"
+az ad app federated-credential create --id "$APP_ID" --parameters "{
+  \"name\": \"github-env-dev\",
+  \"issuer\": \"https://token.actions.githubusercontent.com\",
+  \"subject\": \"${SUB_PREFIX}:environment:dev\",
+  \"audiences\": [\"api://AzureADTokenExchange\"],
+  \"description\": \"GitHub Actions deployments to the dev environment\"
+}"
 
 # 3. Two role assignments, both scoped to the environment's resource group and nothing
 #    wider: Contributor to create the resources, and Role Based Access Control
@@ -310,9 +315,10 @@ Three things to know before trusting a first run:
 
 - **RBAC propagation takes a few minutes.** The first deployment after creating the
   assignments can fail once and succeed on replay.
-- **Renaming the repository or the organisation kills the identity silently.** The
-  federated credential's subject embeds both names; the token exchange starts failing
-  with AADSTS70021 and nothing on the GitHub side explains why.
+- **Renaming the repository or the organisation changes the subject.** The
+  federated credential's subject embeds both names next to their immutable IDs; after a
+  rename the token exchange fails with AADSTS700213 until the credential is recreated
+  from the new `sub_claim_prefix` — nothing on the GitHub side explains why.
 - **Verify the result, not the commands.** `az role assignment list --assignee "$APP_ID"
   --all` must return exactly two assignments, both scoped to the resource group, and
   `az ad app credential list --id "$APP_ID"` must return an empty list.
@@ -396,7 +402,7 @@ merges produce two complete deployments, in order.
 
 | Symptom | Cause |
 |---|---|
-| `AADSTS70021: No matching federated identity record found` | the federated credential's subject does not match `repo:lehub-ms/lehub:environment:dev` — also what a renamed repository or organisation looks like, and what a run from a branch the `dev` environment does not allow gets |
+| `AADSTS700213: No matching federated identity record found for presented assertion subject '...'` | the federated credential's subject is not the one quoted in the message — compare it with `az ad app federated-credential list --id "$APP_ID"`. Typically a credential created in the legacy `repo:lehub-ms/lehub:environment:dev` format while GitHub now emits the immutable `repo:lehub-ms@<id>/lehub@<id>:environment:dev`, a renamed repository or organisation, or a run from a branch the `dev` environment does not allow |
 | `AuthorizationFailed` on the role-assignment module | the identity lost `Role Based Access Control Administrator`, or RBAC propagation after the bootstrap has not settled yet — replay once before digging |
 | First deployment after the bootstrap fails, second succeeds | RBAC propagation, a few minutes |
 | `database` job times out on its wake-up step | the serverless database took longer than the bounded retries; replay the run |
