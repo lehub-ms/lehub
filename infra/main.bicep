@@ -120,3 +120,13 @@ module appServicePlan 'modules/appServicePlan.bicep' = {
   }
 }
 
+module sqlServer 'modules/sqlServer.bicep' = {
+  name: 'sqlServer'
+  params: {
+    name: sqlServerName
+    location: location
+    tags: tags
+    aadAdminGroupObjectId: sqlAadAdminGroupObjectId
+  }
+}
+
