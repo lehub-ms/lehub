@@ -92,3 +92,13 @@ module managedIdentity 'modules/managedIdentity.bicep' = {
   }
 }
 
+module monitoring 'modules/monitoring.bicep' = {
+  name: 'monitoring'
+  params: {
+    logAnalyticsName: logAnalyticsName
+    appInsightsName: appInsightsName
+    location: location
+    tags: tags
+  }
+}
+
