@@ -234,6 +234,10 @@ module functionApp 'modules/functionApp.bicep' = {
 
 // ─── Outputs ─────────────────────────────────────────────────────────────────
 
+// The deployment workflow consumes the four resource names below instead of
+// rebuilding them, so a naming change here never leaves a workflow deploying
+// to a resource that no longer exists.
+output functionAppName string = functionApp.outputs.name
 output functionAppHostname string = functionApp.outputs.defaultHostname
 
 // Carries the scheme on purpose. The bare hostname assigned to VITE_API_BASE_URL would
@@ -242,9 +246,12 @@ output functionAppHostname string = functionApp.outputs.defaultHostname
 @description('Becomes VITE_API_BASE_URL when the front-ends are built.')
 output apiBaseUrl string = 'https://${functionApp.outputs.defaultHostname}'
 
+output webAppName string = webStaticSite.outputs.name
 output webAppHostname string = webStaticSite.outputs.defaultHostname
+output adminAppName string = adminStaticSite.outputs.name
 output adminAppHostname string = adminStaticSite.outputs.defaultHostname
 
+output sqlServerName string = sqlServer.outputs.name
 output sqlServerFqdn string = sqlServer.outputs.fullyQualifiedDomainName
 output sqlDatabaseName string = sqlDatabase.outputs.name
 

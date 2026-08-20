@@ -1,0 +1,65 @@
+name: CD
+
+# The deployment pipeline, parameterised by environment and owning no trigger
+# of its own. cd-dev.yml calls it for dev on every merge to develop; opening
+# prod one day is a new ten-line caller plus its identity bootstrap — a
+# configuration to add, not a workflow to rewrite.
+#
+# Job order is the order the architecture imposes: resources first, then the
+# database schema, then the API, then the two web apps — which need the
+# Function App's public URL at build time.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment (dev or prod)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  infra:
+    runs-on: ubuntu-latest
+    # The GitHub environment carries the AZURE_* variables and is what the
+    # federated credential's subject points at: no environment, no token.
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      functionAppName: ${{ steps.deploy.outputs.functionAppName }}
+      functionAppHostname: ${{ steps.deploy.outputs.functionAppHostname }}
+      apiBaseUrl: ${{ steps.deploy.outputs.apiBaseUrl }}
+      webAppName: ${{ steps.deploy.outputs.webAppName }}
+      webAppHostname: ${{ steps.deploy.outputs.webAppHostname }}
+      adminAppName: ${{ steps.deploy.outputs.adminAppName }}
+      adminAppHostname: ${{ steps.deploy.outputs.adminAppHostname }}
+      sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy infra/main.bicep
+        id: deploy
+        # Named after the run so the portal's deployment history links back to
+        # the GitHub execution that produced it. The resource group is a
+        # prerequisite created by hand — see docs/deployment.md.
+        run: |
+          outputs=$(az deployment group create \
+            --resource-group "rg-lehub-${{ inputs.environment }}" \
+            --name "lehub-${{ github.run_id }}" \
+            --template-file infra/main.bicep \
+            --parameters "infra/main.${{ inputs.environment }}.bicepparam" \
+            --query properties.outputs --output json)
+          # Every downstream job consumes resource names from here — never a
+          # hard-coded name in any workflow.
+          for key in functionAppName functionAppHostname apiBaseUrl \
+                     webAppName webAppHostname adminAppName adminAppHostname \
+                     sqlServerName; do
+            echo "$key=$(echo "$outputs" | jq -er ".$key.value")" >> "$GITHUB_OUTPUT"
+          done
