@@ -197,3 +197,102 @@ jobs:
           done
           echo "$url never answered 200" >&2
           exit 1
+
+  web:
+    # Both front-ends are built here with the real API URL of the target
+    # environment: VITE_API_BASE_URL is baked in at build time, so a build
+    # output is never transposable from one environment to another.
+    needs: [infra, api]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      VITE_API_BASE_URL: ${{ needs.infra.outputs.apiBaseUrl }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            frontend/lehub.ms/package-lock.json
+            frontend/admin.lehub.ms/package-lock.json
+      - name: Refuse an empty API URL
+        # An absent VITE_API_BASE_URL builds fine and produces a site that
+        # calls undefined/... — fail here, loudly, instead.
+        run: |
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "VITE_API_BASE_URL is empty — refusing to build a broken site" >&2
+            exit 1
+          fi
+      # A failed build publishes nothing for either application: the publish
+      # steps only run once both builds have succeeded.
+      - name: Build the public app
+        working-directory: frontend/lehub.ms
+        run: |
+          npm ci
+          npm run build
+      - name: Build the admin app
+        working-directory: frontend/admin.lehub.ms
+        run: |
+          npm ci
+          npm run build
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Read the deployment tokens
+        # Read at run time from the OIDC session, masked, never stored as a
+        # GitHub secret.
+        id: tokens
+        run: |
+          web_token="$(az staticwebapp secrets list \
+            --name "${{ needs.infra.outputs.webAppName }}" \
+            --query properties.apiKey --output tsv)"
+          echo "::add-mask::$web_token"
+          echo "web=$web_token" >> "$GITHUB_OUTPUT"
+          admin_token="$(az staticwebapp secrets list \
+            --name "${{ needs.infra.outputs.adminAppName }}" \
+            --query properties.apiKey --output tsv)"
+          echo "::add-mask::$admin_token"
+          echo "admin=$admin_token" >> "$GITHUB_OUTPUT"
+      # The two publications are independent: if the first fails, the second
+      # still runs and the job stays red. skip_app_build ships the dist/
+      # already built above — no Oryx rebuild on the Azure side. Each app's
+      # staticwebapp.config.json travels inside dist/, copied from public/.
+      - name: Publish the public app
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.tokens.outputs.web }}
+          action: upload
+          app_location: frontend/lehub.ms/dist
+          skip_app_build: true
+          skip_api_build: true
+      - name: Publish the admin app
+        if: ${{ !cancelled() && steps.tokens.outcome == 'success' }}
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.tokens.outputs.admin }}
+          action: upload
+          app_location: frontend/admin.lehub.ms/dist
+          skip_app_build: true
+          skip_api_build: true
+      - name: Check both sites answer
+        run: |
+          for host in "${{ needs.infra.outputs.webAppHostname }}" \
+                      "${{ needs.infra.outputs.adminAppHostname }}"; do
+            for attempt in $(seq 1 5); do
+              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://$host/" || true)"
+              if [ "$code" = "200" ]; then
+                echo "https://$host/ answers 200"
+                continue 2
+              fi
+              echo "attempt $attempt on $host: got $code, waiting 10s"
+              sleep 10
+            done
+            echo "https://$host/ never answered 200" >&2
+            exit 1
+          done
