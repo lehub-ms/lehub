@@ -41,6 +41,10 @@ jobs:
       # npm ci, never npm install: a package-lock.json out of sync with its
       # package.json is an error, not something to resolve silently.
       - run: npm ci
+      # high and critical block the merge — known CVEs are fixed before any
+      # feature lands. moderate and below stay visible in the log without
+      # failing the build.
+      - run: npm audit --audit-level=high
       # lint is eslint in the front-ends and tsc --noEmit in /api — the
       # asymmetry is deliberate, /api has no ESLint setup.
       - run: npm run lint

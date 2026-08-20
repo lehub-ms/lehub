@@ -1,0 +1,43 @@
+# Weekly dependency update proposals, grouped per package so the repository
+# is not flooded with one pull request per dependency. Every pull request
+# targets develop — never main — and passes the same CI as any other change.
+# Silencing an alert is never done here: an exception is justified in writing
+# in the pull request that carries it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      api:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend/lehub.ms
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      web:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend/admin.lehub.ms
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      admin:
+        patterns: ["*"]
+
+  # The workflows pin actions by major version; this keeps those pins moving.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      actions:
+        patterns: ["*"]
