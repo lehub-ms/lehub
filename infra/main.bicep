@@ -102,3 +102,12 @@ module monitoring 'modules/monitoring.bicep' = {
   }
 }
 
+module storage 'modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    name: storageAccountName
+    location: location
+    tags: tags
+  }
+}
+
