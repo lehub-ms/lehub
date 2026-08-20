@@ -74,6 +74,12 @@ var alwaysReadyInstances = environmentName == 'prod' ? 1 : 0
 // of 512 MB are far more than a community agenda ever needs.
 var maximumInstances = environmentName == 'prod' ? 20 : 10
 
+// Tripwires, not targets. Dev is estimated at 5-10 EUR a month and is the volatile one,
+// since a woken serverless database bills by the hour; prod is a flat 4.30 EUR plus usage.
+// Prod is set high enough that an alert is unambiguous, and its 50% threshold lands
+// exactly on the ~25 EUR the project budgets for itself as a whole.
+var monthlyBudgetAmount = environmentName == 'prod' ? 50 : 15
+
 // The local Vite origins exist only so the development loop exercises the same
 // cross-origin path as the cloud. They have no reason to be allowed in prod.
 var localDevOrigins = environmentName == 'dev'
@@ -104,6 +110,16 @@ module monitoring 'modules/monitoring.bicep' = {
     appInsightsName: appInsightsName
     location: location
     tags: tags
+  }
+}
+
+// Deliberately first, and dependent on nothing: a guard that is only provisioned once the
+// resources it guards succeeded would be missing exactly when a deployment goes wrong.
+module budget 'modules/budget.bicep' = {
+  name: 'budget'
+  params: {
+    environmentName: environmentName
+    monthlyBudgetAmount: monthlyBudgetAmount
   }
 }
 
