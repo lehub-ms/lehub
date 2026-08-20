@@ -3,6 +3,10 @@
 # targets develop — never main — and passes the same CI as any other change.
 # Silencing an alert is never done here: an exception is justified in writing
 # in the pull request that carries it.
+#
+# This file only governs version updates. Dependabot *security* updates, if
+# they are ever enabled on the repository, ignore target-branch and open
+# their pull requests against the default branch, main.
 version: 2
 updates:
   - package-ecosystem: npm
