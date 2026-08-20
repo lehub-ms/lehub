@@ -137,3 +137,63 @@ jobs:
           az sql server firewall-rule delete \
             --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER_NAME" \
             --name "$FIREWALL_RULE"
+
+  api:
+    # Publishing has exactly one path: this job. No func publish from a
+    # workstation — SCM and FTP credentials are disabled by Bicep anyway.
+    needs: [infra, database]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Build
+        working-directory: api
+        run: |
+          npm ci
+          npm run build
+      - name: Assemble the deployment artifact
+        # Exactly dist/, host.json, package.json and production
+        # node_modules — no devDependency, no TypeScript source.
+        working-directory: api
+        run: |
+          npm ci --omit=dev
+          mkdir publish
+          cp -R dist host.json package.json node_modules publish/
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # App settings are owned by Bicep and their list is exhaustive: this
+      # workflow writes none, or the next infra deployment would erase them.
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ needs.infra.outputs.functionAppName }}
+          package: api/publish
+          sku: flexconsumption
+          remote-build: false
+      - name: Check /api/health
+        # A deployment that published successfully but does not answer is a
+        # failure. Bounded retries absorb the cold start and a possible
+        # database wake-up without looping forever.
+        run: |
+          url="https://${{ needs.infra.outputs.functionAppHostname }}/api/health"
+          for attempt in $(seq 1 10); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$url" || true)"
+            if [ "$code" = "200" ]; then
+              echo "healthy after $attempt attempt(s)"
+              exit 0
+            fi
+            echo "attempt $attempt: got $code, waiting 15s"
+            sleep 15
+          done
+          echo "$url never answered 200" >&2
+          exit 1
