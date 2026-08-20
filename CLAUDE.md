@@ -39,10 +39,10 @@ the maintainer first — propose it, do not create it.
 | SQL driver | `mssql` | Managed Identity in cloud, SQL auth locally only |
 | JWT validation | `jose` | remote JWKS, cached |
 | Database | Azure SQL Database | Basic (prod) / `GP_S_Gen5_1` serverless auto-pause 60 min (dev) |
-| Hosting (web) | Azure Static Web Apps Standard | two SWA per environment (see `/infra`) |
+| Hosting (web) | Azure Static Web Apps Free | two SWA per environment; Standard buys only `linkedBackend`, which is impossible here |
 | Identity | Microsoft Entra External ID | sole IdP; no custom credential storage |
-| Secrets | Azure Key Vault | RBAC + Key Vault references in app settings |
-| IaC | Bicep | Azure Verified Modules where they exist |
+| Secrets | Azure Key Vault | none exist in the current scope, so `/infra` provisions no vault |
+| IaC | Bicep | hand-written modules in `infra/modules/`; no AVM — see `docs/deployment.md` |
 | CI/CD | GitHub Actions | OIDC federated credentials, no static Azure secrets |
 | Observability | Application Insights + Log Analytics | enabled in every environment |
 | Tests | Vitest | both `/api` and each frontend |
@@ -73,11 +73,10 @@ npm --prefix api test                         # vitest run
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
 ./scripts/db-seed.sh local|dev [--demo]       # reference data, + demo data on request
 
-# Infrastructure
-az deployment group what-if -g rg-lehub-<env> \
-  --template-file infra/main.bicep --parameters infra/main.<env>.bicepparam
-az deployment group create -g rg-lehub-<env> \
-  --template-file infra/main.bicep --parameters infra/main.<env>.bicepparam
+# Infrastructure (resource groups are created by hand, never by Bicep)
+./scripts/infra-deploy.sh dev --what-if       # preview, changes nothing
+./scripts/infra-deploy.sh dev                 # apply infra/main.dev.bicepparam
+./scripts/db-bootstrap-mi.sh dev              # grant the managed identity on the database
 ```
 
 Requires: Docker, Node 22 via `fnm` (pinned in `.nvmrc`), `func` (Core Tools 4), Azure CLI 2.60+,
