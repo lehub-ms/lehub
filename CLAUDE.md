@@ -4,8 +4,10 @@
 
 LeHub is the community agenda of French-speaking Microsoft communities: a public SPA listing
 meetups, conferences and webinars, plus an admin backoffice for community organizers.
-Volunteer-run, open source (MIT), hosted 100% on Azure under a ~25 €/month budget cap — every
-new Azure resource must be justified against that budget before it lands in `/infra`.
+Volunteer-run, open source (MIT), hosted 100% on Azure under a ~25 €/month design cap — every
+new Azure resource must be justified against that budget before it lands in `/infra`. The
+Azure budgets in `/infra` are tripwires set above that cap, not the cap itself: 15 € on dev,
+50 € on prod, whose 50% alert lands exactly on the 25 €. See `docs/deployment.md`.
 
 ## Repository layout
 

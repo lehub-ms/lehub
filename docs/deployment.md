@@ -36,6 +36,61 @@ guessing a region.
 az group create -n rg-lehub-prod -l westeurope --tags env=prod project=lehub
 ```
 
+`infra-deploy.sh` also refuses a group outside `westeurope`. The template takes its
+location from the group, so the group's region silently becomes the region of the whole
+environment — and a template cannot check a choice that was made before it ran.
+
+## Cost guardrails
+
+The budget shapes this project, so three things enforce it rather than describing it.
+
+| Guard | dev | prod | What it does |
+|---|---|---|---|
+| `Microsoft.Consumption/budgets` | 15 € | 50 € | alerts at 50 / 80 / 100 % of actual spend, and at 100 % of *forecast* |
+| `maximumInstanceCount` | 10 | 20 | ceiling on API scale-out, so a hammered endpoint cannot scale the bill |
+| Log Analytics `dailyQuotaGb` | 0.5 | 0.5 | stops ingestion for the rest of the UTC day |
+
+The amounts sit above expected spend on purpose — dev is estimated at 5-10 €/month and
+prod at 4.30 € plus usage — so that a notification means something is wrong rather than
+that the month was busy. Prod's 50 % threshold lands on 25 €, the figure the project
+budgets for itself as a whole. Notifications go to the **Owner role** on the resource
+group, not to an address: nothing has to be updated when a contact changes, and no
+personal address is committed to a public repository.
+
+The forecast alert is the only one that can still be acted on. The other three report
+money already spent.
+
+**The daily cap has a cost of its own.** Reaching it stops *all* ingestion until midnight
+UTC, including the SQL security audit — protecting the bill can leave a hole in the
+security log. The cap is a runaway guard, not a target: real volume here is a few
+megabytes a day, and 0.5 GB/day sustained would cost more than the environment's entire
+budget. The platform's minimum is 0.023 GB/day if it ever needs tightening.
+
+## Accepted risks
+
+Written down so they are decisions rather than discoveries.
+
+| Risk | Why it is accepted |
+|---|---|
+| No blob soft delete or versioning | the container holds the deployment package, which a redeployment rebuilds |
+| Point-in-time restore only, 7 days on prod Basic | long-term retention is billed per GB and the data is re-seedable |
+| No regional DR, no zone redundancy | a community agenda tolerates hours of downtime; geo-redundancy does not fit the budget |
+| Storage reachable from any network | `allowSharedKeyAccess: false` means Entra is the barrier, not the network |
+| SQL reachable from any Azure IP | a private endpoint is ~7 €/month; `azureADOnlyAuthentication` is the real guard |
+| Microsoft Defender for Cloud, beyond the free tiers | Defender for SQL ~13 €, Storage ~10 €, App Service ~15 € per month — together more than the whole budget |
+
+The SQL audit is what replaces Defender for SQL: successful and failed authentications
+are written to `log-lehub-<env>`. It is deliberately narrow — the default audit groups
+include `BATCH_COMPLETED_GROUP`, which records every statement the API runs and would be
+an ingestion bill rather than a security log.
+
+```kusto
+AzureDiagnostics
+| where Category == "SQLSecurityAuditEvents"
+| where action_name_s startswith "DATABASE AUTHENTICATION"
+| project TimeGenerated, action_name_s, succeeded_s, server_principal_name_s, client_ip_s
+```
+
 ## Deploying
 
 ```bash
@@ -46,8 +101,25 @@ az group create -n rg-lehub-prod -l westeurope --tags env=prod project=lehub
 
 Applying to prod types the resource group name back before anything happens.
 
-A second `--what-if` straight after a deployment should report no change. If it does
-not, the template and the environment have drifted apart and that is the bug.
+A second `--what-if` straight after a deployment reports **nine resources to modify**, and
+none of them is drift. Every one is the resource provider normalising something, or
+`what-if` being unable to evaluate an expression before the deployment runs. Anything
+*outside* this list is the bug:
+
+| Resource | Reported | Why |
+|---|---|---|
+| `budgets/budget-lehub-dev` | `startDate`, `endDate` | the start date is `utcNow()`, which `what-if` cannot resolve; the API defaults an end date ten years out |
+| `components/appi-lehub-dev` | `Flow_Type`, `Request_Source` | stamped by the provider on creation |
+| `auditingSettings/default` | `isManagedIdentityInUse`, `retentionDays`, `storageAccountSubscriptionId` | storage-target properties the provider fills in even for an Azure Monitor target |
+| `diagnosticSettings/sqlAudit` | `metrics`, ten disabled log categories | the provider expands the category list to every category the resource supports |
+| `containers/deployments` | `defaultEncryptionScope`, `denyEncryptionScopeOverride` | account-level encryption defaults, applied to every container |
+| `sites/func-lehub-dev` | `siteConfig.*` | `what-if` compares an unexpanded `siteConfig`, so CORS and `ftpsState` read as additions |
+| `config/appsettings` | `properties` | the settings are built from `reference()`, which has no value until the deployment runs |
+| both `staticSites` | `deploymentAuthPolicy`, `provider`, `stableInboundIP`, `trafficSplitting` | assigned by the provider; the template does not set them |
+
+Re-measure this table rather than trusting it. Each line is a property the template does
+not own, and taking ownership of one removes its line — which is exactly how the plan's
+`kind` and the blob retention policy stopped appearing here.
 
 ## After a first deployment
 
@@ -149,6 +221,8 @@ follows the resource name — so the CORS allow-list and any build-time API URL 
 | Private endpoints | out of budget; Entra authentication is the barrier instead |
 | `FUNCTIONS_WORKER_RUNTIME` | Flex Consumption declares the runtime in `functionAppConfig` |
 | Azure Verified Modules | the stories pin properties to the line; hand-written modules stay auditable |
+| Microsoft Defender for Cloud plans | see "Accepted risks" — together they cost more than the whole budget |
+| Basic publishing credentials (SCM, FTP) | refused outright; deployment goes through the managed identity |
 
 The identity holds two role assignments and no more: **Storage Blob Data Owner** on the
 storage account, and **Monitoring Metrics Publisher** on the Application Insights
