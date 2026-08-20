@@ -69,6 +69,11 @@ var functionAppName = 'func-lehub-${environmentName}'
 // zero, prod keeps one instance warm so the first visitor does not pay for a cold start.
 var alwaysReadyInstances = environmentName == 'prod' ? 1 : 0
 
+// Same rule, the other end of the range: how far the API is allowed to scale out. Kept
+// deliberately low — this is a bill ceiling before it is a capacity one, and 20 instances
+// of 512 MB are far more than a community agenda ever needs.
+var maximumInstances = environmentName == 'prod' ? 20 : 10
+
 // The local Vite origins exist only so the development loop exercises the same
 // cross-origin path as the cloud. They have no reason to be allowed in prod.
 var localDevOrigins = environmentName == 'dev'
@@ -193,8 +198,10 @@ module functionApp 'modules/functionApp.bicep' = {
     sqlServerFqdn: sqlServer.outputs.fullyQualifiedDomainName
     sqlDatabaseName: sqlDatabase.outputs.name
     appInsightsConnectionString: monitoring.outputs.connectionString
+    appInsightsId: monitoring.outputs.componentId
     allowedOrigins: allowedOrigins
     alwaysReadyInstances: alwaysReadyInstances
+    maximumInstances: maximumInstances
   }
   // The only explicit dependency in this file, and the only one that cannot be implicit:
   // no value flows from the role assignments to the app. With shared-key access refused

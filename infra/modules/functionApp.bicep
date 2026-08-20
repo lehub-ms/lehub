@@ -19,16 +19,28 @@ param sqlDatabaseName string
 
 param appInsightsConnectionString string
 
+@description('Resource id of the Application Insights component, for the portal link tag.')
+param appInsightsId string
+
 @description('Exactly the origins allowed to call the API. Nothing else gets through.')
 param allowedOrigins array
 
 @description('Instances kept warm. 0 in dev, 1 in prod.')
 param alwaysReadyInstances int
 
+@description('Hard ceiling on scale-out. 10 in dev, 20 in prod.')
+param maximumInstances int
+
 resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   name: name
   location: location
-  tags: tags
+  // The platform adds a hidden-link tag pointing at the Application Insights component,
+  // and that is what makes the portal show the component on this app's blade. Tags are
+  // replaced wholesale on every deployment, so a bare `tags: tags` deleted it each time.
+  // Declaring it here is the only way to both own the tag set and keep the link.
+  tags: union(tags, {
+    'hidden-link:${appInsightsId}': 'Resource'
+  })
   kind: 'functionapp,linux'
   identity: {
     // One explicit identity, no system-assigned one. Its lifetime stays independent of
@@ -70,10 +82,17 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
             ]
           : []
         instanceMemoryMB: 512
-        maximumInstanceCount: 40
+        // A ceiling on the bill before it is a ceiling on capacity. The API is anonymous
+        // and reaches the database on every call, so anything that hammers it scales the
+        // plan and keeps a serverless database awake. A budget alert arrives after the
+        // money is spent; this refuses to spend it.
+        maximumInstanceCount: maximumInstances
       }
     }
     siteConfig: {
+      // Deployment reads the package from a blob container with the managed identity.
+      // FTP is a second way in that nothing uses, so it is closed rather than secured.
+      ftpsState: 'Disabled'
       cors: {
         allowedOrigins: allowedOrigins
         // No cookies, no credentialed requests: the API is anonymous in this scope.
@@ -124,9 +143,19 @@ resource appSettings 'Microsoft.Web/sites/config@2024-04-01' = {
 //
 // The API validates its own tokens with jose when it has any to validate. Nothing is
 // delegated to the platform's authentication layer.
+//
+// Chained behind the app settings on purpose, and every site-level write below is chained
+// in turn. Their only implicit dependency is the site itself, so ARM issues the requests
+// concurrently — while App Service serialises writes to a site, and the losing request
+// comes back `409 Cannot modify this site because another operation is in progress`.
+// Intermittently, and only on a redeploy. This chain is what makes it impossible; do not
+// collapse it back into siblings.
 resource authSettings 'Microsoft.Web/sites/config@2024-04-01' = {
   parent: functionApp
   name: 'authsettingsV2'
+  dependsOn: [
+    appSettings
+  ]
   properties: {
     platform: {
       enabled: false
@@ -136,6 +165,35 @@ resource authSettings 'Microsoft.Web/sites/config@2024-04-01' = {
       unauthenticatedClientAction: 'AllowAnonymous'
     }
   }
+}
+
+// The last static credential the platform still offered. Both default to allowed, which
+// left a username-and-password path into Kudu and FTP: whoever obtained the publish
+// profile could deploy code to this API without holding any Entra identity at all. That
+// is the opposite of what the rest of this template spends its effort on.
+//
+// Deployment goes through the managed identity and the blob container, so nothing here
+// loses a capability it was using.
+resource scmPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2024-04-01' = {
+  parent: functionApp
+  name: 'scm'
+  properties: {
+    allow: false
+  }
+  dependsOn: [
+    authSettings
+  ]
+}
+
+resource ftpPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2024-04-01' = {
+  parent: functionApp
+  name: 'ftp'
+  properties: {
+    allow: false
+  }
+  dependsOn: [
+    scmPolicy
+  ]
 }
 
 output name string = functionApp.name
