@@ -313,6 +313,37 @@ Three things to know before trusting a first run:
   --all` must return exactly two assignments, both scoped to the resource group, and
   `az ad app credential list --id "$APP_ID"` must return an empty list.
 
+## Branch protection
+
+GitHub refuses any merge whose CI is not green — the rule does not depend on the
+discipline of whoever clicks the button. Two repository rulesets, `protect-main` and
+`protect-develop`, enforce on both branches: pull request required, squash merge only,
+force-push and deletion forbidden, linear history, the four `ci.yml` checks required, and
+the branch up to date with its target before merging. `main` has no bypass actor — a
+hotfix goes through a pull request like everything else, urgency included.
+
+This configuration lives in GitHub, not in the repository, so it cannot be versioned —
+and it can drift from this page without anything signalling it. Two mitigations:
+
+- `docs/github/protect-main.json` and `docs/github/protect-develop.json` are the exported
+  rulesets, replayable as-is on a fresh repository:
+
+  ```bash
+  gh api -X POST repos/lehub-ms/lehub/rulesets --input docs/github/protect-main.json
+  gh api -X POST repos/lehub-ms/lehub/rulesets --input docs/github/protect-develop.json
+  ```
+
+- **The required-check list is maintained by hand.** Adding a job to `ci.yml` does not
+  add it to the required checks — the omission is silent, and a pull request could merge
+  without the new job being green. Renaming a job breaks the match the other way and
+  blocks every pull request until the rulesets are updated. Any change to `ci.yml` job
+  names updates the rulesets and re-exports the JSON in the same pull request.
+
+The required checks are exactly the four jobs of `ci.yml`, no more: a required check
+that never runs would block pull requests forever, which is why no `ci.yml` job is ever
+conditional. A run cancelled by `concurrency` leaves a `cancelled` check, which is not a
+failure and does not block.
+
 ## Continuous deployment
 
 There is none yet. Deployments are run by hand with `infra-deploy.sh` until the
