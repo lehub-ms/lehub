@@ -162,6 +162,14 @@ module adminStaticSite 'modules/staticWebApp.bicep' = {
 // Built here rather than in the module: main.bicep is the only place that knows both
 // front-ends and the environment. A custom domain added later becomes a new origin and
 // has to be added here, or the site fails CORS while the API looks perfectly healthy.
+var allowedOrigins = concat(
+  [
+    'https://${webStaticSite.outputs.defaultHostname}'
+    'https://${adminStaticSite.outputs.defaultHostname}'
+  ],
+  localDevOrigins
+)
+
 module roleAssignments 'modules/roleAssignments.bicep' = {
   name: 'roleAssignments'
   params: {
@@ -171,3 +179,52 @@ module roleAssignments 'modules/roleAssignments.bicep' = {
   }
 }
 
+module functionApp 'modules/functionApp.bicep' = {
+  name: 'functionApp'
+  params: {
+    name: functionAppName
+    location: location
+    tags: tags
+    appServicePlanId: appServicePlan.outputs.id
+    managedIdentityId: managedIdentity.outputs.id
+    managedIdentityClientId: managedIdentity.outputs.clientId
+    storageAccountName: storage.outputs.name
+    deploymentContainerUri: storage.outputs.deploymentContainerUri
+    sqlServerFqdn: sqlServer.outputs.fullyQualifiedDomainName
+    sqlDatabaseName: sqlDatabase.outputs.name
+    appInsightsConnectionString: monitoring.outputs.connectionString
+    allowedOrigins: allowedOrigins
+    alwaysReadyInstances: alwaysReadyInstances
+  }
+  // The only explicit dependency in this file, and the only one that cannot be implicit:
+  // no value flows from the role assignments to the app. With shared-key access refused
+  // on the storage account, the identity has no way to reach the deployment container
+  // until Storage Blob Data Owner exists — so on a new resource group the host would
+  // otherwise come up before it is allowed to read its own code.
+  dependsOn: [
+    roleAssignments
+  ]
+}
+
+// ─── Outputs ─────────────────────────────────────────────────────────────────
+
+output functionAppHostname string = functionApp.outputs.defaultHostname
+
+// Carries the scheme on purpose. The bare hostname assigned to VITE_API_BASE_URL would
+// be resolved as a relative path against the site's own origin, which fails as a 404
+// from the static host rather than as anything recognisable as an API problem.
+@description('Becomes VITE_API_BASE_URL when the front-ends are built.')
+output apiBaseUrl string = 'https://${functionApp.outputs.defaultHostname}'
+
+output webAppHostname string = webStaticSite.outputs.defaultHostname
+output adminAppHostname string = adminStaticSite.outputs.defaultHostname
+
+output sqlServerFqdn string = sqlServer.outputs.fullyQualifiedDomainName
+output sqlDatabaseName string = sqlDatabase.outputs.name
+
+@description('Consumed by scripts/db-bootstrap-mi.sh to create the database user.')
+output managedIdentityName string = managedIdentity.outputs.name
+output managedIdentityClientId string = managedIdentity.outputs.clientId
+output managedIdentityPrincipalId string = managedIdentity.outputs.principalId
+
+output storageAccountName string = storage.outputs.name
