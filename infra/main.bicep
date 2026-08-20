@@ -130,3 +130,14 @@ module sqlServer 'modules/sqlServer.bicep' = {
   }
 }
 
+module sqlDatabase 'modules/sqlDatabase.bicep' = {
+  name: 'sqlDatabase'
+  params: {
+    serverName: sqlServer.outputs.name
+    databaseName: sqlDatabaseName
+    location: location
+    tags: tags
+    skuName: sqlDatabaseSku
+  }
+}
+
