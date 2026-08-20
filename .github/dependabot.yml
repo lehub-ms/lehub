@@ -36,7 +36,9 @@ updates:
       admin:
         patterns: ["*"]
 
-  # The workflows pin actions by major version; this keeps those pins moving.
+  # The organisation's Actions policy requires every action to be pinned to
+  # a full commit SHA; this keeps those pins moving (Dependabot updates the
+  # SHA and the trailing version comment together).
   - package-ecosystem: github-actions
     directory: /
     schedule:
