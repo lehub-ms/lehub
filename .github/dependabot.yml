@@ -1,0 +1,49 @@
+# Weekly dependency update proposals, grouped per package so the repository
+# is not flooded with one pull request per dependency. Every pull request
+# targets develop — never main — and passes the same CI as any other change.
+# Silencing an alert is never done here: an exception is justified in writing
+# in the pull request that carries it.
+#
+# This file only governs version updates. Dependabot *security* updates, if
+# they are ever enabled on the repository, ignore target-branch and open
+# their pull requests against the default branch, main.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      api:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend/lehub.ms
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      web:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend/admin.lehub.ms
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      admin:
+        patterns: ["*"]
+
+  # The organisation's Actions policy requires every action to be pinned to
+  # a full commit SHA; this keeps those pins moving (Dependabot updates the
+  # SHA and the trailing version comment together).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      actions:
+        patterns: ["*"]

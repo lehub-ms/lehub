@@ -93,6 +93,10 @@ AzureDiagnostics
 
 ## Deploying
 
+Merging to `develop` deploys dev without any of this — see "Continuous deployment"
+below. The commands here are for previews, for a first deployment on a fresh
+subscription, and for prod as long as no pipeline targets it.
+
 ```bash
 ./scripts/infra-deploy.sh dev --what-if     # preview, changes nothing
 ./scripts/infra-deploy.sh dev               # apply
@@ -233,8 +237,193 @@ Contributor does not cover it. It is a constraint accepted knowingly, not an ove
 Access to SQL is not an Azure RBAC assignment at all: it is a database user, created by
 `scripts/db-bootstrap-mi.sh`.
 
+## The deployment identity
+
+GitHub Actions authenticates to Azure with OIDC federated credentials: the workflow
+exchanges its GitHub-issued token for an Entra token at run time, so no Azure credential
+of any kind is stored in GitHub — no secret, no certificate, no publish profile. The
+identity is created once, by hand: the pipeline cannot create the identity it
+authenticates with.
+
+Every command below is replayable — each one either creates its object or fails loudly
+because it already exists, and none of them generates a secret.
+
+```bash
+SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+TENANT_ID="$(az account show --query tenantId -o tsv)"
+
+# 1. The Entra application and its service principal. No password, no certificate:
+#    the federated credential below is the only way to authenticate as this identity.
+APP_ID="$(az ad app create --display-name github-lehub-cicd --query appId -o tsv)"
+SP_ID="$(az ad sp create --id "$APP_ID" --query id -o tsv)"
+
+# 2. One federated credential per environment, never one per branch or pull request:
+#    access to Azure always goes through a GitHub environment. The subject must be
+#    exactly `repo:<org>/<repo>:environment:<env>` — a malformed subject only shows up
+#    at run time as AADSTS70021, which does not say what subject it expected.
+az ad app federated-credential create --id "$APP_ID" --parameters '{
+  "name": "github-env-dev",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:lehub-ms/lehub:environment:dev",
+  "audiences": ["api://AzureADTokenExchange"],
+  "description": "GitHub Actions deployments to the dev environment"
+}'
+
+# 3. Two role assignments, both scoped to the environment's resource group and nothing
+#    wider: Contributor to create the resources, and Role Based Access Control
+#    Administrator because main.bicep declares role assignments. Without the second,
+#    a deployment creates the resources and then dies on the role-assignment module
+#    with AuthorizationFailed, leaving a half-provisioned environment.
+SCOPE="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-lehub-dev"
+az role assignment create --assignee-object-id "$SP_ID" \
+  --assignee-principal-type ServicePrincipal --role Contributor --scope "$SCOPE"
+az role assignment create --assignee-object-id "$SP_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Role Based Access Control Administrator" --scope "$SCOPE"
+
+# 4. Database access: membership of sg-lehub-sql-admins, the group that is the SQL
+#    server's Entra administrator. This is the pipeline's only path into the database —
+#    there is no SQL login to hand it.
+az ad group member add --group sg-lehub-sql-admins --member-id "$SP_ID"
+
+# 5. The GitHub environment the federated credential's subject points at, restricted
+#    to the branch that deploys there. A workflow on any other branch fails the token
+#    exchange before it ever reaches Azure.
+gh api -X PUT repos/lehub-ms/lehub/environments/dev \
+  -F "deployment_branch_policy[protected_branches]=false" \
+  -F "deployment_branch_policy[custom_branch_policies]=true"
+gh api -X POST repos/lehub-ms/lehub/environments/dev/deployment-branch-policies \
+  -f name=develop
+
+# 6. Three identifiers — not secrets — as environment variables. No GitHub secret
+#    exists in this repository, and none should ever be added for Azure access.
+gh variable set AZURE_CLIENT_ID       --env dev --body "$APP_ID"
+gh variable set AZURE_TENANT_ID       --env dev --body "$TENANT_ID"
+gh variable set AZURE_SUBSCRIPTION_ID --env dev --body "$SUBSCRIPTION_ID"
+```
+
+Opening prod one day repeats steps 2 to 6 with prod values — a second federated
+credential and a second GitHub environment on the same application, scoped to
+`rg-lehub-prod`.
+
+Three things to know before trusting a first run:
+
+- **RBAC propagation takes a few minutes.** The first deployment after creating the
+  assignments can fail once and succeed on replay.
+- **Renaming the repository or the organisation kills the identity silently.** The
+  federated credential's subject embeds both names; the token exchange starts failing
+  with AADSTS70021 and nothing on the GitHub side explains why.
+- **Verify the result, not the commands.** `az role assignment list --assignee "$APP_ID"
+  --all` must return exactly two assignments, both scoped to the resource group, and
+  `az ad app credential list --id "$APP_ID"` must return an empty list.
+
+## Branch protection
+
+GitHub refuses any merge whose CI is not green — the rule does not depend on the
+discipline of whoever clicks the button. Two repository rulesets, `protect-main` and
+`protect-develop`, enforce on both branches: pull request required, squash merge only,
+force-push and deletion forbidden, linear history, the four `ci.yml` checks required, and
+the branch up to date with its target before merging. `main` has no bypass actor — a
+hotfix goes through a pull request like everything else, urgency included.
+
+This configuration lives in GitHub, not in the repository, so it cannot be versioned —
+and it can drift from this page without anything signalling it. Two mitigations:
+
+- `docs/github/protect-main.json` and `docs/github/protect-develop.json` are the exported
+  rulesets, replayable as-is on a fresh repository:
+
+  ```bash
+  gh api -X POST repos/lehub-ms/lehub/rulesets --input docs/github/protect-main.json
+  gh api -X POST repos/lehub-ms/lehub/rulesets --input docs/github/protect-develop.json
+  ```
+
+- **The required-check list is maintained by hand.** Adding a job to `ci.yml` does not
+  add it to the required checks — the omission is silent, and a pull request could merge
+  without the new job being green. Renaming a job breaks the match the other way and
+  blocks every pull request until the rulesets are updated. Any change to `ci.yml` job
+  names updates the rulesets and re-exports the JSON in the same pull request.
+
+The required checks are exactly the four jobs of `ci.yml`, no more: a required check
+that never runs would block pull requests forever, which is why no `ci.yml` job is ever
+conditional. A run cancelled by `concurrency` leaves a `cancelled` check, which is not a
+failure and does not block.
+
 ## Continuous deployment
 
-There is none yet. Deployments are run by hand with `infra-deploy.sh` until the
-continuous deployment feature lands, which is also what will wire each Static Web App to
-this repository — the template leaves `repositoryUrl` unset on purpose.
+What the pipeline does, so nobody has to read the workflows to know the state of an
+environment. Any change to a trigger or to the job order updates this section in the
+same pull request — a page that drifts from the workflows is worse than no page.
+
+### Triggers
+
+| Event | Effect |
+|---|---|
+| Pull request to `develop` or `main` | `ci.yml` — build and test everything, no Azure access |
+| Merge to `develop` | `cd-dev.yml` — full ordered deployment to dev |
+| Merge to `main` | **nothing**, until putting LeHub into production is decided |
+| `workflow_dispatch` on `cd-dev.yml` | same as a merge to `develop` — this is how a deployment is replayed |
+
+The pipeline itself lives in `cd.yml`, reusable and parameterised by environment;
+`cd-dev.yml` only decides when it runs. Opening prod one day is a thin new caller on
+`main`, the prod half of the identity bootstrap above, and teaching the `/scripts`
+database tooling about prod — not a rewrite.
+
+Deployments serialise (`concurrency: cd-dev`, never cancelled mid-flight), so two close
+merges produce two complete deployments, in order.
+
+### Jobs, in order, and what each guarantees
+
+1. **ci** — replays `ci.yml` on the merged commit: what was validated on the pull
+   request is not what the merge produced. Nothing deploys if it fails.
+2. **infra** — applies `infra/main.bicep` to the pre-existing resource group, as
+   deployment `lehub-<run_id>` so the portal links back to the GitHub run. Every
+   downstream job consumes resource names from its outputs; no name is hard-coded in a
+   workflow.
+3. **database** — opens a single-IP firewall rule `gh-<run_id>` (removed even on
+   failure), waits for the serverless database to wake, then calls
+   `scripts/db-migrate.sh` and `scripts/db-seed.sh` (never `--demo`). A failure stops
+   the chain: the API never runs against a schema older than itself.
+4. **api** — builds `/api`, publishes exactly `dist/`, `host.json`, `package.json` and
+   production `node_modules` to the Function App, writes no app setting (Bicep owns
+   them), then probes `GET /api/health` until it answers 200 — a published-but-dead API
+   is a red job.
+5. **web** — builds both front-ends with `VITE_API_BASE_URL` from the infra outputs
+   (an empty value fails the build), reads each Static Web App's deployment token at
+   run time from the OIDC session — masked, never stored — publishes both
+   independently, and checks both hostnames answer 200.
+
+### Common failures
+
+| Symptom | Cause |
+|---|---|
+| `AADSTS70021: No matching federated identity record found` | the federated credential's subject does not match `repo:lehub-ms/lehub:environment:dev` — also what a renamed repository or organisation looks like, and what a run from a branch the `dev` environment does not allow gets |
+| `AuthorizationFailed` on the role-assignment module | the identity lost `Role Based Access Control Administrator`, or RBAC propagation after the bootstrap has not settled yet — replay once before digging |
+| First deployment after the bootstrap fails, second succeeds | RBAC propagation, a few minutes |
+| `database` job times out on its wake-up step | the serverless database took longer than the bounded retries; replay the run |
+| `checksum mismatch` from `db-migrate.sh` | a migration file was modified after being applied — restore the file, the fix is a *new* migration |
+| Function App publication refused | Flex Consumption writes to the `deployments` blob container; the app's managed identity needs its Storage Blob Data Owner assignment, which the infra job creates — a half-deleted environment loses it |
+| A `gh-*` firewall rule survives | the run was cancelled brutally between create and delete; delete it by name, nothing else uses that prefix |
+
+### Replaying and rolling back
+
+Replay: `Actions → CD dev → Run workflow` on `develop` (or `gh workflow run cd-dev.yml
+--ref develop`). The pipeline is idempotent — an unchanged commit produces a no-change
+deployment, "database is up to date", and a republished identical build.
+
+Rollback: there is none. Going back means replaying the chain on an earlier commit —
+revert the offending commit on `develop` through a pull request and let the merge
+deploy. Migrations do not roll back either: write a new migration that undoes the
+damage.
+
+### What the chain does not do
+
+- No production deployment, and no `prod` support in the database scripts — both belong
+  to the feature that actually puts LeHub into production.
+- No per-pull-request preview environments: the Static Web Apps Free plan does not
+  offer them, a trade-off accepted with the plan.
+- No automatic rollback, no end-to-end tests, no schema lifecycle beyond calling the
+  `/scripts` entry points.
+
+The Static Web Apps are wired to their content by this pipeline alone — the Bicep
+template leaves `repositoryUrl` unset on purpose, and a Static Web App recreated by hand
+serves the default page until the next merge republishes it.

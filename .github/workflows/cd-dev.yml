@@ -1,0 +1,35 @@
+name: CD dev
+
+# Every merge to develop redeploys the dev environment in full. The pipeline
+# itself lives in cd.yml; this file only decides when it runs and against
+# which environment. There is deliberately no prod counterpart: a push to
+# main deploys nothing until putting LeHub into production is decided.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two close merges produce two serialised deployments, and a deployment is
+# never cancelled mid-flight — half-applied infrastructure is worse than a
+# queue.
+concurrency:
+  group: cd-dev
+  cancel-in-progress: false
+
+jobs:
+  # The merged commit is rebuilt and retested before anything is published:
+  # what was validated on the pull request is not what the merge produced.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    uses: ./.github/workflows/cd.yml
+    with:
+      environment: dev
+    permissions:
+      id-token: write
+      contents: read

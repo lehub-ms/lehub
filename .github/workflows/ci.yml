@@ -1,0 +1,72 @@
+name: CI
+
+# The single definition of "green". Pull requests trigger it directly; the
+# deployment workflow replays it on the merged commit via workflow_call, so
+# nothing is ever published that this file has not validated.
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Cancel the previous run of the same pull request only. When called from a
+# deployment workflow the group must be unique (run_id) and never cancelled:
+# the caller's own concurrency already serialises deployments.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    # No path filter and no conditional job, ever: every pull request replays
+    # everything, and a job that sometimes does not run would deadlock the
+    # required checks of the branch protection.
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [api, frontend/lehub.ms, frontend/admin.lehub.ms]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+      # npm ci, never npm install: a package-lock.json out of sync with its
+      # package.json is an error, not something to resolve silently.
+      - run: npm ci
+      # high and critical block the merge — known CVEs are fixed before any
+      # feature lands. moderate and below stay visible in the log without
+      # failing the build.
+      - run: npm audit --audit-level=high
+      # lint is eslint in the front-ends and tsc --noEmit in /api — the
+      # asymmetry is deliberate, /api has no ESLint setup.
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+  infra:
+    # Compilation only — a pull request never gets a token and never talks to
+    # Azure. Warnings fail the build: bicepconfig.json already promotes most
+    # linter rules to errors, this catches the rest.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Compile Bicep, failing on any diagnostic
+        run: |
+          # The version-check nag is CLI noise, not a compile diagnostic — it
+          # would fail the emptiness check below. The runner is ephemeral, so
+          # the config change dies with the job.
+          az config set bicep.version_check=False
+          az bicep install
+          diagnostics=$(az bicep build --file infra/main.bicep --stdout 2>&1 >/dev/null)
+          if [ -n "$diagnostics" ]; then
+            echo "$diagnostics"
+            exit 1
+          fi
