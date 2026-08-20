@@ -233,6 +233,86 @@ Contributor does not cover it. It is a constraint accepted knowingly, not an ove
 Access to SQL is not an Azure RBAC assignment at all: it is a database user, created by
 `scripts/db-bootstrap-mi.sh`.
 
+## The deployment identity
+
+GitHub Actions authenticates to Azure with OIDC federated credentials: the workflow
+exchanges its GitHub-issued token for an Entra token at run time, so no Azure credential
+of any kind is stored in GitHub — no secret, no certificate, no publish profile. The
+identity is created once, by hand: the pipeline cannot create the identity it
+authenticates with.
+
+Every command below is replayable — each one either creates its object or fails loudly
+because it already exists, and none of them generates a secret.
+
+```bash
+SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+TENANT_ID="$(az account show --query tenantId -o tsv)"
+
+# 1. The Entra application and its service principal. No password, no certificate:
+#    the federated credential below is the only way to authenticate as this identity.
+APP_ID="$(az ad app create --display-name github-lehub-cicd --query appId -o tsv)"
+SP_ID="$(az ad sp create --id "$APP_ID" --query id -o tsv)"
+
+# 2. One federated credential per environment, never one per branch or pull request:
+#    access to Azure always goes through a GitHub environment. The subject must be
+#    exactly `repo:<org>/<repo>:environment:<env>` — a malformed subject only shows up
+#    at run time as AADSTS70021, which does not say what subject it expected.
+az ad app federated-credential create --id "$APP_ID" --parameters '{
+  "name": "github-env-dev",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:lehub-ms/lehub:environment:dev",
+  "audiences": ["api://AzureADTokenExchange"],
+  "description": "GitHub Actions deployments to the dev environment"
+}'
+
+# 3. Two role assignments, both scoped to the environment's resource group and nothing
+#    wider: Contributor to create the resources, and Role Based Access Control
+#    Administrator because main.bicep declares role assignments. Without the second,
+#    a deployment creates the resources and then dies on the role-assignment module
+#    with AuthorizationFailed, leaving a half-provisioned environment.
+SCOPE="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-lehub-dev"
+az role assignment create --assignee-object-id "$SP_ID" \
+  --assignee-principal-type ServicePrincipal --role Contributor --scope "$SCOPE"
+az role assignment create --assignee-object-id "$SP_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Role Based Access Control Administrator" --scope "$SCOPE"
+
+# 4. Database access: membership of sg-lehub-sql-admins, the group that is the SQL
+#    server's Entra administrator. This is the pipeline's only path into the database —
+#    there is no SQL login to hand it.
+az ad group member add --group sg-lehub-sql-admins --member-id "$SP_ID"
+
+# 5. The GitHub environment the federated credential's subject points at, restricted
+#    to the branch that deploys there. A workflow on any other branch fails the token
+#    exchange before it ever reaches Azure.
+gh api -X PUT repos/lehub-ms/lehub/environments/dev \
+  -F "deployment_branch_policy[protected_branches]=false" \
+  -F "deployment_branch_policy[custom_branch_policies]=true"
+gh api -X POST repos/lehub-ms/lehub/environments/dev/deployment-branch-policies \
+  -f name=develop
+
+# 6. Three identifiers — not secrets — as environment variables. No GitHub secret
+#    exists in this repository, and none should ever be added for Azure access.
+gh variable set AZURE_CLIENT_ID       --env dev --body "$APP_ID"
+gh variable set AZURE_TENANT_ID       --env dev --body "$TENANT_ID"
+gh variable set AZURE_SUBSCRIPTION_ID --env dev --body "$SUBSCRIPTION_ID"
+```
+
+Opening prod one day repeats steps 2 to 6 with prod values — a second federated
+credential and a second GitHub environment on the same application, scoped to
+`rg-lehub-prod`.
+
+Three things to know before trusting a first run:
+
+- **RBAC propagation takes a few minutes.** The first deployment after creating the
+  assignments can fail once and succeed on replay.
+- **Renaming the repository or the organisation kills the identity silently.** The
+  federated credential's subject embeds both names; the token exchange starts failing
+  with AADSTS70021 and nothing on the GitHub side explains why.
+- **Verify the result, not the commands.** `az role assignment list --assignee "$APP_ID"
+  --all` must return exactly two assignments, both scoped to the resource group, and
+  `az ad app credential list --id "$APP_ID"` must return an empty list.
+
 ## Continuous deployment
 
 There is none yet. Deployments are run by hand with `infra-deploy.sh` until the
