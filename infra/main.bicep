@@ -162,3 +162,12 @@ module adminStaticSite 'modules/staticWebApp.bicep' = {
 // Built here rather than in the module: main.bicep is the only place that knows both
 // front-ends and the environment. A custom domain added later becomes a new origin and
 // has to be added here, or the site fails CORS while the API looks perfectly healthy.
+module roleAssignments 'modules/roleAssignments.bicep' = {
+  name: 'roleAssignments'
+  params: {
+    principalId: managedIdentity.outputs.principalId
+    storageAccountName: storage.outputs.name
+    appInsightsName: monitoring.outputs.componentName
+  }
+}
+
