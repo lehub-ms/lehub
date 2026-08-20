@@ -30,6 +30,20 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  // Declared rather than left out. This resource exists to parent the container below,
+  // but a deployment rewrites what it names and erases what it does not: leaving the
+  // properties off silently removed the retention policies on every run. Off is the
+  // decision — the container holds the deployment package and nothing else, and a
+  // redeployment rebuilds it — so turning soft delete on means changing these lines,
+  // not discovering later that the template quietly turned it back off.
+  properties: {
+    deleteRetentionPolicy: {
+      enabled: false
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: false
+    }
+  }
 }
 
 // Flex Consumption pulls the code package from this container.
