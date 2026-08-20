@@ -132,6 +132,8 @@ module sqlServer 'modules/sqlServer.bicep' = {
     location: location
     tags: tags
     aadAdminGroupObjectId: sqlAadAdminGroupObjectId
+    // Carries the ordering too: the workspace has to exist before the audit can name it.
+    logAnalyticsWorkspaceId: monitoring.outputs.workspaceId
   }
 }
 
