@@ -62,8 +62,15 @@ RESOURCE_GROUP="rg-lehub-$ENV_NAME"
 [[ -f "$PARAMS" ]] || die "Parameters not found: $PARAMS"
 
 # Fail here rather than half-way through a deployment against nothing.
-az group show -n "$RESOURCE_GROUP" >/dev/null 2>&1 \
+RG_LOCATION="$(az group show -n "$RESOURCE_GROUP" --query location -o tsv 2>/dev/null)" \
   || die "Resource group '$RESOURCE_GROUP' does not exist. Create it by hand, in westeurope."
+
+# main.bicep takes its location from the group, so the group's region silently becomes the
+# region of the whole environment. A prod group created in the wrong place would deploy all
+# of production outside the only authorised region and report success. Checked here because
+# the template cannot express it: by the time it runs, the choice is already made.
+[[ "$RG_LOCATION" == "westeurope" ]] \
+  || die "Resource group '$RESOURCE_GROUP' is in '$RG_LOCATION'. westeurope is the only authorised region."
 
 SUBSCRIPTION="$(az account show --query name -o tsv)"
 

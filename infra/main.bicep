@@ -42,8 +42,9 @@ param sqlAadAdminGroupObjectId string
 // Computed once here and passed down; no module rebuilds them.
 
 // Never a parameter: westeurope is the only authorised region, and the group already
-// carries it. A group created elsewhere would silently move the environment, which is
-// a review-time check, not something the template can express.
+// carries it. A group created elsewhere would silently move the whole environment, which
+// the template cannot express — so scripts/infra-deploy.sh refuses to deploy into a group
+// outside westeurope before this line is ever evaluated.
 var location = resourceGroup().location
 
 var tags = {
