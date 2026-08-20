@@ -20,6 +20,17 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
     }
     // The included tier. Raising it is billed, and is a budget decision of its own.
     retentionInDays: 30
+    workspaceCapping: {
+      // A runaway guard, not a target: real volume here is a few megabytes a day.
+      // Sustaining 0.5 GB/day would cost more than the environment's whole budget,
+      // which is exactly the accident this is meant to stop.
+      //
+      // The cost of the guard: once the cap is reached, ingestion stops until
+      // midnight UTC — including the SQL security audit. Protecting the bill can
+      // therefore leave a hole in the security log. That trade is written down in
+      // docs/deployment.md rather than left to be discovered.
+      dailyQuotaGb: json('0.5')
+    }
   }
 }
 
@@ -45,5 +56,9 @@ output connectionString string = component.properties.ConnectionString
 
 @description('Scope of the Monitoring Metrics Publisher role assignment.')
 output componentName string = component.name
+
+// The Function App tags itself with this id so the portal keeps linking the app to its
+// component. Without it the platform's own hidden-link tag is erased on every deployment.
+output componentId string = component.id
 
 output workspaceId string = workspace.id
