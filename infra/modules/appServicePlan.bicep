@@ -14,7 +14,11 @@ resource plan 'Microsoft.Web/serverfarms@2024-04-01' = {
   name: name
   location: location
   tags: tags
-  kind: 'functionapp,linux'
+  // Not 'functionapp,linux': the Web resource provider does not persist the composite
+  // form on a serverfarm, it stores 'functionapp'. Declaring what it stores is what
+  // keeps every what-if from reporting the same phantom change. Linux is carried by
+  // reserved below, which is the property the platform actually reads.
+  kind: 'functionapp'
   sku: {
     name: 'FC1'
     tier: 'FlexConsumption'
