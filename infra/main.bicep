@@ -141,3 +141,24 @@ module sqlDatabase 'modules/sqlDatabase.bicep' = {
   }
 }
 
+module webStaticSite 'modules/staticWebApp.bicep' = {
+  name: 'webStaticSite'
+  params: {
+    name: webStaticSiteName
+    location: location
+    tags: tags
+  }
+}
+
+module adminStaticSite 'modules/staticWebApp.bicep' = {
+  name: 'adminStaticSite'
+  params: {
+    name: adminStaticSiteName
+    location: location
+    tags: tags
+  }
+}
+
+// Built here rather than in the module: main.bicep is the only place that knows both
+// front-ends and the environment. A custom domain added later becomes a new origin and
+// has to be added here, or the site fails CORS while the API looks perfectly healthy.
