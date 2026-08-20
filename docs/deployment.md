@@ -93,6 +93,10 @@ AzureDiagnostics
 
 ## Deploying
 
+Merging to `develop` deploys dev without any of this — see "Continuous deployment"
+below. The commands here are for previews, for a first deployment on a fresh
+subscription, and for prod as long as no pipeline targets it.
+
 ```bash
 ./scripts/infra-deploy.sh dev --what-if     # preview, changes nothing
 ./scripts/infra-deploy.sh dev               # apply
@@ -346,6 +350,80 @@ failure and does not block.
 
 ## Continuous deployment
 
-There is none yet. Deployments are run by hand with `infra-deploy.sh` until the
-continuous deployment feature lands, which is also what will wire each Static Web App to
-this repository — the template leaves `repositoryUrl` unset on purpose.
+What the pipeline does, so nobody has to read the workflows to know the state of an
+environment. Any change to a trigger or to the job order updates this section in the
+same pull request — a page that drifts from the workflows is worse than no page.
+
+### Triggers
+
+| Event | Effect |
+|---|---|
+| Pull request to `develop` or `main` | `ci.yml` — build and test everything, no Azure access |
+| Merge to `develop` | `cd-dev.yml` — full ordered deployment to dev |
+| Merge to `main` | **nothing**, until putting LeHub into production is decided |
+| `workflow_dispatch` on `cd-dev.yml` | same as a merge to `develop` — this is how a deployment is replayed |
+
+The pipeline itself lives in `cd.yml`, reusable and parameterised by environment;
+`cd-dev.yml` only decides when it runs. Opening prod one day is a thin new caller on
+`main`, the prod half of the identity bootstrap above, and teaching the `/scripts`
+database tooling about prod — not a rewrite.
+
+Deployments serialise (`concurrency: cd-dev`, never cancelled mid-flight), so two close
+merges produce two complete deployments, in order.
+
+### Jobs, in order, and what each guarantees
+
+1. **ci** — replays `ci.yml` on the merged commit: what was validated on the pull
+   request is not what the merge produced. Nothing deploys if it fails.
+2. **infra** — applies `infra/main.bicep` to the pre-existing resource group, as
+   deployment `lehub-<run_id>` so the portal links back to the GitHub run. Every
+   downstream job consumes resource names from its outputs; no name is hard-coded in a
+   workflow.
+3. **database** — opens a single-IP firewall rule `gh-<run_id>` (removed even on
+   failure), waits for the serverless database to wake, then calls
+   `scripts/db-migrate.sh` and `scripts/db-seed.sh` (never `--demo`). A failure stops
+   the chain: the API never runs against a schema older than itself.
+4. **api** — builds `/api`, publishes exactly `dist/`, `host.json`, `package.json` and
+   production `node_modules` to the Function App, writes no app setting (Bicep owns
+   them), then probes `GET /api/health` until it answers 200 — a published-but-dead API
+   is a red job.
+5. **web** — builds both front-ends with `VITE_API_BASE_URL` from the infra outputs
+   (an empty value fails the build), reads each Static Web App's deployment token at
+   run time from the OIDC session — masked, never stored — publishes both
+   independently, and checks both hostnames answer 200.
+
+### Common failures
+
+| Symptom | Cause |
+|---|---|
+| `AADSTS70021: No matching federated identity record found` | the federated credential's subject does not match `repo:lehub-ms/lehub:environment:dev` — also what a renamed repository or organisation looks like, and what a run from a branch the `dev` environment does not allow gets |
+| `AuthorizationFailed` on the role-assignment module | the identity lost `Role Based Access Control Administrator`, or RBAC propagation after the bootstrap has not settled yet — replay once before digging |
+| First deployment after the bootstrap fails, second succeeds | RBAC propagation, a few minutes |
+| `database` job times out on its wake-up step | the serverless database took longer than the bounded retries; replay the run |
+| `checksum mismatch` from `db-migrate.sh` | a migration file was modified after being applied — restore the file, the fix is a *new* migration |
+| Function App publication refused | Flex Consumption writes to the `deployments` blob container; the app's managed identity needs its Storage Blob Data Owner assignment, which the infra job creates — a half-deleted environment loses it |
+| A `gh-*` firewall rule survives | the run was cancelled brutally between create and delete; delete it by name, nothing else uses that prefix |
+
+### Replaying and rolling back
+
+Replay: `Actions → CD dev → Run workflow` on `develop` (or `gh workflow run cd-dev.yml
+--ref develop`). The pipeline is idempotent — an unchanged commit produces a no-change
+deployment, "database is up to date", and a republished identical build.
+
+Rollback: there is none. Going back means replaying the chain on an earlier commit —
+revert the offending commit on `develop` through a pull request and let the merge
+deploy. Migrations do not roll back either: write a new migration that undoes the
+damage.
+
+### What the chain does not do
+
+- No production deployment, and no `prod` support in the database scripts — both belong
+  to the feature that actually puts LeHub into production.
+- No per-pull-request preview environments: the Static Web Apps Free plan does not
+  offer them, a trade-off accepted with the plan.
+- No automatic rollback, no end-to-end tests, no schema lifecycle beyond calling the
+  `/scripts` entry points.
+
+The Static Web Apps are wired to their content by this pipeline alone — the Bicep
+template leaves `repositoryUrl` unset on purpose, and a Static Web App recreated by hand
+serves the default page until the next merge republishes it.
