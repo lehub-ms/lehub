@@ -78,3 +78,17 @@ var localDevOrigins = environmentName == 'dev'
     ]
   : []
 
+// ─── Composition ─────────────────────────────────────────────────────────────
+// Order is expressed by the values modules pass to each other. The one exception is
+// spelled out on the Function App below: a dependency that carries no value cannot be
+// expressed any other way.
+
+module managedIdentity 'modules/managedIdentity.bicep' = {
+  name: 'managedIdentity'
+  params: {
+    name: managedIdentityName
+    location: location
+    tags: tags
+  }
+}
+
