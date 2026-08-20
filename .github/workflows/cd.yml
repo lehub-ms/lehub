@@ -37,6 +37,7 @@ jobs:
       adminAppName: ${{ steps.deploy.outputs.adminAppName }}
       adminAppHostname: ${{ steps.deploy.outputs.adminAppHostname }}
       sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
+      sqlServerFqdn: ${{ steps.deploy.outputs.sqlServerFqdn }}
     steps:
       - uses: actions/checkout@v5
       - uses: azure/login@v2
@@ -60,6 +61,79 @@ jobs:
           # hard-coded name in any workflow.
           for key in functionAppName functionAppHostname apiBaseUrl \
                      webAppName webAppHostname adminAppName adminAppHostname \
-                     sqlServerName; do
+                     sqlServerName sqlServerFqdn; do
             echo "$key=$(echo "$outputs" | jq -er ".$key.value")" >> "$GITHUB_OUTPUT"
           done
+
+  database:
+    # Migrations and reference data run before the API is published, so no
+    # version of the API ever executes against a schema older than itself.
+    # The schema lifecycle belongs to /db and /scripts — this job only calls
+    # them.
+    needs: infra
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      RESOURCE_GROUP: rg-lehub-${{ inputs.environment }}
+      SQL_SERVER_NAME: ${{ needs.infra.outputs.sqlServerName }}
+      SQL_SERVER_FQDN: ${{ needs.infra.outputs.sqlServerFqdn }}
+      FIREWALL_RULE: gh-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install go-sqlcmd
+        # The scripts use go-sqlcmd's --authentication-method, which the
+        # ODBC sqlcmd preinstalled on the runner does not understand.
+        run: |
+          curl -fsSL -o /tmp/sqlcmd.tar.bz2 \
+            https://github.com/microsoft/go-sqlcmd/releases/latest/download/sqlcmd-linux-amd64.tar.bz2
+          sudo tar -xjf /tmp/sqlcmd.tar.bz2 -C /usr/local/bin sqlcmd
+          sqlcmd --version
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Open the SQL firewall to this runner
+        # A GitHub runner's IP is unpredictable, so the rule is created for
+        # this exact run and this exact address — never a permanent range,
+        # never "allow Azure services". Orphaned rules from brutally
+        # cancelled runs stay recognisable by their gh- prefix.
+        run: |
+          RUNNER_IP="$(curl -fsS https://api.ipify.org)"
+          az sql server firewall-rule create \
+            --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER_NAME" \
+            --name "$FIREWALL_RULE" \
+            --start-ip-address "$RUNNER_IP" --end-ip-address "$RUNNER_IP" \
+            --output none
+      - name: Wake the database
+        # The dev database is serverless with auto-pause: the first
+        # connection after a pause can time out while it resumes. This exact
+        # case is retried — and only this one, the scripts themselves are
+        # never replayed.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sqlcmd -S "$SQL_SERVER_FQDN" -d lehub \
+                 --authentication-method ActiveDirectoryAzCli \
+                 -Q "SELECT 1" > /dev/null 2>&1; then
+              exit 0
+            fi
+            echo "attempt $attempt: database not reachable yet, waiting 30s"
+            sleep 30
+          done
+          echo "database still unreachable after 5 attempts" >&2
+          exit 1
+      - name: Apply pending migrations
+        run: ./scripts/db-migrate.sh ${{ inputs.environment }}
+      - name: Apply reference data
+        # Never --demo: demonstration data does not enter an Azure
+        # environment.
+        run: ./scripts/db-seed.sh ${{ inputs.environment }}
+      - name: Close the SQL firewall
+        if: always()
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER_NAME" \
+            --name "$FIREWALL_RULE"
