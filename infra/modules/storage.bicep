@@ -39,6 +39,10 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   properties: {
     deleteRetentionPolicy: {
       enabled: false
+      // The platform fills this in whether or not the template mentions it, so leaving
+      // it out means erasing it on every deployment — the same half-ownership this
+      // block exists to end. Found by reading a what-if after deploying, not before.
+      allowPermanentDelete: false
     }
     containerDeleteRetentionPolicy: {
       enabled: false
