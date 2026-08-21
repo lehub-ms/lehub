@@ -27,9 +27,14 @@ describe('EventCard', () => {
   })
 
   it('renders the date range', () => {
+    // `Z`-suffixed UTC, matching what the API actually returns — a timezone-less local
+    // string parses relative to the *system* timezone, which differs between a dev
+    // machine and the CI runner (UTC) and silently shifts the displayed hour.
+    // 17:00/19:00 UTC is 18:00/20:00 in the `Europe/Paris` zone `formatEventDateRange`
+    // pins its display to (CET, +1 — mid-March is still before the DST switch).
     render(
       <EventCard
-        event={buildEvent({ startDate: '2026-03-15T18:00:00', endDate: '2026-03-15T20:00:00' })}
+        event={buildEvent({ startDate: '2026-03-15T17:00:00.000Z', endDate: '2026-03-15T19:00:00.000Z' })}
       />,
     )
     expect(screen.getByText(/18:00 → 20:00/)).not.toBeNull()
