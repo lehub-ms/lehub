@@ -82,8 +82,9 @@ npm --prefix api test                         # vitest run
 ./scripts/db-bootstrap-mi.sh dev              # grant the managed identity on the database
 ```
 
-Requires: Docker, Node 22 via `fnm` (pinned in `.nvmrc`; **22.22.0 minimum** — React Router v8
-refuses anything below), `func` (Core Tools 4), Azure CLI 2.60+,
+Requires: Docker, Node 22 via `fnm` (`.nvmrc` pins the major only) — keep your 22.x current,
+as React Router v8 declares `engines: node >=22.22.0` and npm merely warns below it,
+`func` (Core Tools 4), Azure CLI 2.60+,
 `az bicep`, `go-sqlcmd`, `gh`, membership in the `sg-lehub-sql-admins` Entra group for any cloud
 DB operation. Setup instructions live in `docs/local-dev.md`.
 

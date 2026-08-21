@@ -1,5 +1,6 @@
+import type { RefObject } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { NavLink } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -10,20 +11,53 @@ import { Wordmark } from './Wordmark'
 const DESKTOP_QUERY = '(min-width: 768px)'
 
 const DESKTOP_LINK =
-  'flex items-center rounded-full px-3.5 py-2 text-sm font-medium transition-colors hover:bg-primary/5 hover:text-primary'
+  'flex items-center rounded-full px-3.5 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-primary/5 hover:text-primary'
 
-/** min-h-11 is the 44px touch target story #9 asks for on every drawer entry. */
+/* min-h-11 is the 44px touch target story #9 asks for on every drawer entry.
+   text-ink-body rather than text-ink-muted: the panel is translucent over a dark
+   scrim, and compositing drags the muted token down to 3.5:1 — below the AA floor.
+   ink-body holds at 7.4:1 whatever the background mesh is doing underneath. */
 const DRAWER_LINK =
-  'flex min-h-11 items-center rounded-xl px-4 text-base font-medium transition-colors hover:bg-primary/5 hover:text-primary'
+  'flex min-h-11 items-center rounded-xl px-4 text-base font-medium text-ink-body transition-colors hover:bg-primary/5 hover:text-primary'
 
-function linkClass(base: string) {
-  return ({ isActive }: { isActive: boolean }) =>
-    cn(base, isActive ? 'bg-primary-xs font-semibold text-primary' : 'text-ink-muted')
+const ACTIVE_LINK = 'bg-primary-xs font-semibold text-primary'
+
+interface SectionLinkProps {
+  to: string
+  label: string
+  isActive: boolean
+  className: string
+  onClick?: () => void
+  linkRef?: RefObject<HTMLAnchorElement | null>
+}
+
+/**
+ * Deliberately a plain `Link` with an exact comparison rather than a `NavLink`.
+ *
+ * NavLink's matching mirrors the router's: `caseSensitive` defaults to false and a
+ * trailing slash is optional. Both of those resolve to a 404 here, so NavLink would
+ * paint "Évènements" as current — and announce `aria-current="page"` — on a page whose
+ * heading reads "Page introuvable". The three sections are exact static paths, so
+ * `pathname === to` is the whole of the matching we need.
+ */
+function SectionLink({ to, label, isActive, className, onClick, linkRef }: SectionLinkProps) {
+  return (
+    <Link
+      ref={linkRef}
+      to={to}
+      onClick={onClick}
+      aria-current={isActive ? 'page' : undefined}
+      className={cn(className, isActive && ACTIVE_LINK)}
+    >
+      {label}
+    </Link>
+  )
 }
 
 export function NavBar() {
   const [open, setOpen] = useState(false)
   const firstLinkRef = useRef<HTMLAnchorElement>(null)
+  const { pathname } = useLocation()
 
   useEffect(() => {
     const query = window.matchMedia(DESKTOP_QUERY)
@@ -55,10 +89,12 @@ export function NavBar() {
         <ul className="hidden items-center gap-1 md:flex">
           {NAV_ITEMS.map((item) => (
             <li key={item.to}>
-              {/* `end` matters on "/", which would otherwise match every route. */}
-              <NavLink to={item.to} end={item.to === '/'} className={linkClass(DESKTOP_LINK)}>
-                {item.label}
-              </NavLink>
+              <SectionLink
+                to={item.to}
+                label={item.label}
+                isActive={pathname === item.to}
+                className={DESKTOP_LINK}
+              />
             </li>
           ))}
         </ul>
@@ -76,7 +112,8 @@ export function NavBar() {
               // The overlay carries no accessible role, so a test hook is the only way to
               // assert "clicking the dimmed backdrop closes the menu".
               data-testid="nav-backdrop"
-              className="fixed inset-0 z-[290] bg-slate-900/50 backdrop-blur-sm" />
+              className="fixed inset-0 z-[290] bg-slate-900/50 backdrop-blur-sm"
+            />
             <Dialog.Content
               // Radix confines assistive tech with aria-hidden on everything else rather
               // than with aria-modal. Story #9 asks for the dialog to be announced as
@@ -93,23 +130,22 @@ export function NavBar() {
                 event.preventDefault()
                 firstLinkRef.current?.focus()
               }}
-              className="glass-strong fixed top-1/2 left-1/2 z-[300] w-[min(22.5rem,calc(100%-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-[20px] p-8"
+              className="glass-strong fixed top-1/2 left-1/2 z-[300] max-h-[calc(100dvh-2rem)] w-[min(22.5rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[20px] p-8"
             >
               <Dialog.Title className="sr-only">Menu principal</Dialog.Title>
               <ul className="flex flex-col gap-1">
                 {NAV_ITEMS.map((item, index) => (
                   <li key={item.to}>
-                    <NavLink
-                      ref={index === 0 ? firstLinkRef : undefined}
+                    <SectionLink
                       to={item.to}
-                      end={item.to === '/'}
+                      label={item.label}
+                      isActive={pathname === item.to}
+                      className={DRAWER_LINK}
+                      linkRef={index === 0 ? firstLinkRef : undefined}
                       onClick={() => {
                         setOpen(false)
                       }}
-                      className={linkClass(DRAWER_LINK)}
-                    >
-                      {item.label}
-                    </NavLink>
+                    />
                   </li>
                 ))}
               </ul>

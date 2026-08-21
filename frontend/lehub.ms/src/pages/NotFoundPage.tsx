@@ -1,5 +1,6 @@
 import { ArrowLeft } from 'lucide-react'
 import { LinkButton } from '@/components/LinkButton'
+import { PATHS } from '@/lib/navigation'
 
 /**
  * Rendered by the `*` route, which is a child of the layout — so the header and the
@@ -19,7 +20,7 @@ export function NotFoundPage() {
         La page que vous cherchez n’existe pas ou a été déplacée.
       </p>
 
-      <LinkButton to="/" className="mt-9">
+      <LinkButton to={PATHS.home} className="mt-9">
         <ArrowLeft aria-hidden="true" className="size-4" />
         Retour à l’accueil
       </LinkButton>

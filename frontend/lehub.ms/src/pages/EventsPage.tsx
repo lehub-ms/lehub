@@ -3,7 +3,7 @@ import { Placeholder } from '@/components/Placeholder'
 export function EventsPage() {
   return (
     <div className="pb-8">
-      <h1 className="text-4xl font-extrabold tracking-tight md:text-[2.5rem]">
+      <h1 className="text-4xl font-bold tracking-tight md:text-[2.5rem]">
         Évènements à venir
       </h1>
       <p className="mt-3 max-w-xl text-ink-muted">

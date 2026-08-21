@@ -67,6 +67,21 @@ describe('en-tête', () => {
     }
   })
 
+  it.each(['/foo', '/evenements/', '/Evenements'])(
+    'ne marque aucune rubrique comme courante sur %s',
+    (path) => {
+      renderAt(path)
+      const nav = mainNav()
+
+      // These URLs all render the 404. NavLink would have marked "Évènements" active
+      // on the last two — its matching ignores case and tolerates a trailing slash —
+      // announcing aria-current="page" on a page that says the page does not exist.
+      for (const item of NAV_ITEMS) {
+        expect(within(nav).getByRole('link', { name: item.label }).getAttribute('aria-current')).toBeNull()
+      }
+    },
+  )
+
   it('navigue côté client depuis l’en-tête', async () => {
     const { router } = renderAt('/')
 

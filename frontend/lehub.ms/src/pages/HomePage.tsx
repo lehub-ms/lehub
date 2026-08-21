@@ -1,5 +1,6 @@
 import { ArrowRight, CalendarDays } from 'lucide-react'
 import { LinkButton } from '@/components/LinkButton'
+import { PATHS } from '@/lib/navigation'
 import { Placeholder } from '@/components/Placeholder'
 
 export function HomePage() {
@@ -22,11 +23,11 @@ export function HomePage() {
         </p>
 
         <div className="mt-9 flex flex-wrap gap-3">
-          <LinkButton to="/evenements">
+          <LinkButton to={PATHS.events}>
             <CalendarDays aria-hidden="true" className="size-[18px]" />
             Voir les évènements
           </LinkButton>
-          <LinkButton to="/lehub" variant="outline">
+          <LinkButton to={PATHS.hub} variant="outline">
             Découvrir LeHub
             <ArrowRight aria-hidden="true" className="size-4" />
           </LinkButton>
