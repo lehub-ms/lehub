@@ -1,0 +1,63 @@
+import type { EventSummary, NamedRef } from './api'
+
+export interface FilterOption {
+  id: string
+  name: string
+}
+
+export interface EventFilterSelection {
+  communityIds: string[]
+  technologyIds: string[]
+}
+
+export const EMPTY_FILTER_SELECTION: EventFilterSelection = {
+  communityIds: [],
+  technologyIds: [],
+}
+
+export interface FilterOptionsData {
+  communities: FilterOption[]
+  technologies: FilterOption[]
+}
+
+function dedupeById(refs: NamedRef[]): FilterOption[] {
+  const seen = new Map<string, FilterOption>()
+  for (const ref of refs) {
+    if (!seen.has(ref.id)) seen.set(ref.id, { id: ref.id, name: ref.name })
+  }
+  return [...seen.values()]
+}
+
+/**
+ * Always compute from the FULL upcoming-events set, never from an already-filtered
+ * subset — stories #21/#22 require each dimension's option list to stay independent of
+ * the other dimension's active filter, so an option must remain listed even when it
+ * currently matches zero visible events.
+ */
+export function deriveFilterOptions(events: EventSummary[]): FilterOptionsData {
+  return {
+    communities: dedupeById(events.flatMap((event) => event.communities)),
+    technologies: dedupeById(events.flatMap((event) => event.technologies)),
+  }
+}
+
+function matchesDimension(refs: NamedRef[], selectedIds: string[]): boolean {
+  // Empty selection excludes nothing from this dimension.
+  return selectedIds.length === 0 || refs.some((ref) => selectedIds.includes(ref.id))
+}
+
+/** OR within each dimension, AND across the two dimensions. */
+export function applyEventFilters(
+  events: EventSummary[],
+  selection: EventFilterSelection,
+): EventSummary[] {
+  return events.filter(
+    (event) =>
+      matchesDimension(event.communities, selection.communityIds) &&
+      matchesDimension(event.technologies, selection.technologyIds),
+  )
+}
+
+export function activeFilterCount(selection: EventFilterSelection): number {
+  return selection.communityIds.length + selection.technologyIds.length
+}
