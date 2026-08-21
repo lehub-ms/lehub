@@ -73,13 +73,6 @@ function darken(hex: string, fraction: number): string {
   return rgbToHex([r * (1 - fraction), g * (1 - fraction), b * (1 - fraction)])
 }
 
-/** Mixes `hex` toward white; `colorFraction` is how much of `hex` survives (0 = white, 1 = unchanged). */
-export function mixWithWhite(hex: string, colorFraction: number): string {
-  const [r, g, b] = hexToRgb(hex)
-  const mix = (channel: number) => 255 * (1 - colorFraction) + channel * colorFraction
-  return rgbToHex([mix(r), mix(g), mix(b)])
-}
-
 function paletteEntry(id: string): PaletteEntry {
   const entry = PALETTE[paletteIndex(id, PALETTE.length)]
   // Unreachable: paletteIndex is always in [0, PALETTE.length). Throwing rather than a
