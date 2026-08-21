@@ -59,3 +59,14 @@ export interface EventSummary {
 export function listUpcomingEvents(): Promise<EventSummary[]> {
   return apiFetch<EventSummary[]>('/api/events')
 }
+
+export interface CommunitySummary {
+  id: string
+  name: string
+  logoUrl: string | null
+  description: string | null
+}
+
+export function listCommunities(): Promise<CommunitySummary[]> {
+  return apiFetch<CommunitySummary[]>('/api/communities')
+}

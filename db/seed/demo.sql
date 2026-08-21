@@ -24,21 +24,40 @@ IF NOT EXISTS (SELECT 1 FROM dbo.FormatType) OR NOT EXISTS (SELECT 1 FROM dbo.Ev
 
 MERGE dbo.Community AS target
 USING (VALUES
-  ('C1C1C1C1-0000-0000-0000-000000000001', N'Azure User Group France',   NULL),
-  ('C2C2C2C2-0000-0000-0000-000000000002', N'Microsoft 365 Community',   NULL),
-  ('C3C3C3C3-0000-0000-0000-000000000003', N'Power Platform France',     NULL),
-  ('C4C4C4C4-0000-0000-0000-000000000004', N'GitHub France',             NULL),
-  ('C5C5C5C5-0000-0000-0000-000000000005', N'DevCom Lyon',               NULL),
-  ('C6C6C6C6-0000-0000-0000-000000000006', N'Azure User Group Bordeaux', NULL),
-  ('C7C7C7C7-0000-0000-0000-000000000007', N'Cloud Native Nantes',       NULL),
-  ('C8C8C8C8-0000-0000-0000-000000000008', N'Azure User Group Toulouse', NULL),
-  ('C9C9C9C9-0000-0000-0000-000000000009', N'Tech & Wine Marseille',     NULL),
-  ('CACACACA-0000-0000-0000-00000000000A', N'PyData Strasbourg',         NULL),
-  ('CBCBCBCB-0000-0000-0000-00000000000B', N'Women in Tech France',      NULL),
-  ('CCCCCCCC-0000-0000-0000-00000000000C', N'DevFest Lille',             NULL)
-) AS source (Id, Name, LogoUrl)
+  ('C1C1C1C1-0000-0000-0000-000000000001', N'Azure User Group France',   NULL,
+   N'L''écosystème Azure au cœur de vos projets cloud, IA et DevOps — formations, meetups et retours d''expérience.'),
+  ('C2C2C2C2-0000-0000-0000-000000000002', N'Microsoft 365 Community',   NULL,
+   N'Maîtrisez Teams, SharePoint, Power Automate et Copilot avec une communauté francophone active et passionnée.'),
+  ('C3C3C3C3-0000-0000-0000-000000000003', N'Power Platform France',     NULL,
+   N'Power Apps, Power BI, Power Automate, Power Virtual Agents — des solutions low-code au service de tous.'),
+  ('C4C4C4C4-0000-0000-0000-000000000004', N'GitHub France',             NULL,
+   N'Collaboration, open source et GitHub Copilot — rejoignez la communauté française des développeurs GitHub.'),
+  ('C5C5C5C5-0000-0000-0000-000000000005', N'DevCom Lyon',               NULL,
+   N'La communauté tech lyonnaise — meetups, conférences et afterworks à Lyon et en Auvergne-Rhône-Alpes.'),
+  ('C6C6C6C6-0000-0000-0000-000000000006', N'Azure User Group Bordeaux', NULL,
+   N'Le rendez-vous mensuel des passionnés Azure en Gironde — cloud, infra et bonnes pratiques.'),
+  ('C7C7C7C7-0000-0000-0000-000000000007', N'Cloud Native Nantes',       NULL,
+   N'Kubernetes, conteneurs et architectures cloud native, décryptés par la communauté nantaise.'),
+  ('C8C8C8C8-0000-0000-0000-000000000008', N'Azure User Group Toulouse', NULL,
+   N'Retours d''expérience et sessions techniques Azure, portés par l''écosystème tech toulousain.'),
+  ('C9C9C9C9-0000-0000-0000-000000000009', N'Tech & Wine Marseille',     NULL,
+   N'Des rencontres tech conviviales sur la Canebière, entre découvertes techniques et dégustation.'),
+  ('CACACACA-0000-0000-0000-00000000000A', N'PyData Strasbourg',         NULL,
+   N'Data science et machine learning en Python, pour la communauté data strasbourgeoise.'),
+  ('CBCBCBCB-0000-0000-0000-00000000000B', N'Women in Tech France',      NULL,
+   N'Un réseau national pour faire avancer la place des femmes dans la tech, meetups et mentorat.'),
+  ('CCCCCCCC-0000-0000-0000-00000000000C', N'DevFest Lille',             NULL,
+   N'La conférence développeurs annuelle du Nord — talks, ateliers et networking.')
+) AS source (Id, Name, LogoUrl, Description)
 ON target.Id = source.Id
-WHEN NOT MATCHED THEN INSERT (Id, Name, LogoUrl) VALUES (source.Id, source.Name, source.LogoUrl);
+-- Backfills Description on communities seeded before it existed (migration 0002).
+-- Name/LogoUrl are left alone on a match, same as before, so a local LogoUrl edit
+-- survives a replay.
+WHEN MATCHED AND target.Description IS NULL THEN
+  UPDATE SET Description = source.Description
+WHEN NOT MATCHED THEN
+  INSERT (Id, Name, LogoUrl, Description)
+  VALUES (source.Id, source.Name, source.LogoUrl, source.Description);
 
 -- ─── Technologies ────────────────────────────────────────────────────────────
 
