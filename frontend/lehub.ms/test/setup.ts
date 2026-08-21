@@ -9,6 +9,7 @@
 type MediaListener = (event: MediaQueryListEvent) => void
 
 let desktopMatches = false
+let reducedMotionMatches = false
 const listeners = new Set<MediaListener>()
 
 /** Simulate the viewport crossing Tailwind's `md` breakpoint, in either direction. */
@@ -18,18 +19,27 @@ export function setDesktopViewport(matches: boolean): void {
   for (const listener of [...listeners]) listener(event)
 }
 
+/** Simulate the OS/browser `prefers-reduced-motion: reduce` setting. */
+export function setPrefersReducedMotion(matches: boolean): void {
+  reducedMotionMatches = matches
+}
+
 /** Call between tests so a stale listener from a previous render cannot fire. */
 export function resetViewport(): void {
   desktopMatches = false
+  reducedMotionMatches = false
   listeners.clear()
 }
 
-// jsdom ships no `matchMedia` at all, and NavBar calls it on mount.
+// jsdom ships no `matchMedia` at all, and NavBar/EventFilterDrawer call it on mount.
+// Query-aware because two independent stubs share this one function: NavBar's desktop
+// breakpoint check and EventFilterDrawer's `prefers-reduced-motion` check.
 window.matchMedia = (query: string): MediaQueryList => {
+  const matchesFor = () => (query === '(prefers-reduced-motion: reduce)' ? reducedMotionMatches : desktopMatches)
   const list = {
     media: query,
     get matches(): boolean {
-      return desktopMatches
+      return matchesFor()
     },
     onchange: null,
     addEventListener: (_type: string, listener: MediaListener) => {
@@ -67,3 +77,19 @@ window.scrollTo = () => undefined
 // scoped place to wait for it.
 window.fetch = () =>
   Promise.resolve(new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } }))
+
+// jsdom ships no `PointerEvent` at all (confirmed: `'PointerEvent' in window` is
+// `false`). React gates its pointer-event listener registration on that check, so
+// without this, `EventFilterDrawer`'s onPointerDown/Move/Up handlers never fire in
+// tests — not because the drag logic is wrong, but because React never attaches a
+// native listener for a pointer type it believes the environment can't emit.
+class PointerEventPolyfill extends MouseEvent {
+  readonly pointerId: number
+
+  constructor(type: string, params: PointerEventInit = {}) {
+    super(type, params)
+    this.pointerId = params.pointerId ?? 0
+  }
+}
+
+window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent

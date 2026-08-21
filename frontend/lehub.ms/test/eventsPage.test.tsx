@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { renderAt } from './support/render-route'
-import { buildEvent } from './support/event-fixtures'
+import { buildEvent, buildNamedRef } from './support/event-fixtures'
 import { ApiError } from '@/lib/api'
 
 const { listUpcomingEvents } = vi.hoisted(() => ({ listUpcomingEvents: vi.fn() }))
@@ -70,5 +71,100 @@ describe('EventsPage', () => {
     })
     // The page shell survives the failure — heading and landmarks are still there.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Évènements à venir')
+  })
+})
+
+describe('EventsPage — filtres', () => {
+  const communityA = buildNamedRef('community', 1)
+  const communityB = buildNamedRef('community', 2)
+  const techX = buildNamedRef('technology', 1)
+  const techY = buildNamedRef('technology', 2)
+
+  function filterPanel(): HTMLElement {
+    return screen.getByRole('complementary', { name: 'Filtres' })
+  }
+
+  it('filters events with OR within a dimension and AND across dimensions', async () => {
+    const user = userEvent.setup()
+    listUpcomingEvents.mockResolvedValue([
+      buildEvent({ id: 'e1', title: 'Event A', communities: [communityA], technologies: [techX] }),
+      buildEvent({ id: 'e2', title: 'Event B', communities: [communityB], technologies: [techY] }),
+      buildEvent({ id: 'e3', title: 'Event C', communities: [communityA], technologies: [techY] }),
+    ])
+
+    renderAt('/evenements')
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(3)
+    })
+
+    await user.click(within(filterPanel()).getByText(communityA.name))
+    // OR would leave A and C visible (both organized by community A).
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Event A',
+      'Event C',
+    ])
+
+    await user.click(within(filterPanel()).getByText(techX.name))
+    // AND across dimensions now narrows to the single event matching both.
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Event A'])
+  })
+
+  it('keeps an option listed even when it currently matches zero visible events', async () => {
+    const user = userEvent.setup()
+    listUpcomingEvents.mockResolvedValue([
+      buildEvent({ id: 'e1', communities: [communityA], technologies: [techX] }),
+      buildEvent({ id: 'e2', communities: [communityB], technologies: [techY] }),
+    ])
+
+    renderAt('/evenements')
+    await waitFor(() => {
+      expect(within(filterPanel()).getByText(communityB.name)).not.toBeNull()
+    })
+
+    await user.click(within(filterPanel()).getByText(techX.name))
+
+    // Community B now matches zero visible events, but must remain a listed, checkable
+    // option — its option list is derived from the full set, not the filtered one.
+    expect(within(filterPanel()).getByText(communityB.name)).not.toBeNull()
+  })
+
+  it('"Réinitialiser" clears both dimensions', async () => {
+    const user = userEvent.setup()
+    listUpcomingEvents.mockResolvedValue([
+      buildEvent({ id: 'e1', communities: [communityA] }),
+      buildEvent({ id: 'e2', communities: [communityB] }),
+    ])
+
+    renderAt('/evenements')
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2)
+    })
+
+    await user.click(within(filterPanel()).getByText(communityA.name))
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1)
+
+    await user.click(within(filterPanel()).getByRole('button', { name: 'Réinitialiser' }))
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2)
+  })
+
+  it('shows a filtered-empty state with a reset that clears both dimensions', async () => {
+    const user = userEvent.setup()
+    listUpcomingEvents.mockResolvedValue([
+      buildEvent({ id: 'e1', communities: [communityA], technologies: [techX] }),
+      buildEvent({ id: 'e2', communities: [communityB], technologies: [techY] }),
+    ])
+
+    renderAt('/evenements')
+    await waitFor(() => {
+      expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2)
+    })
+
+    await user.click(within(filterPanel()).getByText(communityA.name))
+    await user.click(within(filterPanel()).getByText(techY.name))
+
+    expect(screen.getByText('Aucun évènement ne correspond à vos filtres')).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Réinitialiser les filtres' }))
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2)
   })
 })
