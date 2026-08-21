@@ -22,5 +22,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Polyfills the jsdom gaps the shell needs: matchMedia and scrollTo.
+    setupFiles: ['./test/setup.ts'],
   },
 })
