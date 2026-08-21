@@ -105,7 +105,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             event.preventDefault()
             closeButtonRef.current?.focus()
           }}
-          className="animate-drawer-in glass-strong fixed inset-x-0 bottom-0 z-[300] flex h-[32rem] max-h-[calc(100dvh-2rem)] flex-col rounded-t-[20px]"
+          className="animate-drawer-in glass-strong fixed inset-x-0 bottom-0 z-[300] flex h-[85dvh] flex-col rounded-t-[20px]"
         >
           <div
             className="flex shrink-0 touch-none justify-center pt-2.5 pb-1"
@@ -131,7 +131,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             </Dialog.Close>
           </div>
 
-          <div className="flex-1 overflow-y-auto overscroll-contain px-8">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-8">
             <Accordion.Root type="single" collapsible value={openSection} onValueChange={setOpenSection}>
               {options.communities.length > 0 && (
                 <FilterSection
