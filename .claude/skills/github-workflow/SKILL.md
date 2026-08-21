@@ -38,18 +38,53 @@ query($owner:String!,$name:String!,$num:Int!) {
 
 ### 2. Crée la branche **depuis la Feature**
 
-Toujours via `gh issue develop`, jamais `git checkout -b` seul : c'est ce qui crée le lien
-*Development* entre l'issue et la branche.
+Toujours via `gh issue develop`, jamais `git checkout -b` seul, **dans les deux modes** ci-dessous :
+c'est `gh issue develop` qui crée le lien *Development* entre l'issue et la branche, pas
+l'existence d'une branche locale.
+
+Nommage : `feat/<numéro-feature>-<slug-court>`, ou `fix/<numéro-feature>-<slug-du-bug>` quand
+le lot ne contient qu'un `Bug`. Toujours basée sur `develop` (sauf hotfix, voir plus bas).
+
+**Le choix worktree vs checkout classique n'est jamais silencieux.** Dès que la création d'une
+branche est engagée, propose explicitement les deux options et attends une confirmation de
+l'utilisateur (`AskUserQuestion` ou équivalent conversationnel) avant d'exécuter `gh issue
+develop`. Ne décide jamais seul à sa place.
+
+#### Mode checkout classique
+
+Bascule le clone courant sur la nouvelle branche — un seul chantier actif à la fois dans ce clone :
 
 ```bash
 gh issue develop <numéro-feature> --repo lehub-ms/lehub --base develop \
   --name feat/<numéro-feature>-<slug-court> --checkout
 ```
 
-Nommage : `feat/<numéro-feature>-<slug-court>`, ou `fix/<numéro-feature>-<slug-du-bug>` quand
-le lot ne contient qu'un `Bug`. Toujours basée sur `develop`.
+#### Mode worktree
 
-Passe la Feature et ses sub-issues en **In Progress**.
+Pour avancer sur plusieurs Features en parallèle sans changer de branche dans le clone courant.
+`gh issue develop` s'utilise **sans** `--checkout` : la branche est créée côté GitHub, le clone
+courant ne bouge pas.
+
+```bash
+gh issue develop <numéro-feature> --repo lehub-ms/lehub --base develop \
+  --name feat/<numéro-feature>-<slug-court>
+git fetch origin
+git worktree add ../lehub.worktrees/<slug-branche> <nom-de-branche>
+code ../lehub.worktrees/<slug-branche>          # ou : open -a "Visual Studio Code" <chemin> (macOS, si `code` absent du PATH)
+```
+
+- Répertoire cible : frère du clone, **hors du dépôt versionné**
+  (`../lehub.worktrees/<slug-branche>/`) — jamais à la racine du dépôt, CLAUDE.md interdit tout
+  nouveau répertoire racine sans discussion préalable avec le mainteneur.
+- `<slug-branche>` = nom de la branche avec les `/` remplacés par des `-`
+  (`feat/42-technology-filter` → `feat-42-technology-filter`), pour rester identifiable entre
+  plusieurs fenêtres VS Code ouvertes en parallèle.
+- Chaque worktree est un checkout indépendant : `./scripts/dev-up.sh` et `./scripts/dev-start.sh`
+  doivent être relancés dedans (dépendances et env propres à chaque répertoire).
+- Plusieurs Features "In Progress" en parallèle via des worktrees distincts est un état normal du
+  Project — pas une anomalie.
+
+Passe la Feature et ses sub-issues en **In Progress**, dans les deux modes.
 
 ### 3. Développe et commite
 
@@ -59,6 +94,22 @@ Un commit par Story / Bug, ordonnés selon leurs dépendances réelles :
 ```bash
 git commit -s -m "feat(api): add technology filter to /api/events" -m "Refs #43"
 ```
+
+#### Rebase régulier (branches en worktree)
+
+`develop` continue d'avancer pendant qu'un worktree existe (d'autres Features mergées en
+parallèle). Toute branche `feat/*` ou `fix/*` en worktree doit être rebasée régulièrement sur
+`origin/develop`, exécuté dans le worktree concerné :
+
+```bash
+git fetch origin
+git rebase origin/develop
+```
+
+Au minimum avant l'ouverture de la PR ; recommandé aussi à chaque reprise de session sur une
+Feature de longue durée. Les branches `hotfix/*` en sont exclues — elles partent de `main`, pas
+de `develop`, et suivent leur propre cycle (section « Hotfix ») ; elles suivent en revanche la
+même logique de worktree.
 
 ### 4. Ouvre la PR vers `develop`
 
@@ -86,8 +137,42 @@ gh pr checks --repo lehub-ms/lehub          # CI verte obligatoire
 gh pr merge <pr> --repo lehub-ms/lehub --squash --delete-branch
 ```
 
+Si la branche a été développée en worktree, supprime-le dans la foulée (no-op en mode checkout
+classique) :
+
+```bash
+git worktree remove ../lehub.worktrees/<slug-branche>
+git worktree prune
+```
+
 Le CD dev part. Déploiement dev OK → passe le lot en **In Test**. **Les issues restent
 ouvertes.**
+
+#### Nettoyage des worktrees orphelins
+
+Le nettoyage ci-dessus suppose que le merge passe par `gh pr merge --delete-branch` dans cette
+session. Une PR peut aussi être mergée ailleurs — portail GitHub web, extension VS Code GitHub
+Pull Requests, un autre contributeur : la branche distante disparaît, mais ni la branche locale
+ni le worktree ne sont nettoyés automatiquement.
+
+Détecte-les périodiquement, pas seulement en réaction à un cas constaté :
+
+```bash
+git fetch --prune
+git branch -vv          # une branche avec ": gone]" a été supprimée côté remote
+git worktree list       # retrouve le chemin du worktree associé
+```
+
+Puis nettoie :
+
+```bash
+git worktree remove ../lehub.worktrees/<slug-branche>
+git branch -d <nom-de-branche>
+git worktree prune
+```
+
+Ce cas est distinct de l'abandon d'une Feature (issue fermée sans merge, voir « Edge cases » plus
+bas) : ici la Feature a bien été livrée, seul le nettoyage local a été sauté.
 
 ### 6. Validation métier
 
@@ -189,12 +274,25 @@ gh pr create --repo lehub-ms/lehub --base main \
 
 `Closes` fonctionne ici parce que la PR cible `main`, la branche par défaut.
 
+Le choix worktree vs checkout classique se pose ici aussi (même confirmation explicite qu'en
+§2) : en mode worktree, remplace le `git checkout -b ... origin/main` ci-dessus par
+`git worktree add ../lehub.worktrees/hotfix-<n>-<slug> -b hotfix/<n>-<slug> origin/main`, puis
+ouvre VS Code dessus. Un hotfix en worktree n'a pas besoin de rebase régulier — il part de
+`main`, pas de `develop`, et vit le temps du correctif.
+
 **Merge retour obligatoire, dans la même session de travail :**
 
 ```bash
 gh pr merge <pr> --repo lehub-ms/lehub --squash --delete-branch
 git checkout develop && git pull
 git merge origin/main && git push
+```
+
+Si le hotfix a été développé en worktree, supprime-le après le merge retour :
+
+```bash
+git worktree remove ../lehub.worktrees/hotfix-<n>-<slug>
+git worktree prune
 ```
 
 Si le merge retour est bloqué par la protection de branche, ouvre immédiatement une PR
@@ -216,6 +314,26 @@ Si le merge retour est bloqué par la protection de branche, ouvre immédiatemen
 - **Oublier le `-s`** — chaque commit doit porter son `Signed-off-by` (DCO).
 - **Oublier de faire avancer le statut** — `In Test` après le CD dev et `Validated` après la
   recette ne sont déclenchés par aucune automation : c'est à toi de les positionner.
+- **Oublier `git worktree remove` après un merge** — le worktree traîne sur le disque, orphelin ;
+  voir « Nettoyage des worktrees orphelins » pour le repérer après coup.
+- **Créer un worktree à l'intérieur du dépôt versionné** — viole l'interdiction CLAUDE.md sur
+  tout nouveau répertoire racine, et pollue le `git status` du clone principal.
+- **Laisser un worktree diverger de `develop` sans rebase avant la PR** — les conflits
+  s'accumulent et éclatent tous au moment du merge au lieu d'être résolus au fil de l'eau.
+
+## Edge cases (worktree)
+
+- Une branche déjà checkoutée dans le clone principal ne peut pas être ajoutée en worktree
+  ailleurs sans être d'abord libérée (bascule le clone principal sur une autre branche) —
+  `git worktree add` échoue sinon avec une erreur explicite.
+- Un conflit de rebase sur `origin/develop` se résout dans le worktree concerné ; l'isolation du
+  worktree confine le conflit à cette Feature, sans affecter les autres worktrees ouverts en
+  parallèle.
+- Un hotfix suit la même logique de worktree que `feat/*` (choix proposé, `git worktree add`),
+  hors obligation de rebase — voir section « Hotfix ».
+- Une Feature en worktree dont l'issue est fermée sans merge (abandon) laisse un worktree
+  orphelin non couvert par le flux post-merge automatique — nettoyage manuel
+  (`git worktree remove` + `git worktree prune`) à la charge du contributeur.
 
 ## Interdits
 
@@ -226,3 +344,4 @@ Si le merge retour est bloqué par la protection de branche, ouvre immédiatemen
 - Ouvrir une PR vers `main` depuis autre chose que `develop` ou une branche `hotfix/*`.
 - Laisser un hotfix sans son merge retour dans `develop`.
 - Batcher deux Features dans une même PR.
+- Créer un worktree à la racine du dépôt ou ailleurs que dans `../lehub.worktrees/`.
