@@ -175,7 +175,7 @@ describe('EventFilterDrawer', () => {
     expect(onChange).toHaveBeenCalledWith({ communityIds: [], technologyIds: [] })
   })
 
-  it('hides "Effacer tout" at zero active filters, shows it otherwise, and it clears everything and closes', async () => {
+  it('shows no footer at all at zero active filters — the × already closes the drawer', async () => {
     const onReset = vi.fn()
     const { rerender } = render(
       <EventFilterDrawer
@@ -187,7 +187,7 @@ describe('EventFilterDrawer', () => {
     )
     let dialog = await openDrawer()
     expect(within(dialog).queryByRole('button', { name: 'Effacer tout' })).toBeNull()
-    expect(within(dialog).getByRole('button', { name: 'Fermer' })).not.toBeNull()
+    expect(within(dialog).queryByRole('button', { name: /Appliquer/ })).toBeNull()
     await user.keyboard('{Escape}')
 
     rerender(
@@ -207,18 +207,18 @@ describe('EventFilterDrawer', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('"Appliquer"/"Fermer" only closes the drawer', async () => {
+  it('"Appliquer" only closes the drawer', async () => {
     render(
       <EventFilterDrawer
         options={{ communities, technologies }}
-        selection={EMPTY_FILTER_SELECTION}
+        selection={{ communityIds: [communities[0]!.id], technologyIds: [] }}
         onChange={vi.fn()}
         onReset={vi.fn()}
       />,
     )
     const dialog = await openDrawer()
 
-    await user.click(within(dialog).getByRole('button', { name: 'Fermer' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Appliquer (1)' }))
 
     expect(screen.queryByRole('dialog')).toBeNull()
   })

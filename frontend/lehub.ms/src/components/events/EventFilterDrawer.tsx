@@ -131,7 +131,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             </Dialog.Close>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-8">
+          <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-8">
             <Accordion.Root type="single" collapsible value={openSection} onValueChange={setOpenSection}>
               {options.communities.length > 0 && (
                 <FilterSection
@@ -168,9 +168,11 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             </Accordion.Root>
           </div>
 
-          <div className="shrink-0 px-10 pt-4 pb-[max(24px,calc(env(safe-area-inset-bottom)+16px))]">
-            <div className={`flex gap-3 border-t border-primary/10 pt-4 ${count > 0 ? '' : 'justify-center'}`}>
-              {count > 0 && (
+          {/* No footer at all when nothing is selected — the × at the top already
+              closes the drawer, and there's nothing here to apply or clear. */}
+          {count > 0 && (
+            <div className="shrink-0 px-10 pt-4 pb-[max(24px,calc(env(safe-area-inset-bottom)+16px))]">
+              <div className="flex gap-3 border-t border-primary/10 pt-4">
                 <Button
                   variant="outline"
                   className="min-w-0 flex-1 rounded-full"
@@ -181,22 +183,18 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
                 >
                   Effacer tout
                 </Button>
-              )}
-              <Button
-                variant="primary"
-                className={
-                  count > 0
-                    ? 'min-w-0 flex-1 rounded-full bg-cta shadow-none hover:bg-cta-dark'
-                    : 'min-w-[180px] rounded-full bg-cta shadow-none hover:bg-cta-dark'
-                }
-                onClick={() => {
-                  setOpen(false)
-                }}
-              >
-                {count > 0 ? `Appliquer (${count})` : 'Fermer'}
-              </Button>
+                <Button
+                  variant="primary"
+                  className="min-w-0 flex-1 rounded-full bg-cta shadow-none hover:bg-cta-dark"
+                  onClick={() => {
+                    setOpen(false)
+                  }}
+                >
+                  {`Appliquer (${count})`}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

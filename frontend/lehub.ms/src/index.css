@@ -204,6 +204,32 @@
   animation: drawer-in 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* A thin, tinted scrollbar for glass surfaces (the filter drawer's scrollable body) —
+   the default OS scrollbar's opaque white track reads as a stray rectangle against the
+   frosted background. `scrollbar-width`/`-color` cover Firefox; the pseudo-elements
+   cover Chromium/WebKit. */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(0 95 184 / 0.25) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: rgb(0 95 184 / 0.25);
+    border-radius: 9999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(0 95 184 / 0.4);
+  }
+}
+
 /* Respect the reader's motion preference — WCAG 2.1 AA. */
 @media (prefers-reduced-motion: reduce) {
   html {

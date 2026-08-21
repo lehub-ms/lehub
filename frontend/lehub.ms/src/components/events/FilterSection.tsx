@@ -93,20 +93,16 @@ export function FilterSection({
 
   return (
     <Accordion.Item value={value} className="border-b border-slate-100 last:border-b-0">
-      <Accordion.Header className="flex items-center gap-2">
-        <Accordion.Trigger className="group flex min-h-14 min-w-0 flex-1 items-center gap-3 overflow-hidden text-left">
+      <Accordion.Header className="flex items-center gap-1">
+        <Accordion.Trigger className="flex min-h-14 min-w-0 flex-1 items-center gap-3 overflow-hidden text-left">
           <span className="shrink-0 text-[0.6875rem] font-bold tracking-[0.08em] text-ink-muted uppercase">
             {label}
           </span>
           <FilterSummaryChips items={summaryItems} />
-          <ChevronDown
-            aria-hidden="true"
-            className="size-[18px] shrink-0 text-ink-muted transition-transform duration-200 group-data-[state=open]:rotate-180"
-          />
         </Accordion.Trigger>
         {/* Always rendered — `invisible` rather than unmounted when there's nothing to
-            clear — so this reserves the same width either way and `Trigger` (and the
-            chevron pinned at its end) never resizes when a selection appears/disappears. */}
+            clear — so this reserves the same width either way and the chevron below
+            never shifts horizontally when a selection appears or disappears. */}
         <button
           type="button"
           onClick={onClear}
@@ -117,6 +113,23 @@ export function FilterSection({
         >
           Effacer
         </button>
+        {/* A second, purely pointer-facing trigger for the same item — `aria-hidden` +
+            `tabIndex={-1}` keep it out of the accessibility tree and tab order, so
+            keyboard/screen-reader users rely solely on the trigger above. This is what
+            lets the chevron sit flush at the row's right edge, after "Effacer", while
+            still toggling on click — a real sibling button can't live *inside* Trigger
+            (nested <button>s), so the chevron can't be both after it and part of the
+            same control. */}
+        <Accordion.Trigger
+          aria-hidden="true"
+          tabIndex={-1}
+          className="group flex size-11 shrink-0 items-center justify-center rounded-lg text-ink-muted hover:bg-primary/5"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className="size-[18px] transition-transform duration-200 group-data-[state=open]:rotate-180"
+          />
+        </Accordion.Trigger>
       </Accordion.Header>
       <Accordion.Content className="overflow-hidden pb-3 data-[state=closed]:animate-none">
         <div className="flex flex-col gap-0.5">
