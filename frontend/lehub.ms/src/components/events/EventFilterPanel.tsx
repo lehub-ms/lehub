@@ -1,7 +1,7 @@
 import type { EventFilterSelection, FilterOptionsData } from '@/lib/eventFilters'
 import { CommunityAvatar } from './CommunityAvatar'
 import { FilterCheckboxRow } from './FilterCheckboxRow'
-import { TechnologySwatch } from './TechnologyPill'
+import { TechnologyAvatar } from './TechnologyAvatar'
 
 interface EventFilterPanelProps {
   options: FilterOptionsData
@@ -84,7 +84,7 @@ export function EventFilterPanel({ options, selection, onChange, onReset }: Even
                     technologyIds: toggleId(selection.technologyIds, technology.id),
                   })
                 }}
-                leading={<TechnologySwatch technologyId={technology.id} />}
+                leading={<TechnologyAvatar technology={technology} size={22} />}
               />
             ))}
           </div>

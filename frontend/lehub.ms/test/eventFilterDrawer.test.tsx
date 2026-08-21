@@ -163,10 +163,15 @@ describe('EventFilterDrawer', () => {
     )
     const dialog = await openDrawer()
 
-    const clearButtons = within(dialog).getAllByRole('button', { name: 'Effacer' })
-    expect(clearButtons).toHaveLength(1)
+    // Both "Effacer" buttons are always in the DOM now — the chevron's position must
+    // not depend on conditional mounting — but only the one for a dimension with an
+    // active selection is visible (`invisible` rather than unmounted; jsdom applies no
+    // real stylesheet, so this is asserted via the class, not computed visibility).
+    const [communityClear, technologyClear] = within(dialog).getAllByRole('button', { name: 'Effacer' })
+    expect(communityClear?.className).not.toMatch(/invisible/)
+    expect(technologyClear?.className).toMatch(/invisible/)
 
-    await user.click(clearButtons[0]!)
+    await user.click(communityClear!)
     expect(onChange).toHaveBeenCalledWith({ communityIds: [], technologyIds: [] })
   })
 
@@ -216,6 +221,25 @@ describe('EventFilterDrawer', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Fermer' }))
 
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('shows a technology row with the same initial-in-circle shape as a community row', async () => {
+    render(
+      <EventFilterDrawer
+        options={{ communities, technologies }}
+        selection={EMPTY_FILTER_SELECTION}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+    const dialog = await openDrawer()
+
+    // Both are initials of their fixtures' names ("community 1"/"2" and "technology
+    // 1") — a flat color square, unlike the community avatar, would render no text at
+    // all here. Both community fixtures share the initial "C", hence `getAllByText`.
+    expect(within(dialog).getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
+    await user.click(within(dialog).getByRole('button', { name: /Technologie/ }))
+    expect(within(dialog).getByText('T', { selector: 'span' })).not.toBeNull()
   })
 
   describe('glisser pour fermer', () => {

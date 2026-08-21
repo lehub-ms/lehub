@@ -2,6 +2,7 @@ import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import * as Accordion from '@radix-ui/react-accordion'
 import { ChevronDown } from 'lucide-react'
 import type { FilterOption } from '@/lib/eventFilters'
+import { cn } from '@/lib/cn'
 import { FilterCheckboxRow } from './FilterCheckboxRow'
 
 interface SummaryItem {
@@ -36,7 +37,7 @@ function MeasuredFilterSummaryChips({ items }: { items: SummaryItem[] }) {
   }, [visibleCount])
 
   if (items.length === 0) {
-    return <span className="text-sm text-[#71717A]">Tout</span>
+    return <span className="min-w-0 flex-1 truncate text-sm text-[#71717A]">Tout</span>
   }
 
   const hiddenCount = items.length - visibleCount
@@ -92,26 +93,32 @@ export function FilterSection({
 
   return (
     <Accordion.Item value={value} className="border-b border-slate-100 last:border-b-0">
-      <Accordion.Header className="flex items-center gap-2">
-        <Accordion.Trigger className="group flex min-h-14 flex-1 items-center gap-3 text-left">
+      <Accordion.Header className="group flex items-center gap-2">
+        <Accordion.Trigger className="flex min-h-14 min-w-0 flex-1 items-center gap-3 overflow-hidden text-left">
           <span className="shrink-0 text-[0.6875rem] font-bold tracking-[0.08em] text-ink-muted uppercase">
             {label}
           </span>
           <FilterSummaryChips items={summaryItems} />
+        </Accordion.Trigger>
+        {/* Always rendered — `invisible` rather than unmounted when there's nothing to
+            clear — so this reserves the same width either way and the chevron below
+            never shifts horizontally when a selection appears or disappears. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onClear}
+            className={cn(
+              'min-h-11 shrink-0 rounded-md px-3 text-sm text-primary hover:bg-primary/5',
+              selectedIds.length === 0 && 'invisible',
+            )}
+          >
+            Effacer
+          </button>
           <ChevronDown
             aria-hidden="true"
             className="size-[18px] shrink-0 text-ink-muted transition-transform duration-200 group-data-[state=open]:rotate-180"
           />
-        </Accordion.Trigger>
-        {selectedIds.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="min-h-11 shrink-0 rounded-md px-3 text-sm text-primary hover:bg-primary/5"
-          >
-            Effacer
-          </button>
-        )}
+        </div>
       </Accordion.Header>
       <Accordion.Content className="overflow-hidden pb-3 data-[state=closed]:animate-none">
         <div className="flex flex-col gap-0.5">

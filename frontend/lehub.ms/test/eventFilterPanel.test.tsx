@@ -66,6 +66,23 @@ describe('EventFilterPanel', () => {
     expect(onReset).toHaveBeenCalledOnce()
   })
 
+  it('shows a technology row with the same initial-in-circle shape as a community row', () => {
+    render(
+      <EventFilterPanel
+        options={{ communities, technologies }}
+        selection={EMPTY_FILTER_SELECTION}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+
+    // Both are initials of their fixtures' names ("community 1"/"2" and "technology
+    // 1") — a flat color square, unlike the community avatar, would render no text at
+    // all here. Both community fixtures share the initial "C", hence `getAllByText`.
+    expect(screen.getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('T', { selector: 'span' })).not.toBeNull()
+  })
+
   it('toggles a community on click', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

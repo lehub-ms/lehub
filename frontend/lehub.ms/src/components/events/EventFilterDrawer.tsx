@@ -6,7 +6,7 @@ import { Button } from '@/components/Button'
 import { activeFilterCount, type EventFilterSelection, type FilterOptionsData } from '@/lib/eventFilters'
 import { CommunityAvatar } from './CommunityAvatar'
 import { FilterSection } from './FilterSection'
-import { TechnologySwatch } from './TechnologyPill'
+import { TechnologyAvatar } from './TechnologyAvatar'
 
 interface EventFilterDrawerProps {
   options: FilterOptionsData
@@ -105,7 +105,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             event.preventDefault()
             closeButtonRef.current?.focus()
           }}
-          className="animate-drawer-in glass-strong fixed inset-x-0 bottom-0 z-[300] flex max-h-[85vh] min-h-[280px] flex-col rounded-t-[20px]"
+          className="animate-drawer-in glass-strong fixed inset-x-0 bottom-0 z-[300] flex h-[32rem] max-h-[calc(100dvh-2rem)] flex-col rounded-t-[20px]"
         >
           <div
             className="flex shrink-0 touch-none justify-center pt-2.5 pb-1"
@@ -161,10 +161,8 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
                   onClear={() => {
                     onChange({ ...selection, technologyIds: [] })
                   }}
-                  renderSummaryChip={(option) => (
-                    <TechnologySwatch technologyId={option.id} size={22} className="shrink-0 rounded-full" />
-                  )}
-                  renderLeading={(option) => <TechnologySwatch technologyId={option.id} />}
+                  renderSummaryChip={(option) => <TechnologyAvatar technology={option} size={22} hidden />}
+                  renderLeading={(option) => <TechnologyAvatar technology={option} size={22} />}
                 />
               )}
             </Accordion.Root>
