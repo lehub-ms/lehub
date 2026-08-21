@@ -1,4 +1,4 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import * as Accordion from '@radix-ui/react-accordion'
 import { ChevronDown } from 'lucide-react'
 import type { FilterOption } from '@/lib/eventFilters'
@@ -35,6 +35,19 @@ function MeasuredFilterSummaryChips({ items }: { items: SummaryItem[] }) {
     if (container.scrollWidth <= container.clientWidth) return
     setVisibleCount((count) => Math.max(0, count - 1))
   }, [visibleCount])
+
+  // A rotation or a resized window can free up room the previous measurement pass
+  // never re-checks (that effect only ever shrinks `visibleCount`, never grows it back)
+  // — reset to the full count so the effect above re-measures and re-converges.
+  useEffect(() => {
+    function handleResize() {
+      setVisibleCount(items.length)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [items])
 
   if (items.length === 0) {
     return <span className="min-w-0 flex-1 truncate text-sm text-[#71717A]">Tout</span>

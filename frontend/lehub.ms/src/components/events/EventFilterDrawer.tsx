@@ -32,7 +32,13 @@ const DRAG_CLOSE_THRESHOLD_PX = 80
  */
 export function EventFilterDrawer({ options, selection, onChange, onReset }: EventFilterDrawerProps) {
   const [open, setOpen] = useState(false)
-  const [openSection, setOpenSection] = useState('communities')
+  // Defaults to whichever dimension actually has options — `options.communities` could
+  // be empty (e.g. upcoming events all lack a community link) while `technologies`
+  // isn't, in which case defaulting to the always-absent 'communities' item would open
+  // the drawer with nothing expanded at all.
+  const [openSection, setOpenSection] = useState(() =>
+    options.communities.length > 0 ? 'communities' : 'technologies',
+  )
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const dragStartY = useRef<number | null>(null)
@@ -65,14 +71,26 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     if (dragStartY.current === null) return
     const dy = Math.max(0, event.clientY - dragStartY.current)
-    dragStartY.current = null
+    resetDrag()
+    if (dy > DRAG_CLOSE_THRESHOLD_PX) setOpen(false)
+  }
 
+  /**
+   * The browser can end a drag without ever firing `pointerup` — an OS edge-swipe
+   * gesture or the browser revoking pointer capture mid-drag fires `pointercancel`
+   * instead. Without handling it too, `dragStartY` never clears and the sheet is left
+   * visually stuck at its last dragged offset for the rest of the open session.
+   */
+  function handlePointerCancel() {
+    resetDrag()
+  }
+
+  function resetDrag() {
+    dragStartY.current = null
     if (contentRef.current) {
       contentRef.current.style.transition = ''
       contentRef.current.style.transform = ''
     }
-
-    if (dy > DRAG_CLOSE_THRESHOLD_PX) setOpen(false)
   }
 
   return (
@@ -113,6 +131,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
             <span aria-hidden="true" className="h-1 w-9 rounded-full bg-slate-300" />
           </div>
