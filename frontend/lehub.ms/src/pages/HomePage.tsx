@@ -3,6 +3,7 @@ import { CalendarCard } from '@/components/CalendarCard'
 import { LinkButton } from '@/components/LinkButton'
 import { PATHS } from '@/lib/navigation'
 import { Placeholder } from '@/components/Placeholder'
+import { CommunitiesCarousel } from '@/components/CommunitiesCarousel'
 
 export function HomePage() {
   return (
@@ -45,10 +46,10 @@ export function HomePage() {
       </section>
 
       <section aria-labelledby="communautes-partenaires">
-        <h2 id="communautes-partenaires" className="mb-8 text-3xl font-bold md:text-4xl">
+        <h2 id="communautes-partenaires" className="mb-8 text-center text-3xl font-bold md:text-4xl">
           Les communautés partenaires
         </h2>
-        <Placeholder>Les communautés partenaires s’afficheront ici très bientôt.</Placeholder>
+        <CommunitiesCarousel />
       </section>
     </div>
   )
