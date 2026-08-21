@@ -1,5 +1,6 @@
 import { Wordmark } from './Wordmark'
 import { GitHubIcon, LinkedInIcon } from './BrandIcons'
+import { GITHUB_URL, LINKEDIN_URL } from '@/lib/external-links'
 
 const EXTERNAL_LINK =
   'inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-primary/5 hover:text-primary'
@@ -16,7 +17,7 @@ export function Footer() {
 
         <nav aria-label="Liens externes" className="flex items-center gap-2">
           <a
-            href="https://github.com/lehub-ms/lehub"
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="LeHub sur GitHub — nouvel onglet"
@@ -25,7 +26,7 @@ export function Footer() {
             <GitHubIcon className="size-5" />
           </a>
           <a
-            href="https://www.linkedin.com/in/tchinnin"
+            href={LINKEDIN_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Théophile CHIN-NIN sur LinkedIn — nouvel onglet"

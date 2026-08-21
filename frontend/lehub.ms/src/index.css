@@ -99,6 +99,35 @@
   color: transparent;
 }
 
+/* Radix Accordion/Collapsible `Content` height-reveal, shared by the features accordion
+   and the two levels of the "À propos" disclosure. Each primitive publishes its own CSS
+   custom property on its `Content` element, hence the two variants. */
+@utility accordion-panel {
+  overflow: hidden;
+  transition: height 200ms;
+
+  &[data-state='closed'] {
+    height: 0;
+  }
+
+  &[data-state='open'] {
+    height: var(--radix-accordion-content-height);
+  }
+}
+
+@utility collapsible-panel {
+  overflow: hidden;
+  transition: height 200ms;
+
+  &[data-state='closed'] {
+    height: 0;
+  }
+
+  &[data-state='open'] {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
 @layer components {
   /* Four blurred colour fields behind everything. Written by hand because expressing
      radial gradients, a 90px blur and negative offsets as utilities would be an
