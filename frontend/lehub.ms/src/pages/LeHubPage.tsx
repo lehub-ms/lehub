@@ -1,5 +1,5 @@
-import { Placeholder } from '@/components/Placeholder'
 import { FeaturesShowcase } from '@/components/FeaturesShowcase'
+import { AboutSection } from '@/components/AboutSection'
 
 export function LeHubPage() {
   return (
@@ -13,10 +13,7 @@ export function LeHubPage() {
       </p>
 
       <FeaturesShowcase />
-
-      <div className="mt-16">
-        <Placeholder>La section « À propos de LeHub » arrive très bientôt.</Placeholder>
-      </div>
+      <AboutSection />
     </div>
   )
 }
