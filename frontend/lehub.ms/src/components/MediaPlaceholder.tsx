@@ -17,7 +17,7 @@ export function MediaPlaceholder({ caption, className }: MediaPlaceholderProps) 
       role="img"
       aria-label={caption}
       className={cn(
-        'flex aspect-video items-center justify-center rounded-2xl border border-primary/15 bg-[repeating-linear-gradient(135deg,var(--color-primary-xs)_0px,var(--color-primary-xs)_14px,rgb(77_159_222/0.16)_14px,rgb(77_159_222/0.16)_28px)] p-6 text-center',
+        'flex aspect-video items-center justify-center rounded-2xl border border-primary/15 bg-[repeating-linear-gradient(135deg,var(--color-primary-xs)_0px,var(--color-primary-xs)_14px,color-mix(in_srgb,var(--color-primary-light)_16%,transparent)_14px,color-mix(in_srgb,var(--color-primary-light)_16%,transparent)_28px)] p-6 text-center',
         className,
       )}
     >

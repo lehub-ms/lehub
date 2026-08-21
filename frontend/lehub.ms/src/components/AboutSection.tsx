@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import * as Accordion from '@radix-ui/react-accordion'
-import { ChevronDown } from 'lucide-react'
 import { GITHUB_URL, LINKEDIN_URL } from '@/lib/external-links'
+import { DisclosureChevron } from './DisclosureChevron'
 
 interface AboutItem {
   id: string
@@ -10,7 +10,7 @@ interface AboutItem {
   body: ReactNode
 }
 
-const EXTERNAL_LINK = 'font-semibold text-primary underline underline-offset-2 hover:decoration-2'
+const INLINE_LINK = 'font-semibold text-primary underline underline-offset-2 hover:decoration-2'
 
 const ABOUT_ITEMS: [AboutItem, AboutItem, AboutItem, AboutItem] = [
   {
@@ -65,7 +65,7 @@ const ABOUT_ITEMS: [AboutItem, AboutItem, AboutItem, AboutItem] = [
         <p>
           Vous avez une suggestion d'amélioration ou vous rencontrez un problème sur le site ?
           Ouvrez une issue sur{' '}
-          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={EXTERNAL_LINK}>
+          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
             GitHub<span className="sr-only"> — nouvel onglet</span>
           </a>
           .
@@ -73,7 +73,7 @@ const ABOUT_ITEMS: [AboutItem, AboutItem, AboutItem, AboutItem] = [
         <p>
           Vous représentez une communauté et souhaitez référencer vos évènements sur LeHub ?
           Contactez-moi sur{' '}
-          <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className={EXTERNAL_LINK}>
+          <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
             LinkedIn<span className="sr-only"> — nouvel onglet</span>
           </a>
           .
@@ -92,21 +92,17 @@ export function AboutSection() {
   return (
     <section aria-labelledby="about-heading" className="mt-16 border-t border-primary/10 pt-10">
       <Collapsible.Root>
-        <Collapsible.Trigger className="group flex min-h-11 items-center gap-4">
-          <ChevronDown
-            aria-hidden="true"
-            focusable="false"
-            className="size-5 shrink-0 text-ink-muted transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-primary"
-          />
-          <h2 id="about-heading" className="m-0 text-2xl font-bold md:text-3xl">
+        <h2 id="about-heading" className="m-0 text-2xl font-bold md:text-3xl">
+          <Collapsible.Trigger className="group flex min-h-11 items-center gap-4">
+            <DisclosureChevron className="size-5" />
             À propos de LeHub
-          </h2>
-        </Collapsible.Trigger>
+          </Collapsible.Trigger>
+        </h2>
         <p className="mt-2 ml-9 max-w-xl text-ink-muted">
           Quelques mots sur ce que LeHub est — et ce qu'il n'est pas.
         </p>
 
-        <Collapsible.Content className="overflow-hidden data-[state=closed]:h-0 data-[state=open]:h-[var(--radix-collapsible-content-height)] transition-[height] duration-200">
+        <Collapsible.Content className="collapsible-panel">
           <Accordion.Root type="single" collapsible defaultValue={ABOUT_ITEMS[0].id} className="mt-6">
             {ABOUT_ITEMS.map((item) => (
               <Accordion.Item key={item.id} value={item.id} className="border-b border-primary/10 first:border-t">
@@ -114,15 +110,11 @@ export function AboutSection() {
                   <h3 className="m-0">
                     <Accordion.Trigger className="group flex min-h-11 w-full items-center justify-between gap-3 py-4 text-left font-heading text-base font-bold text-ink">
                       {item.title}
-                      <ChevronDown
-                        aria-hidden="true"
-                        focusable="false"
-                        className="size-4 shrink-0 text-ink-muted transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-primary"
-                      />
+                      <DisclosureChevron className="size-4" />
                     </Accordion.Trigger>
                   </h3>
                 </Accordion.Header>
-                <Accordion.Content className="overflow-hidden data-[state=closed]:h-0 data-[state=open]:h-[var(--radix-accordion-content-height)] transition-[height] duration-200">
+                <Accordion.Content className="accordion-panel">
                   <div className="space-y-3 pb-6 text-[0.9375rem] leading-relaxed text-ink-muted text-pretty">
                     {item.body}
                   </div>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import * as Accordion from '@radix-ui/react-accordion'
-import { ChevronDown } from 'lucide-react'
 import { MediaPlaceholder } from './MediaPlaceholder'
+import { DisclosureChevron } from './DisclosureChevron'
 
 interface Feature {
   id: string
@@ -71,7 +71,8 @@ const FEATURES: [Feature, Feature, Feature] = [
 
 /**
  * Story #16. Controlled accordion: the desktop sticky media pane reads the same
- * `openFeature` state as the trigger list, so it can't fall out of sync with what's open.
+ * `openFeature` state as the trigger list, so its caption always matches whichever item —
+ * if any — is currently open.
  */
 export function FeaturesShowcase() {
   const [openFeature, setOpenFeature] = useState<string>(FEATURES[0].id)
@@ -96,15 +97,11 @@ export function FeaturesShowcase() {
               <h2 className="m-0">
                 <Accordion.Trigger className="group flex min-h-11 w-full items-center justify-between gap-3 py-4 text-left font-heading text-lg font-bold text-ink">
                   {feature.title}
-                  <ChevronDown
-                    aria-hidden="true"
-                    focusable="false"
-                    className="size-5 shrink-0 text-ink-muted transition-transform duration-200 group-data-[state=open]:rotate-180 group-data-[state=open]:text-primary"
-                  />
+                  <DisclosureChevron className="size-5" />
                 </Accordion.Trigger>
               </h2>
             </Accordion.Header>
-            <Accordion.Content className="overflow-hidden data-[state=closed]:h-0 data-[state=open]:h-[var(--radix-accordion-content-height)] transition-[height] duration-200">
+            <Accordion.Content className="accordion-panel">
               <div className="space-y-3 pb-6 text-[0.9375rem] leading-relaxed text-ink-muted text-pretty [&_strong]:text-ink">
                 {feature.body}
               </div>
@@ -117,6 +114,9 @@ export function FeaturesShowcase() {
       </Accordion.Root>
 
       <div className="mt-8 hidden min-w-0 flex-1 min-[900px]:sticky min-[900px]:top-28 min-[900px]:mt-0 min-[900px]:block min-[900px]:self-start">
+        {/* `collapsible` lets the open item close, so `current` can be undefined — the
+            mock-up itself hides the media box in that case rather than freezing on the
+            last screenshot, and this mirrors it. */}
         {current && <MediaPlaceholder caption={current.mediaCaption} />}
       </div>
     </section>
