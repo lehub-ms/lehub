@@ -27,3 +27,26 @@ describe("page d'accueil — hero pitch", () => {
     expect(link.getAttribute('href')).toBe('/lehub')
   })
 })
+
+describe("page d'accueil — ordre des sections", () => {
+  it('affiche un aperçu des prochains évènements et des communautés, dans cet ordre', () => {
+    renderAt('/')
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    const eventsIndex = headings.findIndex((text) => text === 'Les prochains évènements')
+    const communitiesIndex = headings.findIndex((text) => text === 'Les communautés partenaires')
+
+    expect(eventsIndex).toBeGreaterThanOrEqual(0)
+    expect(communitiesIndex).toBeGreaterThan(eventsIndex)
+  })
+
+  it("place les deux sections après le hero", () => {
+    renderAt('/')
+
+    const hero = screen.getByRole('heading', { level: 1 })
+    const events = screen.getByRole('heading', { name: 'Les prochains évènements' })
+
+    // DOCUMENT_POSITION_FOLLOWING: `events` comes after `hero` in the DOM.
+    expect(hero.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
