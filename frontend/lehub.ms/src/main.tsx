@@ -1,13 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { App } from './App'
+import { RouterProvider, createBrowserRouter } from 'react-router'
+import { routes } from './routes'
 import './index.css'
 
 const container = document.getElementById('root')
 if (!container) throw new Error('Root element #root is missing from index.html')
 
+const router = createBrowserRouter(routes)
+
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <RouterProvider router={router} />
   </StrictMode>,
 )
