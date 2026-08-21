@@ -35,7 +35,7 @@ the maintainer first — propose it, do not create it.
 | Styling | Tailwind CSS | v4 via `@tailwindcss/vite` — no other CSS framework, no CSS-in-JS |
 | Components | Radix UI Primitives + `clsx` + `tailwind-merge` | headless, accessible |
 | Icons | Lucide React | only icon library; never emojis as UI icons |
-| Routing | React Router | v7 |
+| Routing | React Router | v8 — ESM-only, library/SPA mode; never `react-router-dom` (removed in v8) |
 | Auth (client) | `oidc-client-ts` | Entra External ID, PKCE |
 | API | Azure Functions v4 | Node 22, TypeScript, Linux, FC1 Flex Consumption |
 | SQL driver | `mssql` | Managed Identity in cloud, SQL auth locally only |
@@ -81,7 +81,8 @@ npm --prefix api test                         # vitest run
 ./scripts/db-bootstrap-mi.sh dev              # grant the managed identity on the database
 ```
 
-Requires: Docker, Node 22 via `fnm` (pinned in `.nvmrc`), `func` (Core Tools 4), Azure CLI 2.60+,
+Requires: Docker, Node 22 via `fnm` (pinned in `.nvmrc`; **22.22.0 minimum** — React Router v8
+refuses anything below), `func` (Core Tools 4), Azure CLI 2.60+,
 `az bicep`, `go-sqlcmd`, `gh`, membership in the `sg-lehub-sql-admins` Entra group for any cloud
 DB operation. Setup instructions live in `docs/local-dev.md`.
 
