@@ -8,7 +8,7 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-20 pb-8">
       <section className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
-        <div>
+        <div className="max-w-2xl">
           <h1 className="text-4xl leading-tight font-bold tracking-tight md:text-5xl">
             <span className="text-gradient">LeHub</span>
             <span className="mt-3 block text-2xl font-bold text-ink md:text-4xl">

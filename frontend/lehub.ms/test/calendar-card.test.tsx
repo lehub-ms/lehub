@@ -34,7 +34,20 @@ describe('encart calendrier personnalisé', () => {
     expect(document.activeElement).toBe(button)
 
     await user.keyboard('{Enter}')
-    // No navigation, no thrown error: the click handler simply does not exist.
     expect(document.activeElement).toBe(button)
+  })
+
+  it('un clic ou un Entrée ne provoque aucune navigation ni effet de bord', async () => {
+    const user = userEvent.setup()
+    render(<CalendarCard />)
+    const button = screen.getByRole('button', { name: /créer un compte.*bientôt disponible/i })
+    const initialUrl = window.location.href
+
+    await user.click(button)
+    expect(window.location.href).toBe(initialUrl)
+
+    button.focus()
+    await user.keyboard('{Enter}')
+    expect(window.location.href).toBe(initialUrl)
   })
 })

@@ -1,4 +1,6 @@
 import { Calendar, CalendarCheck, Mail, UserPlus } from 'lucide-react'
+import { BUTTON_BASE, BUTTON_VARIANTS } from '@/lib/button-styles'
+import { cn } from '@/lib/cn'
 
 const APPS = [
   { icon: Calendar, label: 'Apple Calendar' },
@@ -52,7 +54,11 @@ export function CalendarCard() {
       <button
         type="button"
         aria-disabled="true"
-        className="flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-primary px-6 text-[0.9375rem] font-semibold text-white opacity-60"
+        // Full opacity, not a dimmed style: opacity-60 over this glass card blended
+        // white-on-blue down to ~2.8:1, well under the AA floor CLAUDE.md sets for any
+        // text a focusable, still-labelled control exposes. "Disabled" is communicated
+        // by cursor-not-allowed and the sr-only suffix below, not by contrast loss.
+        className={cn(BUTTON_BASE, BUTTON_VARIANTS.primary, 'w-full cursor-not-allowed shadow-none hover:bg-primary')}
       >
         <UserPlus aria-hidden="true" className="size-4" />
         Créer un compte / Se connecter
