@@ -1,8 +1,9 @@
 import { Placeholder } from '@/components/Placeholder'
+import { FeaturesShowcase } from '@/components/FeaturesShowcase'
 
 export function LeHubPage() {
   return (
-    <div className="max-w-4xl pb-8">
+    <div className="max-w-[57.5rem] pb-8">
       <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
         Les fonctionnalités LeHub
       </h1>
@@ -11,10 +12,10 @@ export function LeHubPage() {
         pour ne rien manquer !
       </p>
 
-      <div className="mt-10">
-        <Placeholder>
-          La présentation détaillée des fonctionnalités arrive très bientôt.
-        </Placeholder>
+      <FeaturesShowcase />
+
+      <div className="mt-16">
+        <Placeholder>La section « À propos de LeHub » arrive très bientôt.</Placeholder>
       </div>
     </div>
   )
