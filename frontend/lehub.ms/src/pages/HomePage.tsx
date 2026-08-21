@@ -1,11 +1,19 @@
-import { ArrowRight, CalendarDays } from 'lucide-react'
+import { ArrowRight, CalendarDays, CalendarX } from 'lucide-react'
 import { CalendarCard } from '@/components/CalendarCard'
-import { LinkButton } from '@/components/LinkButton'
-import { PATHS } from '@/lib/navigation'
-import { Placeholder } from '@/components/Placeholder'
 import { CommunitiesCarousel } from '@/components/CommunitiesCarousel'
+import { EmptyState } from '@/components/EmptyState'
+import { ErrorState } from '@/components/ErrorState'
+import { EventCard } from '@/components/events/EventCard'
+import { EventCardSkeleton } from '@/components/events/EventCardSkeleton'
+import { LinkButton } from '@/components/LinkButton'
+import { useUpcomingEvents } from '@/hooks/useUpcomingEvents'
+import { PATHS } from '@/lib/navigation'
+
+const HOME_EVENT_COUNT = 3
 
 export function HomePage() {
+  const upcoming = useUpcomingEvents()
+
   return (
     <div className="flex flex-col gap-20 pb-8">
       <section className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
@@ -39,10 +47,40 @@ export function HomePage() {
       </section>
 
       <section aria-labelledby="prochains-evenements">
-        <h2 id="prochains-evenements" className="mb-8 text-3xl font-bold md:text-4xl">
-          Les prochains évènements
-        </h2>
-        <Placeholder>Les prochains évènements s’afficheront ici très bientôt.</Placeholder>
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <h2 id="prochains-evenements" className="text-3xl font-bold md:text-4xl">
+            Les prochains évènements
+          </h2>
+          <LinkButton to={PATHS.events} variant="outline" className="text-sm">
+            Tout voir
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </LinkButton>
+        </div>
+
+        {upcoming.status === 'loading' && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: HOME_EVENT_COUNT }, (_, index) => (
+              <EventCardSkeleton key={index} />
+            ))}
+          </div>
+        )}
+
+        {upcoming.status === 'error' && <ErrorState error={upcoming.error} onRetry={upcoming.refetch} />}
+
+        {upcoming.status === 'success' &&
+          (upcoming.events.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {upcoming.events.slice(0, HOME_EVENT_COUNT).map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={CalendarX}
+              title="Aucun évènement à venir pour le moment"
+              description="Revenez bientôt : les communautés annoncent régulièrement de nouveaux évènements."
+            />
+          ))}
       </section>
 
       <section aria-labelledby="communautes-partenaires">
