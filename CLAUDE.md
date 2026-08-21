@@ -34,7 +34,8 @@ the maintainer first — propose it, do not create it.
 | Language | TypeScript | `strict: true`, no `any`, no `@ts-ignore` |
 | Styling | Tailwind CSS | v4 via `@tailwindcss/vite` — no other CSS framework, no CSS-in-JS |
 | Components | Radix UI Primitives + `clsx` + `tailwind-merge` | headless, accessible |
-| Icons | Lucide React | only icon library; never emojis as UI icons |
+| Icons | Lucide React | only icon library; never emojis as UI icons. v1 dropped every brand mark, so GitHub/LinkedIn logos are inline SVG |
+| Fonts | `@fontsource-variable/*` | Space Grotesk (headings, max weight 700) + DM Sans (body), self-hosted so the CSP stays at `font-src 'self'` |
 | Routing | React Router | v8 — ESM-only, library/SPA mode; never `react-router-dom` (removed in v8) |
 | Auth (client) | `oidc-client-ts` | Entra External ID, PKCE |
 | API | Azure Functions v4 | Node 22, TypeScript, Linux, FC1 Flex Consumption |
@@ -112,9 +113,27 @@ Branches, commits, PR bodies, GitHub Project statuses, releases and hotfixes are
 the `github-workflow` skill** (`.claude/skills/github-workflow/SKILL.md`) — read it before any
 git or `gh` operation. Do not restate its rules here.
 
-The design system and the UI mockup workflow are not defined yet — they will be added to this
-file when that work starts. Until then, do not introduce a `/design` directory, a design skill,
-or design tokens on your own initiative.
+## Design system
+
+The **Claude Design project `lehub.ms/`** is the source of truth for anything visual: every
+change of look or UX starts there, then lands in the repo. Do not create a `/design` directory
+or a design skill in this repo — the mock-ups are not committed here, and generated HTML
+previews remain an anti-pattern.
+
+Tokens live in exactly one place: the `@theme` block of `frontend/lehub.ms/src/index.css`.
+Colours are `--color-*`, families are `--font-*`, and Tailwind derives `bg-primary`,
+`text-ink-muted`, `font-heading` from them. Repeated composites (`glass`, `glass-strong`,
+`text-gradient`) are Tailwind `@utility` rules in the same file; hand-written CSS is reserved
+for what a utility genuinely cannot express (the background mesh, `:focus-visible`).
+
+Two tokens deliberately diverge from the mock-ups, because WCAG AA outranks visual fidelity:
+
+- `--color-ink-muted` is `#63738a`, not the mock-up's `#64748b`, which measures 4.47:1 on the
+  canvas and misses the 4.5:1 floor.
+- `--color-primary-light` (`#4d9fde`, 2.69:1) is **decorative only** — gradients and the mesh.
+  Never text. Section labels use `--color-primary` (5.92:1).
+
+Both corrections are owed back to the Claude Design project.
 
 ## GitHub Issues
 
@@ -194,8 +213,9 @@ These are enforceable rules; a PR violating one does not merge.
   GitHub secrets.
 - Security-relevant events (auth failures, authorization denials, anomalous access) are logged
   to Application Insights.
-- WCAG 2.1 AA: contrast ratios per MASTER.md, visible focus states, keyboard navigation,
-  semantic landmarks, `alt` on every meaningful image.
+- WCAG 2.1 AA: text contrast ≥4.5:1 (≥3:1 for large text; logotypes are exempt per 1.4.3),
+  visible focus states, keyboard navigation, interactive targets ≥44×44px on mobile, semantic
+  landmarks, `alt` on every meaningful image.
 - Security headers (CSP, X-Frame-Options, restrictive CORS) configured on both SWA and the
   Function App.
 - Known CVEs in dependencies are fixed before any new feature merges.
