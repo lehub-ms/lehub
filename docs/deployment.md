@@ -72,10 +72,12 @@ Written down so they are decisions rather than discoveries.
 
 | Risk | Why it is accepted |
 |---|---|
-| No blob soft delete or versioning | the container holds the deployment package, which a redeployment rebuilds |
+| No blob soft delete or versioning **on the host storage** | that account holds the deployment package, which a redeployment rebuilds. The media account is the opposite case and keeps 7-day blob and container retention |
+| No versioning on the media account | retention covers a deletion; overwriting a logo with a newer one is the intended operation, not an accident to undo |
 | Point-in-time restore only, 7 days on prod Basic | long-term retention is billed per GB and the data is re-seedable |
 | No regional DR, no zone redundancy | a community agenda tolerates hours of downtime; geo-redundancy does not fit the budget |
 | Storage reachable from any network | `allowSharedKeyAccess: false` means Entra is the barrier, not the network |
+| The media container is readable by anyone | that is what serving public logos means. `publicAccess: 'Blob'` grants reads on a known blob name and not container listing, so the container is not an inventory of what the site references |
 | SQL reachable from any Azure IP | a private endpoint is ~7 €/month; `azureADOnlyAuthentication` is the real guard |
 | Microsoft Defender for Cloud, beyond the free tiers | Defender for SQL ~13 €, Storage ~10 €, App Service ~15 € per month — together more than the whole budget |
 
@@ -105,7 +107,7 @@ subscription, and for prod as long as no pipeline targets it.
 
 Applying to prod types the resource group name back before anything happens.
 
-A second `--what-if` straight after a deployment reports **nine resources to modify**, and
+A second `--what-if` straight after a deployment reports **ten resources to modify**, and
 none of them is drift. Every one is the resource provider normalising something, or
 `what-if` being unable to evaluate an expression before the deployment runs. Anything
 *outside* this list is the bug:
@@ -117,6 +119,7 @@ none of them is drift. Every one is the resource provider normalising something,
 | `auditingSettings/default` | `isManagedIdentityInUse`, `retentionDays`, `storageAccountSubscriptionId` | storage-target properties the provider fills in even for an Azure Monitor target |
 | `diagnosticSettings/sqlAudit` | `metrics`, ten disabled log categories | the provider expands the category list to every category the resource supports |
 | `containers/deployments` | `defaultEncryptionScope`, `denyEncryptionScopeOverride` | account-level encryption defaults, applied to every container |
+| `containers/media` | `defaultEncryptionScope`, `denyEncryptionScopeOverride` | the same two, on the media account's container. Neither the media account nor its `blobServices/default` appears here — the exhaustive properties block is what keeps them out |
 | `sites/func-lehub-dev` | `siteConfig.*` | `what-if` compares an unexpanded `siteConfig`, so CORS and `ftpsState` read as additions |
 | `config/appsettings` | `properties` | the settings are built from `reference()`, which has no value until the deployment runs |
 | both `staticSites` | `deploymentAuthPolicy`, `provider`, `stableInboundIP`, `trafficSplitting` | assigned by the provider; the template does not set them |
@@ -214,6 +217,11 @@ Recreating a serverless database takes a few minutes, and the connection that fo
 be waiting for it to wake. The Function App keeps its hostname, because the hostname
 follows the resource name — so the CORS allow-list and any build-time API URL stay valid.
 
+**The media account is deliberately not part of this.** It is the one store here whose
+contents a redeployment cannot rebuild, and `storageAccountName` in the snippet above
+resolves to the host storage, never to it. Emptying it would delete logos a community
+handed over; the 7-day retention would give you a week to notice, and nothing after that.
+
 ## What is deliberately absent
 
 | Not here | Why |
@@ -225,14 +233,17 @@ follows the resource name — so the CORS allow-list and any build-time API URL 
 | Private endpoints | out of budget; Entra authentication is the barrier instead |
 | `FUNCTIONS_WORKER_RUNTIME` | Flex Consumption declares the runtime in `functionAppConfig` |
 | Azure Verified Modules | the stories pin properties to the line; hand-written modules stay auditable |
+| Any CDN in front of the media account | classic Azure CDN is retired, and Front Door Standard bills a 30.75 €/month base fee in westeurope before serving a byte — more, on its own, than the whole 25 € cap. The public blob endpoint with long cache headers is enough at this scale |
 | Microsoft Defender for Cloud plans | see "Accepted risks" — together they cost more than the whole budget |
 | Basic publishing credentials (SCM, FTP) | refused outright; deployment goes through the managed identity |
 
-The identity holds two role assignments and no more: **Storage Blob Data Owner** on the
-storage account, and **Monitoring Metrics Publisher** on the Application Insights
-component. Blob Data Owner is wider than anyone would pick — Flex Consumption manages
-the host content store as well as reading the deployment package, and Blob Data
-Contributor does not cover it. It is a constraint accepted knowingly, not an oversight.
+The identity holds three role assignments and no more: **Storage Blob Data Owner** on the
+host storage account, **Storage Blob Data Contributor** on the media storage account, and
+**Monitoring Metrics Publisher** on the Application Insights component. Blob Data Owner is
+wider than anyone would pick — Flex Consumption manages the host content store as well as
+reading the deployment package, and Blob Data Contributor does not cover it. It is a
+constraint accepted knowingly, not an oversight, and it is why the media account gets the
+narrower role: nothing manages a content store there.
 
 Access to SQL is not an Azure RBAC assignment at all: it is a database user, created by
 `scripts/db-bootstrap-mi.sh`.

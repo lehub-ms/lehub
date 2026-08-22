@@ -39,6 +39,7 @@ jobs:
       sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
       sqlServerFqdn: ${{ steps.deploy.outputs.sqlServerFqdn }}
       sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
+      mediaHostname: ${{ steps.deploy.outputs.mediaHostname }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
@@ -64,7 +65,7 @@ jobs:
           # a failed assignment does.
           for key in functionAppName functionAppHostname apiBaseUrl \
                      webAppName webAppHostname adminAppName adminAppHostname \
-                     sqlServerName sqlServerFqdn sqlDatabaseName; do
+                     sqlServerName sqlServerFqdn sqlDatabaseName mediaHostname; do
             value="$(echo "$outputs" | jq -er ".$key.value")"
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
