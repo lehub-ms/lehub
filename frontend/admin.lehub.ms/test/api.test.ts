@@ -40,10 +40,19 @@ describe('getHealth', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
-        jsonResponse({ status: 'ok', sqlConfigured: true, timestamp: '2026-01-01T00:00:00.000Z' }),
+        jsonResponse({
+          status: 'ok',
+          sqlConfigured: true,
+          mediaConfigured: true,
+          timestamp: '2026-01-01T00:00:00.000Z',
+        }),
       ),
     )
 
-    await expect(getHealth()).resolves.toMatchObject({ status: 'ok', sqlConfigured: true })
+    await expect(getHealth()).resolves.toMatchObject({
+      status: 'ok',
+      sqlConfigured: true,
+      mediaConfigured: true,
+    })
   })
 })

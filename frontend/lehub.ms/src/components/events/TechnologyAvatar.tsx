@@ -2,7 +2,8 @@ import type { NamedRef } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 interface TechnologyAvatarProps {
-  technology: NamedRef
+  // Not the full NamedRef: filter options are handed to this too, and they carry no logo.
+  technology: Pick<NamedRef, 'id' | 'name'>
   size?: number
   className?: string
   /** Set by callers that provide their own accessible name (e.g. a filter summary chip). */

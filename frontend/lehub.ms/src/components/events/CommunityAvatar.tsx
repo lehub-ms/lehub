@@ -3,7 +3,8 @@ import { communityColor } from '@/lib/communityPalette'
 import { cn } from '@/lib/cn'
 
 interface CommunityAvatarProps {
-  community: NamedRef
+  // Not the full NamedRef: filter options are handed to this too, and they carry no logo.
+  community: Pick<NamedRef, 'id' | 'name'>
   size?: number
   className?: string
   /** Set by callers that provide their own accessible name (e.g. `CommunityAvatarStack`). */

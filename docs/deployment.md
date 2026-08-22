@@ -399,7 +399,11 @@ merges produce two complete deployments, in order.
 3. **database** — opens a single-IP firewall rule `gh-<run_id>` (removed even on
    failure), waits for the serverless database to wake, then calls
    `scripts/db-migrate.sh` and `scripts/db-seed.sh` (never `--demo`). A failure stops
-   the chain: the API never runs against a schema older than itself.
+   the chain: the API never runs against a schema older than itself. The converse is not
+   guaranteed — a migration that is not backward compatible leaves the *previous* API
+   answering 500 until step 4 publishes, and indefinitely if step 4 fails. Prefer
+   expand/contract for anything touching populated columns; when a breaking change is
+   taken anyway, say so in the migration's header.
 4. **api** — builds `/api`, publishes exactly `dist/`, `host.json`, `package.json` and
    production `node_modules` to the Function App, writes no app setting (Bicep owns
    them), then probes `GET /api/health` until it answers 200 — a published-but-dead API

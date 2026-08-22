@@ -8,7 +8,9 @@
     "SQL_DATABASE": "lehub-local",
     "SQL_AUTH_MODE": "sql",
     "SQL_USER": "sa",
-    "SQL_PASSWORD": "<replace-with-MSSQL_SA_PASSWORD-from-.env>"
+    "SQL_PASSWORD": "<replace-with-MSSQL_SA_PASSWORD-from-.env>",
+
+    "MEDIA_BASE_URL": "http://127.0.0.1:10000/devstoreaccount1/media"
   },
   "Host": {
     "CORS": "http://localhost:5173,http://localhost:5174",

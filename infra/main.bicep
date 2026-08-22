@@ -230,6 +230,7 @@ module functionApp 'modules/functionApp.bicep' = {
     deploymentContainerUri: storage.outputs.deploymentContainerUri
     sqlServerFqdn: sqlServer.outputs.fullyQualifiedDomainName
     sqlDatabaseName: sqlDatabase.outputs.name
+    mediaBaseUrl: mediaStorage.outputs.baseUrl
     appInsightsConnectionString: monitoring.outputs.connectionString
     appInsightsId: monitoring.outputs.componentId
     allowedOrigins: allowedOrigins
