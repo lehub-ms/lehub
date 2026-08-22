@@ -100,31 +100,61 @@
 }
 
 /* Radix Accordion/Collapsible `Content` height-reveal, shared by the features accordion
-   and the two levels of the "À propos" disclosure. Each primitive publishes its own CSS
-   custom property on its `Content` element, hence the two variants. */
-@utility accordion-panel {
-  overflow: hidden;
-  transition: height 200ms;
+   and the two levels of the "À propos" disclosure. Each primitive publishes the measured
+   height under its own CSS custom property, so each utility maps its own into the shared
+   `--panel-height` the keyframes below read — one pair of keyframes for both, rather than
+   two pairs that would drift apart the day someone retunes the duration or the easing.
 
-  &[data-state='closed'] {
+   Keyframes rather than `transition: height`, and deliberately without a fill mode — unlike
+   `animate-drawer-in` below. The height is borrowed for the duration of the reveal only,
+   then the panel falls back to `height: auto`. Radix re-measures the property whenever the
+   panel opens or closes, but never while it stays open, so a panel pinned to it in a rule
+   of its own would keep the height it had when it opened: that is exactly how the outer
+   disclosure ended up clipping the nested accordion as soon as a taller item was opened
+   inside it (#67). Such a rule would also poison Radix's own measurement, which reads the
+   element back with its animation neutralised. And `Presence` only ever recognises
+   animations, never transitions, so this is what makes the closing reveal play at all. */
+@keyframes panel-open {
+  from {
     height: 0;
   }
+  to {
+    height: var(--panel-height);
+  }
+}
+
+@keyframes panel-close {
+  from {
+    height: var(--panel-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@utility accordion-panel {
+  --panel-height: var(--radix-accordion-content-height);
+  overflow: hidden;
 
   &[data-state='open'] {
-    height: var(--radix-accordion-content-height);
+    animation: panel-open 200ms ease-out;
+  }
+
+  &[data-state='closed'] {
+    animation: panel-close 200ms ease-out;
   }
 }
 
 @utility collapsible-panel {
+  --panel-height: var(--radix-collapsible-content-height);
   overflow: hidden;
-  transition: height 200ms;
-
-  &[data-state='closed'] {
-    height: 0;
-  }
 
   &[data-state='open'] {
-    height: var(--radix-collapsible-content-height);
+    animation: panel-open 200ms ease-out;
+  }
+
+  &[data-state='closed'] {
+    animation: panel-close 200ms ease-out;
   }
 }
 
