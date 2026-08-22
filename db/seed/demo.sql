@@ -48,16 +48,16 @@ USING (VALUES
    N'Un réseau national pour faire avancer la place des femmes dans la tech, meetups et mentorat.'),
   ('CCCCCCCC-0000-0000-0000-00000000000C', N'DevFest Lille',             NULL,
    N'La conférence développeurs annuelle du Nord — talks, ateliers et networking.')
-) AS source (Id, Name, LogoUrl, Description)
+) AS source (Id, Name, LogoPath, Description)
 ON target.Id = source.Id
 -- Backfills Description on communities seeded before it existed (migration 0002).
--- Name/LogoUrl are left alone on a match, same as before, so a local LogoUrl edit
+-- Name/LogoPath are left alone on a match, same as before, so a local LogoPath edit
 -- survives a replay.
 WHEN MATCHED AND target.Description IS NULL THEN
   UPDATE SET Description = source.Description
 WHEN NOT MATCHED THEN
-  INSERT (Id, Name, LogoUrl, Description)
-  VALUES (source.Id, source.Name, source.LogoUrl, source.Description);
+  INSERT (Id, Name, LogoPath, Description)
+  VALUES (source.Id, source.Name, source.LogoPath, source.Description);
 
 -- ─── Technologies ────────────────────────────────────────────────────────────
 
@@ -73,9 +73,9 @@ USING (VALUES
   ('B8B8B8B8-0000-0000-0000-000000000008', N'GitHub Copilot', NULL),
   ('B9B9B9B9-0000-0000-0000-000000000009', N'Azure OpenAI',   NULL),
   ('BABABABA-0000-0000-0000-00000000000A', N'Kubernetes',     NULL)
-) AS source (Id, Name, LogoUrl)
+) AS source (Id, Name, LogoPath)
 ON target.Id = source.Id
-WHEN NOT MATCHED THEN INSERT (Id, Name, LogoUrl) VALUES (source.Id, source.Name, source.LogoUrl);
+WHEN NOT MATCHED THEN INSERT (Id, Name, LogoPath) VALUES (source.Id, source.Name, source.LogoPath);
 
 -- ─── Events ──────────────────────────────────────────────────────────────────
 -- Formats:  F1 Conférence · F2 Meetup · F3 Webinaire · F4 Hackathon · F5 Atelier
@@ -158,12 +158,12 @@ USING (VALUES
    N'Édition lilloise du DevFest : cloud, IA, web moderne. Une journée, deux tracks, 500 développeurs.',
    DATEADD(DAY, 70, GETUTCDATE()), DATEADD(HOUR, 9, DATEADD(DAY, 70, GETUTCDATE())),
    'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001', NULL)
-) AS source (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImageUrl)
+) AS source (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImagePath)
 ON target.Id = source.Id
 WHEN NOT MATCHED THEN
-  INSERT (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImageUrl)
+  INSERT (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImagePath)
   VALUES (source.Id, source.Title, source.Description, source.StartDate, source.EndDate,
-          source.FormatTypeId, source.EventModeId, source.BannerImageUrl)
+          source.FormatTypeId, source.EventModeId, source.BannerImagePath)
 WHEN MATCHED THEN
   -- Dates only: see the note at the top of this file.
   UPDATE SET target.StartDate = source.StartDate,

@@ -1,7 +1,7 @@
 import type { EventSummary, NamedRef } from '@/lib/api'
 
-export function buildNamedRef(prefix: string, index = 1): NamedRef {
-  return { id: `${prefix}-${index}`, name: `${prefix} ${index}` }
+export function buildNamedRef(prefix: string, index = 1, logoUrl: string | null = null): NamedRef {
+  return { id: `${prefix}-${index}`, name: `${prefix} ${index}`, logoUrl }
 }
 
 export function buildEvent(overrides: Partial<EventSummary> = {}): EventSummary {

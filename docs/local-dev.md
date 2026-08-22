@@ -77,6 +77,25 @@ SQL authentication is used **only** by the local container. Every Azure SQL serv
 project has Entra-only authentication enabled, and the API connects with a managed identity —
 there is no application password anywhere in the cloud.
 
+### Media
+
+The database stores media as a **blob path** — `communities/aznug.png` — never an absolute
+URL, so one dataset is valid locally, on dev and on prod. The API composes the absolute URL
+from `MEDIA_BASE_URL`, which is a deployment setting owned by Bicep in the cloud and comes
+from `api/local.settings.json` here. It has no default: an absent value fails the request
+with an explicit error rather than serving a relative path that would 404 somewhere else.
+
+The value in the template points at the Azurite default endpoint, and **nothing in
+`docker-compose.yml` starts Azurite**. The demo dataset carries no media path, so the local
+stack works without it and the front-ends show their colour fallbacks. To actually see an
+image locally, run an emulator yourself, create a `media` container in it, and set a path on
+a row by hand.
+
+Note also that the **Content-Security-Policy is not served locally**. It lives in each app's
+`staticwebapp.config.json`, which only Azure Static Web Apps applies; the Vite dev server
+ignores it. A CSP regression — a media domain missing from `img-src`, for instance — is
+therefore invisible here and only shows up on a deployed environment.
+
 ## Database
 
 The schema is a sequence of migrations, the data is seeded separately. See `db/README.md` for
@@ -130,6 +149,7 @@ Same scripts in `frontend/admin.lehub.ms`.
 | Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | check `Host.CORS` in `api/local.settings.json` lists 5173 and 5174, and that Vite really bound those ports |
 | Page shows `Aucune réponse de http://localhost:7071` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |
+| `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | an `api/local.settings.json` created before the media setting existed — `dev-up.sh` never overwrites an existing one | copy the `MEDIA_BASE_URL` line from `api/local.settings.json.example` into it |
 | `0001_….sql changed after it was applied` | a merged migration was edited | revert the file; corrections go in a **new** migration |
 | `npm ci` fails on a lockfile mismatch | `package.json` changed without refreshing the lockfile | `npm --prefix <pkg> install`, and commit the lockfile |
 

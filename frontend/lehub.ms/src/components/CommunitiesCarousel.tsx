@@ -20,9 +20,10 @@ interface CommunityCardProps {
 }
 
 function CommunityCard({ community, cardRef, ariaHidden }: CommunityCardProps) {
-  // The CSP only allows `img-src 'self' data:`, so an organizer-supplied LogoUrl on
-  // another origin is blocked at the network level, not just occasionally missing —
-  // onError has to fall back to the same placeholder as a genuinely absent logo.
+  // logoUrl is served from the media storage account, whose host the deployment chain adds
+  // to the CSP's img-src — so a cross-origin logo does load. What it does not guarantee is
+  // that the blob behind the stored path exists: the API composes the URL without checking.
+  // onError therefore has to fall back to the same placeholder as a genuinely absent logo.
   const [logoFailed, setLogoFailed] = useState(false)
   const { logoUrl } = community
 

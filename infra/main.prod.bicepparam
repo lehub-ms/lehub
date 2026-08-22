@@ -9,6 +9,9 @@ using './main.bicep'
 //                           wake-up latency on a visitor's first request.
 //   Function App FC1        pay-per-execution, plus one alwaysReady instance
 //   Static Web Apps         Free tier, 0 €
+//   Media storage           Hot LRS: 0.0172 €/GB/month stored, 0.0038 €/10K reads.
+//                           Under 0.10 €/month at this volume. No CDN in front of
+//                           it: Front Door Standard alone is 30.75 €/month.
 //   Storage, Log Analytics  a few euros at expected volume
 //
 // Comfortably inside the ~25 €/month cap the project sets itself.

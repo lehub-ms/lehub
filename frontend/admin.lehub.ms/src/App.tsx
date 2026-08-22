@@ -81,6 +81,8 @@ export function App() {
               <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm text-slate-700">
                 <dt className="font-medium">Base de données configurée</dt>
                 <dd>{state.health.sqlConfigured ? 'oui' : 'non'}</dd>
+                <dt className="font-medium">Stockage des médias configuré</dt>
+                <dd>{state.health.mediaConfigured ? 'oui' : 'non'}</dd>
                 <dt className="font-medium">Horodatage</dt>
                 <dd>
                   <time dateTime={state.health.timestamp}>{state.health.timestamp}</time>
