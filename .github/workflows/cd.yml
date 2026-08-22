@@ -256,6 +256,39 @@ jobs:
         run: |
           npm ci
           npm run build
+      # The committed staticwebapp.config.json declares `img-src 'self' data:` and stays
+      # that way: it has to remain a valid policy on its own, so a build outside this
+      # chain produces a site that blocks images rather than a broken site. The media
+      # account's host carries a uniqueness hash and differs per environment, so it
+      # cannot be written into a versioned file — it comes from the deployment outputs,
+      # like every other resource name here. No wildcard: `*.blob.core.windows.net`
+      # would allow any storage account, an attacker's included, which is the opposite
+      # of what the directive is for.
+      - name: Allow the media account in both content security policies
+        env:
+          MEDIA_HOSTNAME: ${{ needs.infra.outputs.mediaHostname }}
+        run: |
+          if [ -z "$MEDIA_HOSTNAME" ]; then
+            echo "mediaHostname is empty — refusing to publish a site that blocks its own images" >&2
+            exit 1
+          fi
+          # Passed through --arg rather than interpolated into the jq program: the needle
+          # contains the single quotes of 'self', which would otherwise have to survive
+          # YAML, then shell, then jq.
+          for cfg in frontend/lehub.ms/dist/staticwebapp.config.json \
+                     frontend/admin.lehub.ms/dist/staticwebapp.config.json; do
+            patched="$(jq \
+              --arg needle "img-src 'self' data:" \
+              --arg repl   "img-src 'self' data: https://$MEDIA_HOSTNAME" \
+              '.globalHeaders["Content-Security-Policy"] |= sub($needle; $repl)' "$cfg")"
+            # A renamed or reworded directive would leave the policy untouched and publish
+            # a site whose images are blocked, silently. Fail here instead.
+            printf '%s' "$patched" | jq -e \
+              --arg origin "https://$MEDIA_HOSTNAME" \
+              '.globalHeaders["Content-Security-Policy"] | contains($origin)' > /dev/null
+            printf '%s\n' "$patched" > "$cfg"
+            echo "$cfg: img-src now allows https://$MEDIA_HOSTNAME"
+          done
       - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}

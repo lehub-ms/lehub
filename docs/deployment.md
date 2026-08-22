@@ -409,9 +409,10 @@ merges produce two complete deployments, in order.
    them), then probes `GET /api/health` until it answers 200 — a published-but-dead API
    is a red job.
 5. **web** — builds both front-ends with `VITE_API_BASE_URL` from the infra outputs
-   (an empty value fails the build), reads each Static Web App's deployment token at
-   run time from the OIDC session — masked, never stored — publishes both
-   independently, and checks both hostnames answer 200.
+   (an empty value fails the build), adds the media account's host to the `img-src`
+   directive of each built `staticwebapp.config.json` (see below), reads each Static Web
+   App's deployment token at run time from the OIDC session — masked, never stored —
+   publishes both independently, and checks both hostnames answer 200.
 
 ### Common failures
 
@@ -448,3 +449,32 @@ damage.
 The Static Web Apps are wired to their content by this pipeline alone — the Bicep
 template leaves `repositoryUrl` unset on purpose, and a Static Web App recreated by hand
 serves the default page until the next merge republishes it.
+
+### The published content security policy is not the committed one
+
+`frontend/*/public/staticwebapp.config.json` declares `img-src 'self' data:` and is
+committed that way in both applications. The media account's host carries a uniqueness
+hash, so it differs per environment and cannot live in a versioned file; the **web** job
+appends it to that one directive in `dist/`, after the build and before publication,
+using `mediaHostname` from the infra outputs.
+
+The committed file therefore stays a valid policy on its own: a build run outside this
+chain produces a site that blocks media images, never a broken site. The step fails
+loudly if the directive it expects is not there, so rewording the CSP cannot silently
+publish a site whose images are blocked.
+
+Two consequences worth knowing:
+
+- A **custom domain on the media account** has to be added at that same step. Nothing
+  else in the chain knows about the media host.
+- The policy is **not served locally** — the Vite dev server ignores
+  `staticwebapp.config.json` — so a CSP regression is only observable on a deployed
+  environment. Verify the header, not the file:
+
+  ```bash
+  curl -sI "https://<swa hostname>/" | grep -i content-security-policy
+  ```
+
+No wildcard is used. `https://*.blob.core.windows.net` would allow any storage account,
+including one an attacker controls, which is precisely what the directive exists to
+prevent — the more so once Epic #2 introduces a per-user calendar token.
