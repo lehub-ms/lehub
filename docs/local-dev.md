@@ -8,14 +8,16 @@ no Azure subscription is needed for the local loop.
 | Tool | Version | Install |
 |---|---|---|
 | Docker Desktop | any recent | <https://docs.docker.com/desktop/> — must be **running** |
-| Node.js | **22** | `brew install fnm`, then `fnm install 22` |
+| Node.js | **22.22.0** or a later 22.x | `brew install fnm`, then `fnm install` from the repository root |
 | Azure Functions Core Tools | 4.x | `npm install -g azure-functions-core-tools@4` |
 | go-sqlcmd | 1.x | `brew install sqlcmd` |
 | git | any recent | — |
 
-Node 22 is not a preference: Azure Functions v4 no longer supports Node 20, and the Function
-App runs 22. The version is pinned in `.nvmrc` and `scripts/dev-up.sh` refuses to run on
-anything else.
+The version is not a preference, and `.nvmrc` carries two constraints at once. The major must
+be 22: Azure Functions v4 no longer supports Node 20 and the Function App runs 22. The patch
+floor is 22.22.0: React Router v8, in `frontend/lehub.ms`, declares `engines: node >=22.22.0`.
+`scripts/dev-up.sh` checks both, and `engine-strict=true` in each package's `.npmrc` makes
+`npm ci` fail rather than warn below the floor — so skipping `dev-up.sh` does not skip the rule.
 
 Add fnm to your shell so `.nvmrc` is picked up when you `cd` into the repository:
 
@@ -39,17 +41,21 @@ git clone https://github.com/lehub-ms/lehub.git && cd lehub
 Then open <http://localhost:5173>. You should see the demonstration events.
 
 `dev-up.sh` is idempotent: run it whenever you want, it re-creates only what is missing and
-never overwrites a file you have edited.
+rewrites the files it derives from the workspace — `.env` and `api/local.settings.json` — and
+never touches anything else you have edited.
 
 ## What runs where
+
+Ports below are the ones a single clone gets — slot 0. A second worktree shifts them; see
+[Working on several worktrees](#working-on-several-worktrees).
 
 | Process | Port | What it is |
 |---|---|---|
 | `api` | 7071 | Azure Functions host — `/api/health`, `/api/events` |
 | `web` | 5173 | public site, `frontend/lehub.ms` |
 | `admin` | 5174 | backoffice, `frontend/admin.lehub.ms` |
-| SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` |
-| Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` |
+| SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` — one instance shared by every workspace, one database each |
+| Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` — shared too |
 
 Both applications call the API **cross-origin**, exactly as they do in production: a Function
 App can only be linked to one Static Web App, and LeHub has two, so there is no `/api` proxy
@@ -57,19 +63,128 @@ anywhere. That is why the API declares `Host.CORS` in `api/local.settings.json` 
 Vite ports are strict — an unexpected origin would simply be refused.
 
 `dev-start.sh` stops everything if any one process fails, so a half-running stack never hides
-a problem. To stop the whole thing — the three processes *and* the database — run
-`./scripts/dev-down.sh`; Ctrl+C in the `dev-start.sh` terminal stops the processes but leaves
-the database up, which is usually what you want between two runs.
+a problem. `./scripts/dev-down.sh` stops the three processes; the containers are shared with
+every other working tree, so they stay up unless you ask for `--sql`. Ctrl+C in the
+`dev-start.sh` terminal does the same thing, which is usually what you want between two runs.
+
+## Working on several worktrees
+
+Every working tree — the main clone and each `git worktree` — is a **workspace**: it gets a
+slug taken from its directory name and a numeric slot, assigned by its first `dev-up.sh` and
+kept from then on. The main clone always holds slot 0, so nothing about it changes.
+
+Each workspace has **its own database** on the one shared SQL Server instance: `lehub-local`
+at slot 0, `lehub-<slug>` after that. Migrations are recorded per database, so applying one on
+a branch leaves every other workspace's history alone. Isolating the database rather than the
+engine is deliberate — a SQL Server container per worktree would cost about 2 GB of RAM each,
+while the useful isolation between branches is the schema and the data. Running a second
+container remains the fallback for the one case a database does not cover, testing an engine
+version change.
+
+The three ports derive from the slot too, a hundred apart, so slot 0 keeps exactly what the
+main clone always had:
+
+| Service | slot 0 | slot 1 | slot 2 | slot 3 |
+|---|---|---|---|---|
+| `api` | 7071 | 7171 | 7271 | 7371 |
+| `web` | 5173 | 5273 | 5373 | 5473 |
+| `admin` | 5174 | 5274 | 5374 | 5474 |
+
+```bash
+git worktree add ../lehub.worktrees/feat-42-something feat/42-something
+cd ../lehub.worktrees/feat-42-something
+./scripts/dev-up.sh          # slot 1: database lehub-feat-42-something, ports 7171/5273/5274
+./scripts/dev-start.sh       # runs alongside the main clone's stack
+```
+
+`api/local.settings.json` and both `.env.local` are rewritten on every `dev-up.sh` **and**
+every `dev-start.sh`, so the API's CORS allow-list, the origin each front-end calls and the
+port each Vite server binds always agree with the slot. `strictPort` stays on: a busy port is
+an error, never a silent slide onto a neighbour's.
+
+Everything else in the stack is scoped to the workspace as well. `dev-start.sh` refuses to
+start only when **its own** ports are taken, and says whether the holder is another LeHub
+worktree or an unrelated process; `dev-down.sh` ends only its own processes, so stopping one
+worktree leaves the others serving.
+
+At most **four** workspaces can exist at once — slot 0 plus three worktrees. Each slot will add
+two redirect URIs to declare on the Entra External ID application once local authentication
+lands, which is what caps the count. Removing a worktree frees its slot at the next
+`dev-up.sh` or `dev-down.sh`.
+
+Stopping is selective, and the containers are opt-in because they belong to the machine rather
+than to a workspace:
+
+| Command | Effect |
+|---|---|
+| `./scripts/dev-down.sh` | stops this workspace's processes; instance and databases untouched |
+| `./scripts/dev-down.sh --sql` | also stops the shared containers, keeping their data |
+| `./scripts/dev-down.sh --drop-db` | also drops this workspace's database |
+| `./scripts/dev-down.sh --volumes` | also deletes the volumes — **every** workspace's data, with a confirmation |
+
+The state shared between workspaces — the slot registry and the SA password — lives in the Git
+common directory, `$(git rev-parse --git-common-dir)/lehub-dev`. It is the one place every
+working tree shares by construction, and nothing there is ever versioned.
+
+**One clone per machine.** That state is shared by the worktrees of a clone, while the SQL
+Server instance, the volume and the ports belong to the machine. A second, independent clone
+would resolve as a main working tree too, claim slot 0, and end up on the same ports and the
+same `lehub-local` with a second SA password against one volume. Use `git worktree` — that is
+what the slots are for. Bootstrapping a second clone against an existing volume stops with an
+explanation rather than a stuck container, but it is not a supported layout.
+
+## Testing from a phone or tablet
+
+Everything listens on the loopback by default, so another device on the same network sees
+nothing. Exposing the stack is an explicit choice, never the default — a development machine
+is not put on the network by accident:
+
+```bash
+./scripts/dev-start.sh --network            # address taken from the default route
+./scripts/dev-start.sh --network=192.168.1.42
+```
+
+The banner prints the address and the URL to type on the device. `LEHUB_NETWORK_HOST` sets it
+too, for a shell that always works this way.
+
+Three values follow the address, and all three have to, or the page loads and then half fails:
+the API's CORS allow-list, the API origin injected into both applications, and the media base
+URL — an image served on the loopback is unreachable from the phone. The loopback origins stay
+allowed while the option is on, so the desktop browser keeps working during the test.
+
+Nothing has to be undone afterwards: the environment files are rendered on **every** start, so
+the next `./scripts/dev-start.sh` without `--network` puts everything back on the loopback,
+including after a Ctrl-C or a killed terminal.
+
+Known limits:
+
+- **Several interfaces** — Wi-Fi, Ethernet, an active VPN. The address comes from the default
+  route, which is where a packet leaving this machine would actually go; with a VPN up that is
+  the VPN's address, which is rarely what the phone can reach. Pass `--network=<ip>` then.
+- **Client isolation.** Guest Wi-Fi and many corporate networks forbid two clients from talking
+  to each other. Nothing on this side can work around it; use a phone hotspot instead.
+- **The machine's address changes** — a new lease, a network switch — while the stack runs. The
+  rendered values still name the old one; stop and start again.
 
 ## Environment files
 
-None of them are committed; `dev-up.sh` creates each from its template.
+None of them are committed. `.env` and `api/local.settings.json` are **rendered on every**
+`dev-up.sh`, from the workspace and from the shared state, rather than created once and left
+alone: that is what stops a workspace from drifting onto another one's database, or onto a
+password the shared volume was never initialised with.
 
-| File | From | Holds |
+| File | Rendered how | Holds |
 |---|---|---|
-| `.env` | `.env.example` | the local SQL password, read by Docker Compose and the scripts |
-| `api/local.settings.json` | `api/local.settings.json.example` | Functions settings, SQL password propagated from `.env` |
-| `frontend/*/.env.local` | `frontend/*/.env.example` | `VITE_API_BASE_URL` |
+| `.env` | rewritten every run | this workspace's slot, slug and database, plus the shared SA password |
+| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD` and `Host.CORS` are managed |
+| `frontend/*/.env.local` | rewritten every run | `VITE_API_BASE_URL`, `VITE_DEV_PORT`, `VITE_DEV_HOST` |
+| `frontend/*/.env.test` | committed fixture, never rendered | the API origin the tests assert; depends on no server |
+
+The SA password is a property of the **instance**, not of a workspace: SQL Server applies
+`MSSQL_SA_PASSWORD` only when it initialises an empty data directory, so every workspace has to
+present the same one. It is generated once into the Git common directory, in `0600`, and read
+back from there. Generating one per workspace is what used to leave the second worktree's
+container stuck unhealthy on `Login failed for user 'sa'`.
 
 `VITE_*` values are inlined into the bundle at build time, so they are public by construction:
 never put a secret in one.
@@ -91,7 +206,7 @@ which `docker-compose.yml` starts alongside SQL Server and `dev-up.sh` waits for
 bootstrap then creates the `media` container with anonymous blob-level read — the same
 `publicAccess` the Bicep module provisions — and uploads the demonstration visuals committed
 under `db/seed/media`, which `db/seed/demo.sql` references. Logos and banners are therefore
-real from the first page load, fetched cross-origin from `127.0.0.1:10000` exactly as they
+real from the first page load, fetched cross-origin from the emulator's port `10000` exactly as they
 are fetched from the storage account in Azure.
 
 Community and event visuals are placeholders created for the project. Technology icons are the
@@ -136,21 +251,28 @@ Inspect the database directly:
 
 ```bash
 source .env
-sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d lehub-local \
+sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d "$LEHUB_DB" \
   -Q "SELECT COUNT(*) FROM dbo.Event"
 ```
 
 ### Starting over
 
+For this workspace alone:
+
+```bash
+./scripts/dev-down.sh --drop-db && ./scripts/dev-up.sh
+```
+
+For the whole machine — every workspace's database and the media container:
+
 ```bash
 ./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh
 ```
 
-This deletes both data volumes and rebuilds the database from the migrations and seeds, and
-the media container from `db/seed/media`. It is
-also the fix for a container that will not become healthy after you change the password in
-`.env`: SQL Server only applies `MSSQL_SA_PASSWORD` when it initialises an empty data
-directory.
+`--volumes` deletes the shared volumes, so it asks for confirmation as soon as another
+workspace has a database on the instance. It is also the only way out once the shared SA
+password has been lost: SQL Server applies `MSSQL_SA_PASSWORD` solely when it initialises an
+empty data directory, so no new password can ever authenticate against an existing volume.
 
 ## Everyday commands
 
@@ -169,16 +291,17 @@ Same scripts in `frontend/admin.lehub.ms`.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `The Docker daemon is not reachable` | Docker Desktop is not running | Start it, then rerun `dev-up.sh` |
-| `Node 22 is required, found v20.x` / `v25.x` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
-| Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a different password | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
-| `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `./scripts/dev-down.sh` |
+| `Node 22.22.0 or a later 22.x is required` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
+| Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a password no workspace holds any more | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
+| `Port 7171 is held by the LeHub workspace at slot 1` | another worktree is already serving | run `./scripts/dev-down.sh` **in that worktree** — from here it would not reach its processes |
+| `Port 7071 is held by a process unrelated to LeHub` | something else on the machine took it | `lsof -i:7071 -sTCP:LISTEN` to identify it, then stop it |
 | `Port 10000 is needed by the lehub-azurite container` | another storage emulator is running — a standalone `azurite`, or Visual Studio's | stop it, or `lsof -i:10000 -sTCP:LISTEN` to find it |
 | `@azure/storage-blob is not installed` | dependencies installed before this package was added — `dev-up.sh` skips `npm ci` when `node_modules` exists | `npm --prefix api ci` |
 | Logos and banners missing, pages otherwise fine | the emulator is down, or its volume was removed without rerunning the bootstrap | `docker compose ps`, then `./scripts/dev-up.sh` |
-| Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | check `Host.CORS` in `api/local.settings.json` lists 5173 and 5174, and that Vite really bound those ports |
-| Page shows `Aucune réponse de http://localhost:7071` | the API is not running | check the `api` pane of `dev-start.sh` |
+| Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | rerun `./scripts/dev-start.sh`, which re-renders `Host.CORS` from this workspace's slot; check it lists the ports Vite actually bound |
+| Page shows `Aucune réponse de http://localhost:<port>` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |
-| `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | an `api/local.settings.json` created before the media setting existed — `dev-up.sh` never overwrites an existing one | copy the `MEDIA_BASE_URL` line from `api/local.settings.json.example` into it |
+| `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | the setting was removed by hand from `api/local.settings.json` | rerun `./scripts/dev-start.sh` — `MEDIA_BASE_URL` is a managed key, rendered on every run |
 | `0001_….sql changed after it was applied` | a merged migration was edited | revert the file; corrections go in a **new** migration |
 | `npm ci` fails on a lockfile mismatch | `package.json` changed without refreshing the lockfile | `npm --prefix <pkg> install`, and commit the lockfile |
 

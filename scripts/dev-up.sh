@@ -3,15 +3,20 @@
 #
 #   ./scripts/dev-up.sh
 #
-# Idempotent: safe on a fresh clone and on an already-configured workspace. It never
-# overwrites a file you have edited.
+# Idempotent: safe on a fresh clone and on an already-configured workspace. Every working
+# tree — the main clone or any `git worktree` — is a workspace with its own database on the
+# one shared SQL Server instance.
 #
 #   1. checks the toolchain (Node per .nvmrc, Docker, func, sqlcmd)
-#   2. creates the missing environment files, generating the local SQL password
+#   2. resolves this workspace — its slot, database and ports — and renders its env files
 #   3. installs dependencies for api and both front-ends, and builds the API
-#   4. starts SQL Server and Azurite, and waits for both to report healthy
+#   4. starts SQL Server and Azurite if no other workspace already did
 #   5. creates the media container and uploads the demonstration media
-#   6. applies the migrations, then the reference and demonstration data
+#   6. creates this workspace's database, migrates it and seeds it
+#
+# The derived files — .env, api/local.settings.json — are rewritten on every run rather
+# than left untouched: that is what keeps a workspace from drifting from the shared
+# instance password or from another workspace's database. Anything else you edit is kept.
 #
 # Then run ./scripts/dev-start.sh.
 
@@ -29,14 +34,31 @@ PACKAGES=(api frontend/lehub.ms frontend/admin.lehub.ms)
 
 info "Checking the toolchain"
 
+# .nvmrc is a repository-wide pin: one Node runs the four processes of dev-start.sh, and
+# ci.yml/cd.yml hand the same file to actions/setup-node. It therefore holds the
+# intersection of what the packages need, and the guard below checks both halves of it —
+# neither is redundant:
+#
+#   major 22    Azure Functions v4 runs the API on Node 22 (api/package.json engines).
+#   >= 22.22.0  react-router, in frontend/lehub.ms only, declares engines node >=22.22.0.
+#
+# Comparing the major against the raw file content — as this guard used to — made the pin
+# uncorrectable: writing a full version into .nvmrc then failed for everyone, including
+# someone running exactly that version.
 REQUIRED_NODE="$(tr -d '[:space:]' < .nvmrc)"
+REQUIRED_MAJOR="${REQUIRED_NODE%%.*}"
 need_cmd node "Install Node ${REQUIRED_NODE} — see docs/local-dev.md"
 CURRENT_NODE="$(node --version)"           # e.g. v22.23.2
-CURRENT_MAJOR="${CURRENT_NODE#v}"; CURRENT_MAJOR="${CURRENT_MAJOR%%.*}"
+CURRENT_VERSION="${CURRENT_NODE#v}"
+CURRENT_MAJOR="${CURRENT_VERSION%%.*}"
 
-if [[ "$CURRENT_MAJOR" != "$REQUIRED_NODE" ]]; then
-  die "Node ${REQUIRED_NODE} is required, found ${CURRENT_NODE}.
-  Azure Functions v4 does not support this version, and the Function App runs Node ${REQUIRED_NODE}.
+# sort -V orders versions rather than strings, so 22.9.0 sorts below 22.22.0 as it must.
+OLDEST_NODE="$(printf '%s\n%s\n' "$REQUIRED_NODE" "$CURRENT_VERSION" | sort -V | head -1)"
+
+if [[ "$CURRENT_MAJOR" != "$REQUIRED_MAJOR" || "$OLDEST_NODE" != "$REQUIRED_NODE" ]]; then
+  die "Node ${REQUIRED_NODE} or a later ${REQUIRED_MAJOR}.x is required, found ${CURRENT_NODE}.
+  Azure Functions v4 pins the API to the ${REQUIRED_MAJOR} major, and React Router v8 refuses
+  anything below ${REQUIRED_NODE}. .nvmrc carries both constraints at once.
   With fnm:   fnm use            (reads .nvmrc)
   Without it: brew install fnm && fnm install ${REQUIRED_NODE} && fnm use"
 fi
@@ -51,71 +73,22 @@ need_cmd sqlcmd "Install go-sqlcmd: brew install sqlcmd"
 
 # Checked here even though they are used further down or by dev-start/dev-down, so a
 # missing one fails at the toolchain gate with guidance rather than as a bare
-# "command not found" halfway through. All three ship with macOS; a slim Linux
+# "command not found" halfway through. Both ship with macOS; a slim Linux
 # container is where they go missing.
 need_cmd openssl "Install OpenSSL — needed to generate the local SQL password."
-need_cmd perl "Install Perl — needed to template api/local.settings.json."
 need_cmd lsof "Install lsof — needed by dev-start.sh and dev-down.sh to manage ports."
 ok "Toolchain ready"
 
-# ─── 2. Environment files ────────────────────────────────────────────────────
+# ─── 2. Workspace and environment files ──────────────────────────────────────
 
-if [[ -f .env ]]; then
-  dim ".env already present, left untouched"
-else
-  # Generated rather than copied from the template: a working password committed to
-  # the repository would be the real one on every default workspace, which the
-  # "no plaintext secret in a commit" rule forbids even for test values.
-  # The suffix guarantees SQL Server's complexity requirement whatever rand produces.
-  GENERATED_PW="$(LC_ALL=C openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)aA1!"
-  PW="$GENERATED_PW" perl -pe 's|^MSSQL_SA_PASSWORD=.*$|"MSSQL_SA_PASSWORD=$ENV{PW}"|e' \
-    .env.example > .env
-  chmod 600 .env
-  ok "Created .env with a freshly generated local SQL password"
-fi
+# Slot, slug and database of this working tree. Stable from one run to the next, and slot 0
+# belongs to the main clone, which therefore keeps `lehub-local` exactly as before.
+workspace_resolve
+info "Workspace: slot $LEHUB_SLOT, slug $LEHUB_SLUG, database $LEHUB_DB_NAME"
+dim "ports: api $LEHUB_API_PORT, web $LEHUB_WEB_PORT, admin $LEHUB_ADMIN_PORT"
 
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
-: "${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is missing from .env}"
-
-if [[ -f api/local.settings.json ]]; then
-  dim "api/local.settings.json already present, left untouched"
-  # Left untouched is the right default — it holds a password this script must not
-  # regenerate — but it also means a workspace bootstrapped before a setting existed never
-  # learns about it. The API refuses to start a request on an incomplete configuration, so
-  # the symptom would otherwise be a 500 on /api/events with a healthy-looking stack.
-  # Node is already a prerequisite, and it parses JSON without adding a dependency.
-  MISSING="$(node -e '
-    const fs = require("node:fs")
-    const read = (f) => JSON.parse(fs.readFileSync(f, "utf8")).Values ?? {}
-    const example = read("api/local.settings.json.example")
-    const actual = read("api/local.settings.json")
-    process.stdout.write(Object.keys(example).filter((k) => !(k in actual)).join(" "))
-  ')"
-  if [[ -n "$MISSING" ]]; then
-    warn "api/local.settings.json is missing: $MISSING"
-    dim "Copy the missing key(s) from api/local.settings.json.example — the API refuses"
-    dim "to serve a request on an incomplete configuration rather than guessing a value."
-  fi
-else
-  cp api/local.settings.json.example api/local.settings.json
-  # The password reaches perl through the environment, never through the program
-  # text: a value containing @ or $ would otherwise be interpolated away.
-  PW="$MSSQL_SA_PASSWORD" perl -i -pe \
-    's|<replace-with-MSSQL_SA_PASSWORD-from-\.env>|$ENV{PW}|g' api/local.settings.json
-  ok "Created api/local.settings.json (SQL password taken from .env)"
-fi
-
-for app in frontend/lehub.ms frontend/admin.lehub.ms; do
-  if [[ -f "$app/.env.local" ]]; then
-    dim "$app/.env.local already present, left untouched"
-  else
-    cp "$app/.env.example" "$app/.env.local"
-    ok "Created $app/.env.local"
-  fi
-done
+# Rendered, not created-if-absent: see workspace_render_env in lib/workspace.sh.
+workspace_render_env
 
 # ─── 3. Dependencies ─────────────────────────────────────────────────────────
 
@@ -158,8 +131,14 @@ fi
 assert_container_port_free lehub-sql 1433
 assert_container_port_free lehub-azurite 10000
 
-info "Starting SQL Server and Azurite"
-docker compose up -d >/dev/null
+# One instance for the whole machine: another workspace may legitimately have started it,
+# and recreating it under that workspace's feet is not the bootstrap's business.
+if instance_running; then
+  dim "SQL Server and Azurite already running — shared with every workspace"
+else
+  info "Starting SQL Server and Azurite"
+  compose up -d >/dev/null
+fi
 
 wait_for_healthy lehub-sql "SQL Server" "  Inspect it with: docker compose logs sql
   A recurring \"Login failed for user 'sa'\" means the volume was initialised with a
@@ -178,13 +157,25 @@ ok "Azurite healthy"
 
 # ─── 6. Schema and data ──────────────────────────────────────────────────────
 
+# The workspace's own database, on the shared instance. dbo.__migrations lives inside it,
+# so a migration applied here never shows up in another workspace's history.
+sql_configure local
+if instance_db_exists "$LEHUB_DB_NAME"; then
+  dim "Database $LEHUB_DB_NAME already exists"
+else
+  info "Creating database $LEHUB_DB_NAME"
+  instance_db_create "$LEHUB_DB_NAME"
+  ok "Database $LEHUB_DB_NAME created"
+fi
+
 "$SCRIPT_DIR/db-migrate.sh" local
 "$SCRIPT_DIR/db-seed.sh" local --demo
 
 printf '\n'
 ok "Local stack ready"
 dim "Next: ./scripts/dev-start.sh"
-dim "  api    http://localhost:7071/api/health"
-dim "  web    http://localhost:5173"
-dim "  admin  http://localhost:5174"
+dim "  workspace  slot $LEHUB_SLOT, database $LEHUB_DB_NAME"
+dim "  api    http://localhost:$LEHUB_API_PORT/api/health"
+dim "  web    http://localhost:$LEHUB_WEB_PORT"
+dim "  admin  http://localhost:$LEHUB_ADMIN_PORT"
 dim "  media  $AZURITE_BLOB_ENDPOINT/$MEDIA_CONTAINER"

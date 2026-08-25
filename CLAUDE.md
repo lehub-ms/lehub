@@ -70,8 +70,8 @@ npm --prefix api test                         # vitest run
 
 # Local full stack
 ./scripts/dev-up.sh                           # idempotent bootstrap (toolchain + env + deps + db)
-./scripts/dev-start.sh                        # run api (7071) + web (5173) + admin (5174)
-./scripts/dev-down.sh [--volumes]             # stop everything; --volumes wipes the DB
+./scripts/dev-start.sh [--network]            # run api + web + admin on this workspace's ports
+./scripts/dev-down.sh [--sql|--drop-db|--volumes]  # stop this workspace; see docs/local-dev.md
 
 # Database (any environment)
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
@@ -86,9 +86,9 @@ npm --prefix api test                         # vitest run
 ./scripts/db-bootstrap-mi.sh dev              # grant the managed identity on the database
 ```
 
-Requires: Docker, Node 22 via `fnm` (`.nvmrc` pins the major only) — keep your 22.x current,
-as React Router v8 declares `engines: node >=22.22.0` and npm merely warns below it,
-`func` (Core Tools 4), Azure CLI 2.60+,
+Requires: Docker, Node via `fnm` (`.nvmrc` pins `22.22.0`, the intersection of the API's
+major-22 ceiling and React Router v8's floor; enforced by `dev-up.sh` and by `engine-strict`
+in each package's `.npmrc`), `func` (Core Tools 4), Azure CLI 2.60+,
 `az bicep`, `go-sqlcmd`, `gh`, membership in the `sg-lehub-sql-admins` Entra group for any cloud
 DB operation. Setup instructions live in `docs/local-dev.md`.
 
