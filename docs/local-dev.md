@@ -49,6 +49,7 @@ never overwrites a file you have edited.
 | `web` | 5173 | public site, `frontend/lehub.ms` |
 | `admin` | 5174 | backoffice, `frontend/admin.lehub.ms` |
 | SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` |
+| Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` |
 
 Both applications call the API **cross-origin**, exactly as they do in production: a Function
 App can only be linked to one Static Web App, and LeHub has two, so there is no `/api` proxy
@@ -79,17 +80,41 @@ there is no application password anywhere in the cloud.
 
 ### Media
 
-The database stores media as a **blob path** — `communities/aznug.png` — never an absolute
+The database stores media as a **blob path** — `communities/devcom-lyon.svg` — never an absolute
 URL, so one dataset is valid locally, on dev and on prod. The API composes the absolute URL
 from `MEDIA_BASE_URL`, which is a deployment setting owned by Bicep in the cloud and comes
 from `api/local.settings.json` here. It has no default: an absent value fails the request
 with an explicit error rather than serving a relative path that would 404 somewhere else.
 
-The value in the template points at the Azurite default endpoint, and **nothing in
-`docker-compose.yml` starts Azurite**. The demo dataset carries no media path, so the local
-stack works without it and the front-ends show their colour fallbacks. To actually see an
-image locally, run an emulator yourself, create a `media` container in it, and set a path on
-a row by hand.
+Locally that endpoint is [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite),
+which `docker-compose.yml` starts alongside SQL Server and `dev-up.sh` waits for. The
+bootstrap then creates the `media` container with anonymous blob-level read — the same
+`publicAccess` the Bicep module provisions — and uploads the demonstration visuals committed
+under `db/seed/media`, which `db/seed/demo.sql` references. Logos and banners are therefore
+real from the first page load, fetched cross-origin from `127.0.0.1:10000` exactly as they
+are fetched from the storage account in Azure.
+
+Community and event visuals are placeholders created for the project. Technology icons are the
+official Microsoft product icons, imported from the Claude Design project, which CLAUDE.md
+makes the source of truth for anything visual — add one there first. They are trademarks and
+not covered by the repository's MIT licence; `db/seed/media/README.md` carries the terms.
+
+Only part of the demonstration rows carry a media path; the rest keep showing the colour
+fallbacks, which is what dev and prod actually display.
+
+Nothing configures a credential. The scripts connect with `UseDevelopmentStorage=true`, the
+emulator's conventional shortcut, so no storage key exists in any file here — not even a
+template. That shortcut is understood by the Azure SDKs and not by the Azure CLI, which is
+why `scripts/blob-seed.sh` delegates to a small Node script rather than calling `az`; the
+local loop still needs no Azure access at all.
+
+```bash
+./scripts/blob-seed.sh local          # create the container, nothing else
+./scripts/blob-seed.sh local --demo   # also upload db/seed/media/**
+```
+
+Both are idempotent. `dev-down.sh --volumes` wipes the emulator's volume along with the
+database, and the next `dev-up.sh` recreates the container and re-uploads everything.
 
 Note also that the **Content-Security-Policy is not served locally**. It lives in each app's
 `staticwebapp.config.json`, which only Azure Static Web Apps applies; the Vite dev server
@@ -121,7 +146,8 @@ sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d lehub-local \
 ./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh
 ```
 
-This deletes the data volume and rebuilds the database from the migrations and seeds. It is
+This deletes both data volumes and rebuilds the database from the migrations and seeds, and
+the media container from `db/seed/media`. It is
 also the fix for a container that will not become healthy after you change the password in
 `.env`: SQL Server only applies `MSSQL_SA_PASSWORD` when it initialises an empty data
 directory.
@@ -146,6 +172,9 @@ Same scripts in `frontend/admin.lehub.ms`.
 | `Node 22 is required, found v20.x` / `v25.x` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
 | Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a different password | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
 | `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `./scripts/dev-down.sh` |
+| `Port 10000 is needed by the lehub-azurite container` | another storage emulator is running — a standalone `azurite`, or Visual Studio's | stop it, or `lsof -i:10000 -sTCP:LISTEN` to find it |
+| `@azure/storage-blob is not installed` | dependencies installed before this package was added — `dev-up.sh` skips `npm ci` when `node_modules` exists | `npm --prefix api ci` |
+| Logos and banners missing, pages otherwise fine | the emulator is down, or its volume was removed without rerunning the bootstrap | `docker compose ps`, then `./scripts/dev-up.sh` |
 | Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | check `Host.CORS` in `api/local.settings.json` lists 5173 and 5174, and that Vite really bound those ports |
 | Page shows `Aucune réponse de http://localhost:7071` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |

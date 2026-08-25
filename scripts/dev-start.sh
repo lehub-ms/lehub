@@ -24,6 +24,11 @@ cd "$ROOT_DIR"
 docker inspect -f '{{.State.Running}}' lehub-sql 2>/dev/null | grep -q true \
   || warn "The SQL container is not running — start it with ./scripts/dev-up.sh, or the API will fail to read events."
 
+# A warning, not a failure: without the emulator the pages still render, every image
+# just falls back to its colour placeholder.
+docker inspect -f '{{.State.Running}}' lehub-azurite 2>/dev/null | grep -q true \
+  || warn "The Azurite container is not running — start it with ./scripts/dev-up.sh, or logos and banners will not load."
+
 # Taken from api/node_modules so nothing has to be installed globally.
 CONCURRENTLY="$ROOT_DIR/api/node_modules/.bin/concurrently"
 [[ -x "$CONCURRENTLY" ]] || die "concurrently not found — run ./scripts/dev-up.sh to install dependencies."

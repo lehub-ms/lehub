@@ -15,6 +15,11 @@ SET NOCOUNT ON;
 --
 -- Identifiers are fixed so the link tables stay valid across replays.
 --
+-- Media are stored as blob paths relative to the media container, and the bytes live
+-- in db/seed/media, uploaded to the local emulator by ./scripts/blob-seed.sh. Only
+-- part of the rows carry one: the rest stay NULL so the colour fallbacks keep being
+-- exercised locally, since that is what dev and prod actually show.
+--
 -- Single batch, no GO: the guard below must be able to abort the whole file.
 
 IF NOT EXISTS (SELECT 1 FROM dbo.FormatType) OR NOT EXISTS (SELECT 1 FROM dbo.EventMode)
@@ -24,19 +29,19 @@ IF NOT EXISTS (SELECT 1 FROM dbo.FormatType) OR NOT EXISTS (SELECT 1 FROM dbo.Ev
 
 MERGE dbo.Community AS target
 USING (VALUES
-  ('C1C1C1C1-0000-0000-0000-000000000001', N'Azure User Group France',   NULL,
+  ('C1C1C1C1-0000-0000-0000-000000000001', N'Azure User Group France',   N'communities/azure-user-group-france.svg',
    N'L''écosystème Azure au cœur de vos projets cloud, IA et DevOps — formations, meetups et retours d''expérience.'),
   ('C2C2C2C2-0000-0000-0000-000000000002', N'Microsoft 365 Community',   NULL,
    N'Maîtrisez Teams, SharePoint, Power Automate et Copilot avec une communauté francophone active et passionnée.'),
-  ('C3C3C3C3-0000-0000-0000-000000000003', N'Power Platform France',     NULL,
+  ('C3C3C3C3-0000-0000-0000-000000000003', N'Power Platform France',     N'communities/power-platform-france.svg',
    N'Power Apps, Power BI, Power Automate, Power Virtual Agents — des solutions low-code au service de tous.'),
   ('C4C4C4C4-0000-0000-0000-000000000004', N'GitHub France',             NULL,
    N'Collaboration, open source et GitHub Copilot — rejoignez la communauté française des développeurs GitHub.'),
-  ('C5C5C5C5-0000-0000-0000-000000000005', N'DevCom Lyon',               NULL,
+  ('C5C5C5C5-0000-0000-0000-000000000005', N'DevCom Lyon',               N'communities/devcom-lyon.svg',
    N'La communauté tech lyonnaise — meetups, conférences et afterworks à Lyon et en Auvergne-Rhône-Alpes.'),
   ('C6C6C6C6-0000-0000-0000-000000000006', N'Azure User Group Bordeaux', NULL,
    N'Le rendez-vous mensuel des passionnés Azure en Gironde — cloud, infra et bonnes pratiques.'),
-  ('C7C7C7C7-0000-0000-0000-000000000007', N'Cloud Native Nantes',       NULL,
+  ('C7C7C7C7-0000-0000-0000-000000000007', N'Cloud Native Nantes',       N'communities/cloud-native-nantes.svg',
    N'Kubernetes, conteneurs et architectures cloud native, décryptés par la communauté nantaise.'),
   ('C8C8C8C8-0000-0000-0000-000000000008', N'Azure User Group Toulouse', NULL,
    N'Retours d''expérience et sessions techniques Azure, portés par l''écosystème tech toulousain.'),
@@ -44,37 +49,51 @@ USING (VALUES
    N'Des rencontres tech conviviales sur la Canebière, entre découvertes techniques et dégustation.'),
   ('CACACACA-0000-0000-0000-00000000000A', N'PyData Strasbourg',         NULL,
    N'Data science et machine learning en Python, pour la communauté data strasbourgeoise.'),
-  ('CBCBCBCB-0000-0000-0000-00000000000B', N'Women in Tech France',      NULL,
+  ('CBCBCBCB-0000-0000-0000-00000000000B', N'Women in Tech France',      N'communities/women-in-tech-france.svg',
    N'Un réseau national pour faire avancer la place des femmes dans la tech, meetups et mentorat.'),
   ('CCCCCCCC-0000-0000-0000-00000000000C', N'DevFest Lille',             NULL,
    N'La conférence développeurs annuelle du Nord — talks, ateliers et networking.')
 ) AS source (Id, Name, LogoPath, Description)
 ON target.Id = source.Id
--- Backfills Description on communities seeded before it existed (migration 0002).
--- Name/LogoPath are left alone on a match, same as before, so a local LogoPath edit
--- survives a replay.
-WHEN MATCHED AND target.Description IS NULL THEN
-  UPDATE SET Description = source.Description
+-- Backfills Description on communities seeded before it existed (migration 0002) and
+-- LogoPath on those seeded before the local media existed. COALESCE keeps a value
+-- already in place, so a local edit still survives a replay; a single WHEN MATCHED
+-- clause is required because MERGE applies only the first one that matches a row.
+WHEN MATCHED AND (target.Description IS NULL OR target.LogoPath IS NULL) THEN
+  UPDATE SET Description = COALESCE(target.Description, source.Description),
+             LogoPath    = COALESCE(target.LogoPath,    source.LogoPath)
 WHEN NOT MATCHED THEN
   INSERT (Id, Name, LogoPath, Description)
   VALUES (source.Id, source.Name, source.LogoPath, source.Description);
 
 -- ─── Technologies ────────────────────────────────────────────────────────────
 
+-- The five carrying a logo are the Microsoft products the Claude Design project holds
+-- an official icon for, and they keep its names — `Copilot` is the Microsoft product,
+-- distinct from the `GitHub Copilot` below. The others have no official icon in the
+-- design project and stay NULL, which is also what keeps the neutral avatar exercised.
+
 MERGE dbo.Technology AS target
 USING (VALUES
-  ('B1B1B1B1-0000-0000-0000-000000000001', N'Azure',          NULL),
-  ('B2B2B2B2-0000-0000-0000-000000000002', N'.NET',           NULL),
-  ('B3B3B3B3-0000-0000-0000-000000000003', N'Microsoft 365',  NULL),
-  ('B4B4B4B4-0000-0000-0000-000000000004', N'Power Platform', NULL),
-  ('B5B5B5B5-0000-0000-0000-000000000005', N'GitHub',         NULL),
-  ('B6B6B6B6-0000-0000-0000-000000000006', N'TypeScript',     NULL),
-  ('B7B7B7B7-0000-0000-0000-000000000007', N'Python',         NULL),
-  ('B8B8B8B8-0000-0000-0000-000000000008', N'GitHub Copilot', NULL),
-  ('B9B9B9B9-0000-0000-0000-000000000009', N'Azure OpenAI',   NULL),
-  ('BABABABA-0000-0000-0000-00000000000A', N'Kubernetes',     NULL)
+  ('B1B1B1B1-0000-0000-0000-000000000001', N'Azure',            N'technologies/azure.svg'),
+  ('B2B2B2B2-0000-0000-0000-000000000002', N'.NET',             NULL),
+  ('B3B3B3B3-0000-0000-0000-000000000003', N'Microsoft 365',    N'technologies/microsoft-365.svg'),
+  ('B4B4B4B4-0000-0000-0000-000000000004', N'Power Platform',   NULL),
+  ('B5B5B5B5-0000-0000-0000-000000000005', N'GitHub',           NULL),
+  ('B6B6B6B6-0000-0000-0000-000000000006', N'TypeScript',       NULL),
+  ('B7B7B7B7-0000-0000-0000-000000000007', N'Python',           NULL),
+  ('B8B8B8B8-0000-0000-0000-000000000008', N'GitHub Copilot',   NULL),
+  ('B9B9B9B9-0000-0000-0000-000000000009', N'Azure OpenAI',     NULL),
+  ('BABABABA-0000-0000-0000-00000000000A', N'Kubernetes',       NULL),
+  ('BBBBBBBB-0000-0000-0000-00000000000B', N'Copilot',          N'technologies/copilot.svg'),
+  ('BCBCBCBC-0000-0000-0000-00000000000C', N'Dynamics 365',     N'technologies/dynamics-365.svg'),
+  ('BDBDBDBD-0000-0000-0000-00000000000D', N'Microsoft Fabric', N'technologies/microsoft-fabric.svg')
 ) AS source (Id, Name, LogoPath)
 ON target.Id = source.Id
+-- Backfills LogoPath on technologies seeded before the local media existed, on the
+-- same terms as the communities above.
+WHEN MATCHED AND target.LogoPath IS NULL THEN
+  UPDATE SET LogoPath = source.LogoPath
 WHEN NOT MATCHED THEN INSERT (Id, Name, LogoPath) VALUES (source.Id, source.Name, source.LogoPath);
 
 -- ─── Events ──────────────────────────────────────────────────────────────────
@@ -87,7 +106,8 @@ USING (VALUES
   ('E1E1E1E1-0000-0000-0000-000000000001', N'Azure Community Day Paris',
    N'Une journée dédiée aux dernières actualités Azure avec des sessions techniques, retours d''expérience et networking.',
    DATEADD(DAY, 7, GETUTCDATE()), DATEADD(HOUR, 3, DATEADD(DAY, 7, GETUTCDATE())),
-   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001', NULL),
+   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001',
+   N'events/azure-community-day-paris.svg'),
 
   ('E2E2E2E2-0000-0000-0000-000000000002', N'Microsoft 365 Bootcamp',
    N'Formation intensive sur les outils M365 : Teams, SharePoint, Power Automate et Copilot.',
@@ -97,7 +117,8 @@ USING (VALUES
   ('E3E3E3E3-0000-0000-0000-000000000003', N'GitHub Copilot Hackathon',
    N'24h pour construire une application assistée par IA avec GitHub Copilot. Équipes de 2 à 4 personnes.',
    DATEADD(DAY, 21, GETUTCDATE()), DATEADD(DAY, 22, GETUTCDATE()),
-   'F4F4F4F4-0000-0000-0000-000000000004', 'D3D3D3D3-0000-0000-0000-000000000003', NULL),
+   'F4F4F4F4-0000-0000-0000-000000000004', 'D3D3D3D3-0000-0000-0000-000000000003',
+   N'events/github-copilot-hackathon.svg'),
 
   ('E4E4E4E4-0000-0000-0000-000000000004', N'Meetup Azure Bordeaux',
    N'Rencontre mensuelle de la communauté Azure de Bordeaux. Au programme : 2 talks de 30 min et networking.',
@@ -132,7 +153,8 @@ USING (VALUES
   ('EAEAEAEA-0000-0000-0000-00000000000A', N'Power Platform World Tour Paris',
    N'Étape française du World Tour Power Platform : Power Apps, Power Automate, Copilot Studio et Dataverse.',
    DATEADD(DAY, 56, GETUTCDATE()), DATEADD(HOUR, 9, DATEADD(DAY, 56, GETUTCDATE())),
-   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001', NULL),
+   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001',
+   N'events/power-platform-world-tour-paris.svg'),
 
   ('EBEBEBEB-0000-0000-0000-00000000000B', N'Women in Tech Conference',
    N'Conférence dédiée à la diversité dans la tech. Talks inspirants, ateliers carrière et sessions de mentorat.',
@@ -157,7 +179,8 @@ USING (VALUES
   ('EFEFEFEF-0000-0000-0000-00000000000F', N'DevFest Lille',
    N'Édition lilloise du DevFest : cloud, IA, web moderne. Une journée, deux tracks, 500 développeurs.',
    DATEADD(DAY, 70, GETUTCDATE()), DATEADD(HOUR, 9, DATEADD(DAY, 70, GETUTCDATE())),
-   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001', NULL)
+   'F1F1F1F1-0000-0000-0000-000000000001', 'D1D1D1D1-0000-0000-0000-000000000001',
+   N'events/devfest-lille.svg')
 ) AS source (Id, Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImagePath)
 ON target.Id = source.Id
 WHEN NOT MATCHED THEN
@@ -165,9 +188,12 @@ WHEN NOT MATCHED THEN
   VALUES (source.Id, source.Title, source.Description, source.StartDate, source.EndDate,
           source.FormatTypeId, source.EventModeId, source.BannerImagePath)
 WHEN MATCHED THEN
-  -- Dates only: see the note at the top of this file.
-  UPDATE SET target.StartDate = source.StartDate,
-             target.EndDate   = source.EndDate;
+  -- Dates, plus a BannerImagePath backfill for events seeded before the local media
+  -- existed: see the note at the top of this file. COALESCE leaves a path already in
+  -- place alone, so a local edit survives a replay.
+  UPDATE SET target.StartDate       = source.StartDate,
+             target.EndDate         = source.EndDate,
+             target.BannerImagePath = COALESCE(target.BannerImagePath, source.BannerImagePath);
 
 -- ─── Event ↔ Community ───────────────────────────────────────────────────────
 
@@ -231,7 +257,18 @@ USING (VALUES
   ('EEEEEEEE-0000-0000-0000-00000000000E', 'B9B9B9B9-0000-0000-0000-000000000009'),
   ('EFEFEFEF-0000-0000-0000-00000000000F', 'B1B1B1B1-0000-0000-0000-000000000001'),
   ('EFEFEFEF-0000-0000-0000-00000000000F', 'B5B5B5B5-0000-0000-0000-000000000005'),
-  ('EFEFEFEF-0000-0000-0000-00000000000F', 'B6B6B6B6-0000-0000-0000-000000000006')
+  ('EFEFEFEF-0000-0000-0000-00000000000F', 'B6B6B6B6-0000-0000-0000-000000000006'),
+  -- Copilot, Dynamics 365 and Microsoft Fabric, paired as the design project pairs
+  -- them on the events the two data sets have in common.
+  ('E1E1E1E1-0000-0000-0000-000000000001', 'BBBBBBBB-0000-0000-0000-00000000000B'),
+  ('E2E2E2E2-0000-0000-0000-000000000002', 'BBBBBBBB-0000-0000-0000-00000000000B'),
+  ('E3E3E3E3-0000-0000-0000-000000000003', 'BDBDBDBD-0000-0000-0000-00000000000D'),
+  ('E4E4E4E4-0000-0000-0000-000000000004', 'B1B1B1B1-0000-0000-0000-000000000001'),
+  ('E4E4E4E4-0000-0000-0000-000000000004', 'BDBDBDBD-0000-0000-0000-00000000000D'),
+  ('E5E5E5E5-0000-0000-0000-000000000005', 'BBBBBBBB-0000-0000-0000-00000000000B'),
+  ('E6E6E6E6-0000-0000-0000-000000000006', 'BCBCBCBC-0000-0000-0000-00000000000C'),
+  ('EAEAEAEA-0000-0000-0000-00000000000A', 'BCBCBCBC-0000-0000-0000-00000000000C'),
+  ('EEEEEEEE-0000-0000-0000-00000000000E', 'BBBBBBBB-0000-0000-0000-00000000000B')
 ) AS source (EventId, TechnologyId)
 ON target.EventId = source.EventId AND target.TechnologyId = source.TechnologyId
 WHEN NOT MATCHED THEN INSERT (EventId, TechnologyId) VALUES (source.EventId, source.TechnologyId);

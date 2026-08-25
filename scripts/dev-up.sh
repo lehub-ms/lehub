@@ -9,8 +9,9 @@
 #   1. checks the toolchain (Node per .nvmrc, Docker, func, sqlcmd)
 #   2. creates the missing environment files, generating the local SQL password
 #   3. installs dependencies for api and both front-ends, and builds the API
-#   4. starts SQL Server and waits for it to report healthy
-#   5. applies the migrations, then the reference and demonstration data
+#   4. starts SQL Server and Azurite, and waits for both to report healthy
+#   5. creates the media container and uploads the demonstration media
+#   6. applies the migrations, then the reference and demonstration data
 #
 # Then run ./scripts/dev-start.sh.
 
@@ -118,8 +119,12 @@ done
 
 # ─── 3. Dependencies ─────────────────────────────────────────────────────────
 
+# node_modules/.package-lock.json is npm's record of what it actually installed, so a
+# lockfile newer than it means the tree is stale. Without that second test, pulling a
+# branch that adds a dependency leaves node_modules in place and untouched, and the
+# bootstrap fails several steps later on a module that is simply not there.
 for pkg in "${PACKAGES[@]}"; do
-  if [[ -d "$pkg/node_modules" ]]; then
+  if [[ -d "$pkg/node_modules" && ! "$pkg/package-lock.json" -nt "$pkg/node_modules/.package-lock.json" ]]; then
     dim "$pkg dependencies already installed"
   else
     info "Installing $pkg dependencies"
@@ -146,28 +151,32 @@ else
   ok "api built"
 fi
 
-# ─── 4. Database container ───────────────────────────────────────────────────
+# ─── 4. Containers ───────────────────────────────────────────────────────────
 
-info "Starting SQL Server"
+# Checked before starting anything, so a busy port is reported as itself rather than
+# as Docker's bind error halfway through bringing the stack up.
+assert_container_port_free lehub-sql 1433
+assert_container_port_free lehub-azurite 10000
+
+info "Starting SQL Server and Azurite"
 docker compose up -d >/dev/null
 
-printf '  waiting for the container to report healthy'
-for attempt in $(seq 1 30); do
-  status="$(docker inspect -f '{{.State.Health.Status}}' lehub-sql 2>/dev/null || echo starting)"
-  [[ "$status" == "healthy" ]] && { printf '\n'; break; }
-  if [[ $attempt -eq 30 ]]; then
-    printf '\n'
-    die "SQL Server did not become healthy within 150s (last status: $status).
-  Inspect it with: docker compose logs sql
+wait_for_healthy lehub-sql "SQL Server" "  Inspect it with: docker compose logs sql
   A recurring \"Login failed for user 'sa'\" means the volume was initialised with a
   different password: ./scripts/dev-down.sh --volumes then rerun this script."
-  fi
-  printf '.'
-  sleep 5
-done
 ok "SQL Server healthy"
 
-# ─── 5. Schema and data ──────────────────────────────────────────────────────
+wait_for_healthy lehub-azurite "Azurite" "  Inspect it with: docker compose logs azurite
+  A port 10000 already taken by another emulator is the usual cause."
+ok "Azurite healthy"
+
+# ─── 5. Media container ──────────────────────────────────────────────────────
+
+# Before the data: the paths db-seed.sh writes are backed by real bytes from the
+# first page load. The cloud container is provisioned by Bicep instead.
+"$SCRIPT_DIR/blob-seed.sh" local --demo
+
+# ─── 6. Schema and data ──────────────────────────────────────────────────────
 
 "$SCRIPT_DIR/db-migrate.sh" local
 "$SCRIPT_DIR/db-seed.sh" local --demo
@@ -178,3 +187,4 @@ dim "Next: ./scripts/dev-start.sh"
 dim "  api    http://localhost:7071/api/health"
 dim "  web    http://localhost:5173"
 dim "  admin  http://localhost:5174"
+dim "  media  $AZURITE_BLOB_ENDPOINT/$MEDIA_CONTAINER"

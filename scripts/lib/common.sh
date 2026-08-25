@@ -76,6 +76,60 @@ stop_dev_processes() {
   return 0
 }
 
+# ─── Containers ──────────────────────────────────────────────────────────────
+# Refuse to start a container whose published port is already taken by something
+# else, with a message naming both. Without this the failure surfaces as Docker's
+# raw "bind: address already in use", which says nothing about what to stop.
+#
+# Skipped when the container itself is already running: it is then the legitimate
+# holder of the port, and re-running dev-up.sh must stay a no-op.
+assert_container_port_free() {
+  local container="$1" port="$2"
+
+  [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" == "true" ]] && return 0
+  [[ -z "$(port_listeners "$port")" ]] && return 0
+
+  die "Port $port is needed by the $container container but something else is holding it.
+  Identify it with: lsof -i:$port -sTCP:LISTEN
+  Stop that process, or stop a previous stack with ./scripts/dev-down.sh, then retry."
+}
+
+# Block until a container reports healthy, or give up with a diagnostic.
+#
+# Reads the container's own healthcheck rather than probing the port from here: the
+# port is published as soon as Docker binds it, well before the service behind it
+# answers, and a bootstrap that continues at that point fails further down with a
+# far less obvious error.
+wait_for_healthy() {
+  local container="$1" label="$2" diagnostic="$3"
+  local attempt status
+
+  printf '  waiting for %s to report healthy' "$label"
+  for attempt in $(seq 1 30); do
+    status="$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo starting)"
+    [[ "$status" == "healthy" ]] && { printf '\n'; return 0; }
+    if [[ $attempt -eq 30 ]]; then
+      printf '\n'
+      die "$label did not become healthy within 150s (last status: $status).
+$diagnostic"
+    fi
+    printf '.'
+    sleep 5
+  done
+}
+
+# ─── Media storage ───────────────────────────────────────────────────────────
+# The emulator's fixed account endpoint and the one container the project uses. Both
+# are mirrored in api/local.settings.json.example as MEDIA_BASE_URL, and the
+# container name matches the one infra/modules/mediaStorage.bicep provisions — the
+# same blob path resolves locally, on dev and on prod.
+#
+# Exported because scripts/lib/blob-seed.mjs reads MEDIA_CONTAINER from the
+# environment rather than repeating the literal.
+AZURITE_BLOB_ENDPOINT='http://127.0.0.1:10000/devstoreaccount1'
+MEDIA_CONTAINER='media'
+export MEDIA_CONTAINER
+
 # ─── SQL connection ──────────────────────────────────────────────────────────
 # One sqlcmd code path for every environment. Local uses SQL authentication — the
 # only place it is allowed; Azure SQL is Entra-only and reuses the current `az`

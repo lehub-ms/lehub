@@ -60,9 +60,20 @@ Applied by `scripts/db-seed.sh <local|dev> [--demo]`, idempotent, replayable.
 |---|---|---|
 | `seed/reference.sql` | Event formats and participation modes — real, stable business data | local, dev, prod |
 | `seed/demo.sql` | Fictitious communities, technologies and events | local, dev only |
+| `seed/media/` | Community and event placeholders, plus the official technology icons | local only |
 
 The split is deliberate: reference data must be able to reach a public environment, demo
 data must never be able to.
+
+`seed/media/` holds bytes, not SQL, and is applied by `scripts/blob-seed.sh local --demo`
+rather than by `db-seed.sh`: it is uploaded to the local storage emulator, where the
+directory tree is the blob container's tree. The paths `demo.sql` stores must match the files
+committed there — `api/test/demoMedia.test.ts` fails if either half drifts.
+
+The community and event files are placeholders created for the project; the technology files
+are official Microsoft product icons imported from the Claude Design project, and are
+trademarks rather than MIT-licensed assets. `db/seed/media/README.md` states the terms of each
+— read it before adding a file. See also [docs/local-dev.md](../docs/local-dev.md).
 
 ## Bootstrap
 
