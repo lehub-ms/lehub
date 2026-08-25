@@ -44,8 +44,9 @@ sha256_of() {
 source "$LIB_DIR/workspace.sh"
 
 # ─── Local processes ─────────────────────────────────────────────────────────
-# The ports the local stack listens on, in the order dev-start.sh names them.
-DEV_PORTS=(7071 5173 5174)
+# The ports the local stack listens on, in the order dev-start.sh names them. Set by
+# workspace_resolve rather than fixed here: they derive from the workspace's slot, so every
+# check and every kill below reaches this working tree's processes and no other's.
 
 # PIDs listening on a port. `-sTCP:LISTEN` is essential: without it lsof also matches
 # every *client* of that port, so a browser holding Vite's HMR websocket on 5173 would

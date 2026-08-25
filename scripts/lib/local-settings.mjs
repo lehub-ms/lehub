@@ -7,6 +7,7 @@
 //
 //   Values.SQL_DATABASE   the workspace's own database on the shared SQL instance
 //   Values.SQL_PASSWORD   the shared instance password, from the Git common directory
+//   Host.CORS             the two front-end origins of this workspace's slot
 //
 // Rewriting rather than "leaving untouched" is the point: a workspace bootstrapped before
 // this state existed, or one whose slot was reassigned, would otherwise keep pointing at
@@ -14,8 +15,8 @@
 //
 //   node local-settings.mjs <settings.json> <settings.json.example>
 //
-// Managed values arrive through the environment — LEHUB_DB_NAME, MSSQL_SA_PASSWORD — never
-// through argv, where a password would show up in `ps`.
+// Managed values arrive through the environment — LEHUB_DB_NAME, MSSQL_SA_PASSWORD,
+// LEHUB_CORS_ORIGINS — never through argv, where a password would show up in `ps`.
 
 import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs'
 
@@ -43,17 +44,25 @@ const settings = created ? example : read(settingsPath)
 settings.Values ??= {}
 settings.Host ??= {}
 
-const managed = {
+const managedValues = {
   SQL_DATABASE: required('LEHUB_DB_NAME'),
   SQL_PASSWORD: required('MSSQL_SA_PASSWORD'),
 }
 
 const changed = []
-for (const [key, value] of Object.entries(managed)) {
+for (const [key, value] of Object.entries(managedValues)) {
   if (settings.Values[key] !== value) {
     settings.Values[key] = value
     changed.push(key)
   }
+}
+
+// The allow-list follows the slot, and is never widened beyond it: an origin the API does
+// not list is refused, which is exactly what the two Static Web Apps get in production.
+const cors = required('LEHUB_CORS_ORIGINS')
+if (settings.Host.CORS !== cors) {
+  settings.Host.CORS = cors
+  changed.push('Host.CORS')
 }
 
 // A key added to the template after this workspace was bootstrapped would otherwise never

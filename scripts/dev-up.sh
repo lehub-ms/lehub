@@ -8,7 +8,7 @@
 # one shared SQL Server instance.
 #
 #   1. checks the toolchain (Node per .nvmrc, Docker, func, sqlcmd)
-#   2. resolves this workspace and renders its environment files
+#   2. resolves this workspace — its slot, database and ports — and renders its env files
 #   3. installs dependencies for api and both front-ends, and builds the API
 #   4. starts SQL Server and Azurite if no other workspace already did
 #   5. creates the media container and uploads the demonstration media
@@ -85,18 +85,10 @@ ok "Toolchain ready"
 # belongs to the main clone, which therefore keeps `lehub-local` exactly as before.
 workspace_resolve
 info "Workspace: slot $LEHUB_SLOT, slug $LEHUB_SLUG, database $LEHUB_DB_NAME"
+dim "ports: api $LEHUB_API_PORT, web $LEHUB_WEB_PORT, admin $LEHUB_ADMIN_PORT"
 
 # Rendered, not created-if-absent: see workspace_render_env in lib/workspace.sh.
 workspace_render_env
-
-for app in frontend/lehub.ms frontend/admin.lehub.ms; do
-  if [[ -f "$app/.env.local" ]]; then
-    dim "$app/.env.local already present, left untouched"
-  else
-    cp "$app/.env.example" "$app/.env.local"
-    ok "Created $app/.env.local"
-  fi
-done
 
 # ─── 3. Dependencies ─────────────────────────────────────────────────────────
 
@@ -183,7 +175,7 @@ printf '\n'
 ok "Local stack ready"
 dim "Next: ./scripts/dev-start.sh"
 dim "  workspace  slot $LEHUB_SLOT, database $LEHUB_DB_NAME"
-dim "  api    http://localhost:7071/api/health"
-dim "  web    http://localhost:5173"
-dim "  admin  http://localhost:5174"
+dim "  api    http://localhost:$LEHUB_API_PORT/api/health"
+dim "  web    http://localhost:$LEHUB_WEB_PORT"
+dim "  admin  http://localhost:$LEHUB_ADMIN_PORT"
 dim "  media  $AZURITE_BLOB_ENDPOINT/$MEDIA_CONTAINER"

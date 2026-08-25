@@ -46,13 +46,16 @@ never touches anything else you have edited.
 
 ## What runs where
 
+Ports below are the ones a single clone gets — slot 0. A second worktree shifts them; see
+[Working on several worktrees](#working-on-several-worktrees).
+
 | Process | Port | What it is |
 |---|---|---|
 | `api` | 7071 | Azure Functions host — `/api/health`, `/api/events` |
 | `web` | 5173 | public site, `frontend/lehub.ms` |
 | `admin` | 5174 | backoffice, `frontend/admin.lehub.ms` |
 | SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` — one instance shared by every workspace, one database each |
-| Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` |
+| Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` — shared too |
 
 Both applications call the API **cross-origin**, exactly as they do in production: a Function
 App can only be linked to one Static Web App, and LeHub has two, so there is no `/api` proxy
@@ -78,11 +81,31 @@ while the useful isolation between branches is the schema and the data. Running 
 container remains the fallback for the one case a database does not cover, testing an engine
 version change.
 
+The three ports derive from the slot too, a hundred apart, so slot 0 keeps exactly what the
+main clone always had:
+
+| Service | slot 0 | slot 1 | slot 2 | slot 3 |
+|---|---|---|---|---|
+| `api` | 7071 | 7171 | 7271 | 7371 |
+| `web` | 5173 | 5273 | 5373 | 5473 |
+| `admin` | 5174 | 5274 | 5374 | 5474 |
+
 ```bash
 git worktree add ../lehub.worktrees/feat-42-something feat/42-something
 cd ../lehub.worktrees/feat-42-something
-./scripts/dev-up.sh          # slot 1, database lehub-feat-42-something
+./scripts/dev-up.sh          # slot 1: database lehub-feat-42-something, ports 7171/5273/5274
+./scripts/dev-start.sh       # runs alongside the main clone's stack
 ```
+
+`api/local.settings.json` and both `.env.local` are rewritten on every `dev-up.sh` **and**
+every `dev-start.sh`, so the API's CORS allow-list, the origin each front-end calls and the
+port each Vite server binds always agree with the slot. `strictPort` stays on: a busy port is
+an error, never a silent slide onto a neighbour's.
+
+Everything else in the stack is scoped to the workspace as well. `dev-start.sh` refuses to
+start only when **its own** ports are taken, and says whether the holder is another LeHub
+worktree or an unrelated process; `dev-down.sh` ends only its own processes, so stopping one
+worktree leaves the others serving.
 
 At most **four** workspaces can exist at once — slot 0 plus three worktrees. Each slot will add
 two redirect URIs to declare on the Entra External ID application once local authentication
@@ -113,8 +136,9 @@ password the shared volume was never initialised with.
 | File | Rendered how | Holds |
 |---|---|---|
 | `.env` | rewritten every run | this workspace's slot, slug and database, plus the shared SA password |
-| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE` and `SQL_PASSWORD` are managed |
-| `frontend/*/.env.local` | created from `frontend/*/.env.example` | `VITE_API_BASE_URL` |
+| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD` and `Host.CORS` are managed |
+| `frontend/*/.env.local` | rewritten every run | `VITE_API_BASE_URL`, `VITE_DEV_PORT`, `VITE_DEV_HOST` |
+| `frontend/*/.env.test` | committed fixture, never rendered | the API origin the tests assert; depends on no server |
 
 The SA password is a property of the **instance**, not of a workspace: SQL Server applies
 `MSSQL_SA_PASSWORD` only when it initialises an empty data directory, so every workspace has to
@@ -229,12 +253,13 @@ Same scripts in `frontend/admin.lehub.ms`.
 | `The Docker daemon is not reachable` | Docker Desktop is not running | Start it, then rerun `dev-up.sh` |
 | `Node 22.22.0 or a later 22.x is required` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
 | Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a password no workspace holds any more | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
-| `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `./scripts/dev-down.sh` |
+| `Port 7171 is held by the LeHub workspace at slot 1` | another worktree is already serving | run `./scripts/dev-down.sh` **in that worktree** — from here it would not reach its processes |
+| `Port 7071 is held by a process unrelated to LeHub` | something else on the machine took it | `lsof -i:7071 -sTCP:LISTEN` to identify it, then stop it |
 | `Port 10000 is needed by the lehub-azurite container` | another storage emulator is running — a standalone `azurite`, or Visual Studio's | stop it, or `lsof -i:10000 -sTCP:LISTEN` to find it |
 | `@azure/storage-blob is not installed` | dependencies installed before this package was added — `dev-up.sh` skips `npm ci` when `node_modules` exists | `npm --prefix api ci` |
 | Logos and banners missing, pages otherwise fine | the emulator is down, or its volume was removed without rerunning the bootstrap | `docker compose ps`, then `./scripts/dev-up.sh` |
-| Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | check `Host.CORS` in `api/local.settings.json` lists 5173 and 5174, and that Vite really bound those ports |
-| Page shows `Aucune réponse de http://localhost:7071` | the API is not running | check the `api` pane of `dev-start.sh` |
+| Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | rerun `./scripts/dev-start.sh`, which re-renders `Host.CORS` from this workspace's slot; check it lists the ports Vite actually bound |
+| Page shows `Aucune réponse de http://localhost:<port>` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |
 | `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | an `api/local.settings.json` created before the media setting existed — `dev-up.sh` never overwrites an existing one | copy the `MEDIA_BASE_URL` line from `api/local.settings.json.example` into it |
 | `0001_….sql changed after it was applied` | a merged migration was edited | revert the file; corrections go in a **new** migration |

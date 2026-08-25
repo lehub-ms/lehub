@@ -70,7 +70,7 @@ npm --prefix api test                         # vitest run
 
 # Local full stack
 ./scripts/dev-up.sh                           # idempotent bootstrap (toolchain + env + deps + db)
-./scripts/dev-start.sh                        # run api (7071) + web (5173) + admin (5174)
+./scripts/dev-start.sh                        # run api + web + admin on this workspace's ports
 ./scripts/dev-down.sh [--sql|--drop-db|--volumes]  # stop this workspace; see docs/local-dev.md
 
 # Database (any environment)
