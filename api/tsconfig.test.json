@@ -1,0 +1,18 @@
+{
+  // The build config compiles src/ into dist/ and cannot also cover test/: rootDir
+  // would reject it and the tests would land in the deployment artifact. This second
+  // project type-checks the suites instead, with no emit — the same coverage both
+  // front-ends get from "include": ["src", "test"] in their tsconfig.app.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    // The suites are not compiled by tsc, they are run by vitest, which loads them as
+    // ES modules through esbuild. Checking them as CommonJS would reject import.meta
+    // and describe a module system they never execute under; "bundler" resolution is
+    // what makes the extensionless relative imports they already use legal.
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["test/**/*"]
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Placeholder mark">
+  <title>Placeholder mark — offset squares</title>
+  <rect x="32" y="32" width="88" height="88" rx="20" fill="#005fb8"/>
+  <rect x="136" y="32" width="88" height="88" rx="20" fill="#4d9fde"/>
+  <rect x="32" y="136" width="88" height="88" rx="20" fill="#0078d4"/>
+  <rect x="136" y="136" width="88" height="88" rx="20" fill="#e6f0fa"/>
+</svg>

@@ -5,13 +5,13 @@
 #   ./scripts/dev-down.sh --volumes   stop everything and delete the data
 #
 # The exact inverse of dev-up.sh: it stops the API and both web applications, then
-# the database. Stopping only the container would leave the applications running
+# the containers. Stopping only the containers would leave the applications running
 # against a database that no longer exists.
 #
-# --volumes is the way back to a pristine database. It is also the fix for a
-# container stuck unhealthy on "Login failed for user 'sa'" after the password
-# changed in .env: SQL Server only applies MSSQL_SA_PASSWORD when it initialises an
-# empty data directory.
+# --volumes is the way back to a pristine database and an empty media container. It
+# is also the fix for a container stuck unhealthy on "Login failed for user 'sa'"
+# after the password changed in .env: SQL Server only applies MSSQL_SA_PASSWORD when
+# it initialises an empty data directory.
 
 set -euo pipefail
 
@@ -47,12 +47,12 @@ else
 fi
 
 if [[ "$WIPE" == true ]]; then
-  info "Stopping SQL Server and deleting its data"
+  info "Stopping SQL Server and Azurite, and deleting their data"
   docker compose down --volumes
-  ok "Stack down, volume removed — ./scripts/dev-up.sh will rebuild the database"
+  ok "Stack down, volumes removed — ./scripts/dev-up.sh will rebuild the database and the media"
 else
-  info "Stopping SQL Server"
+  info "Stopping SQL Server and Azurite"
   docker compose down
-  ok "Stack down — the data volume is kept"
-  dim "Add --volumes to start from an empty database."
+  ok "Stack down — the data volumes are kept"
+  dim "Add --volumes to start from an empty database and an empty media container."
 fi

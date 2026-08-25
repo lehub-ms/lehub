@@ -1,8 +1,9 @@
-# Local development — SQL Server 2022, the closest engine to Azure SQL.
+# Local development — SQL Server 2022, the closest engine to Azure SQL, and Azurite,
+# the storage emulator standing in for the public media account.
 #
-#   docker compose up -d       start (data survives restarts via the named volume)
+#   docker compose up -d       start (data survives restarts via the named volumes)
 #   docker compose down        stop, keep the data
-#   docker compose down -v     stop and wipe the data
+#   docker compose down -v     stop and wipe the data, both volumes
 #
 # MSSQL_SA_PASSWORD comes from .env — see .env.example. Note that SQL Server only
 # applies it when it initialises an empty data directory: changing the password in
@@ -42,5 +43,39 @@ services:
       start_period: 30s
       timeout: 5s
 
+  azurite:
+    # Pinned, unlike the SQL image whose 2022-latest tag still fixes the engine major:
+    # Azurite publishes no such tag, and `latest` would let a major land in the local
+    # loop with no diff to bisect.
+    image: mcr.microsoft.com/azure-storage/azurite:3.36.0
+    container_name: lehub-azurite
+    # Blob only. No function declares a storage trigger and AzureWebJobsStorage stays
+    # empty, so the queue and table endpoints would listen for nobody; publishing the
+    # single blob port also halves the surface that can collide with something else.
+    #
+    # The emulator's well-known account is the local counterpart of the media storage
+    # account, which sets allowSharedKeyAccess: false — shared key exists here and
+    # nowhere else, exactly as SQL authentication does above. Nothing configures it:
+    # the scripts connect with the conventional UseDevelopmentStorage=true shortcut,
+    # so no key is written into a versioned file.
+    #
+    # --skipApiVersionCheck keeps the emulator from rejecting an x-ms-version newer
+    # than the image knows, which is what an SDK upgrade would otherwise produce.
+    command: azurite-blob --blobHost 0.0.0.0 --location /data --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - lehub-azurite-data:/data
+    healthcheck:
+      # Azurite binds the port only once it is ready to serve, and busybox nc is the
+      # only probe the image ships — it has no curl and no wget spider worth trusting
+      # against a 403 on an unauthenticated request.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 10000"]
+      interval: 10s
+      retries: 10
+      start_period: 5s
+      timeout: 5s
+
 volumes:
   lehub-sql-data:
+  lehub-azurite-data:

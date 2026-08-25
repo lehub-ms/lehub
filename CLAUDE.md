@@ -19,6 +19,7 @@ Azure budgets in `/infra` are tripwires set above that cap, not the cap itself: 
 /frontend/admin.lehub.ms     Admin backoffice SPA (React 19 + Vite)
 /docs                        Technical docs: local dev, deployment, ADRs
 /scripts                     Bash tooling: db init, MI bootstrap, local dev orchestration
+                             (one Node helper, for the Azure SDK the CLI cannot replace)
 /.github                     Workflows, issue templates, PR template
 ```
 
@@ -76,6 +77,9 @@ npm --prefix api test                         # vitest run
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
 ./scripts/db-seed.sh local|dev [--demo]       # reference data, + demo data on request
 
+# Local media storage (Azurite; the cloud container is provisioned by Bicep)
+./scripts/blob-seed.sh local [--demo]         # create the media container, + demo visuals
+
 # Infrastructure (resource groups are created by hand, never by Bicep)
 ./scripts/infra-deploy.sh dev --what-if       # preview, changes nothing
 ./scripts/infra-deploy.sh dev                 # apply infra/main.dev.bicepparam
@@ -120,6 +124,11 @@ The **Claude Design project `lehub.ms/`** is the source of truth for anything vi
 change of look or UX starts there, then lands in the repo. Do not create a `/design` directory
 or a design skill in this repo — the mock-ups are not committed here, and generated HTML
 previews remain an anti-pattern.
+
+Its `lehub.ms/icons/` holds the official Microsoft product icons and the technology reference
+they belong to. They are imported into `db/seed/media/technologies/` for the local loop, and
+they are trademarks, not MIT-licensed assets — see `db/seed/media/README.md`. A new technology
+icon is added to the design project first.
 
 Tokens live in exactly one place: the `@theme` block of `frontend/lehub.ms/src/index.css`.
 Colours are `--color-*`, families are `--font-*`, and Tailwind derives `bg-primary`,

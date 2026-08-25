@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" role="img" aria-label="Placeholder banner">
+  <title>Placeholder banner — stacked chevrons</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#0078d4"/>
+      <stop offset="1" stop-color="#0a2540"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="480" fill="url(#g)"/>
+  <g fill="none" stroke="#e6f0fa" stroke-width="36" opacity="0.3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M240 120L440 240 240 360"/>
+    <path d="M520 120L720 240 520 360"/>
+    <path d="M800 120L1000 240 800 360"/>
+  </g>
+</svg>
