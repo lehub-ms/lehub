@@ -204,28 +204,38 @@ with an explicit error rather than serving a relative path that would 404 somewh
 Locally that endpoint is [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite),
 which `docker-compose.yml` starts alongside SQL Server and `dev-up.sh` waits for. The
 bootstrap then creates the `media` container with anonymous blob-level read — the same
-`publicAccess` the Bicep module provisions — and uploads the demonstration visuals committed
-under `db/seed/media`, which `db/seed/demo.sql` references. Logos and banners are therefore
-real from the first page load, fetched cross-origin from the emulator's port `10000` exactly as they
+`publicAccess` the Bicep module provisions — and uploads the visuals committed under
+`db/seed/media`, which the seed files reference. Logos and banners are therefore real from
+the first page load, fetched cross-origin from the emulator's port `10000` exactly as they
 are fetched from the storage account in Azure.
+
+What is uploaded comes in two tiers, and the top-level folder decides which. The technology
+icons under `technologies/` are **reference media**: `db/seed/reference.sql` points at them
+and they reach every environment, so `blob-seed.sh` uploads them with no flag. The community
+and event placeholders are **demonstration media**, referenced by `db/seed/demo.sql`, gated
+behind `--demo`, and accepted for `local` only — one notch stricter than `db-seed.sh`, which
+lets the fictitious *rows* live on `dev`. `api/test/seedMedia.test.ts` fails if a tier names
+the other's media, or if a path and its file drift apart.
 
 Community and event visuals are placeholders created for the project. Technology icons are the
 official Microsoft product icons, imported from the Claude Design project, which CLAUDE.md
 makes the source of truth for anything visual — add one there first. They are trademarks and
 not covered by the repository's MIT licence; `db/seed/media/README.md` carries the terms.
 
-Only part of the demonstration rows carry a media path; the rest keep showing the colour
-fallbacks, which is what dev and prod actually display.
+Only part of the rows carry a media path — the technologies the design project publishes no
+icon for, and most of the demonstration entities. The rest keep showing the colour fallbacks,
+which is what dev and prod mostly display.
 
-Nothing configures a credential. The scripts connect with `UseDevelopmentStorage=true`, the
-emulator's conventional shortcut, so no storage key exists in any file here — not even a
-template. That shortcut is understood by the Azure SDKs and not by the Azure CLI, which is
-why `scripts/blob-seed.sh` delegates to a small Node script rather than calling `az`; the
-local loop still needs no Azure access at all.
+Nothing configures a credential. Locally the scripts connect with
+`UseDevelopmentStorage=true`, the emulator's conventional shortcut, so no storage key exists
+in any file here — not even a template. That shortcut is understood by the Azure SDKs and
+not by the Azure CLI, which is why `scripts/blob-seed.sh` delegates the local upload to a
+small Node script; against a real account it calls `az` directly, with the ambient `az login`
+session. Either way the local loop needs no Azure access at all.
 
 ```bash
-./scripts/blob-seed.sh local          # create the container, nothing else
-./scripts/blob-seed.sh local --demo   # also upload db/seed/media/**
+./scripts/blob-seed.sh local          # container + the reference icons
+./scripts/blob-seed.sh local --demo   # also upload the placeholders
 ```
 
 Both are idempotent. `dev-down.sh --volumes` wipes the emulator's volume along with the

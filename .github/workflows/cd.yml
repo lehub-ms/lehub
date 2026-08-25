@@ -71,10 +71,11 @@ jobs:
           done
 
   database:
-    # Migrations and reference data run before the API is published, so no
-    # version of the API ever executes against a schema older than itself.
-    # The schema lifecycle belongs to /db and /scripts — this job only calls
-    # them.
+    # Everything the reference data set is made of, in both stores it lives in:
+    # the icons in the media container, then the schema and the rows. All of it
+    # before the API is published, so no version of the API ever executes
+    # against a schema older than itself. The lifecycle belongs to /db and
+    # /scripts — this job only calls their entry points.
     needs: infra
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -106,6 +107,15 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Upload the reference media
+        # Before the rows, as scripts/dev-up.sh does locally: the paths db-seed.sh
+        # writes are backed by real bytes from the first page load. Never --demo —
+        # the script refuses it outside local anyway, so no placeholder can reach a
+        # public environment. It resolves the media account from the resource group
+        # itself and writes through the OIDC session, using the Storage Blob Data
+        # Contributor assignment infra/modules/roleAssignments.bicep scopes to that
+        # one account. No storage key exists on it to use instead.
+        run: ./scripts/blob-seed.sh ${{ inputs.environment }}
       - name: Open the SQL firewall to this runner
         id: firewall
         # A GitHub runner's IP is unpredictable, so the rule is created for

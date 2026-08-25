@@ -194,12 +194,42 @@ $diagnostic"
 # container name matches the one infra/modules/mediaStorage.bicep provisions — the
 # same blob path resolves locally, on dev and on prod.
 #
-# Exported because scripts/lib/blob-seed.mjs reads MEDIA_CONTAINER from the
-# environment rather than repeating the literal.
+# Exported because scripts/lib/blob-seed.mjs reads MEDIA_CONTAINER and
+# MEDIA_CACHE_CONTROL from the environment rather than repeating the literals.
 AZURITE_BLOB_PORT='10000'
 AZURITE_BLOB_ENDPOINT="http://127.0.0.1:$AZURITE_BLOB_PORT/devstoreaccount1"
 MEDIA_CONTAINER='media'
 export MEDIA_CONTAINER
+
+# What the media account serves, locally and in Azure alike: media are immutable, a new
+# visual is a new blob name. db/seed/media/README.md states the consequence — replacing
+# the bytes under an existing name stays invisible for up to a year.
+MEDIA_CACHE_CONTROL='public, max-age=31536000, immutable'
+export MEDIA_CACHE_CONTROL
+
+# Top-level folders of db/seed/media that hold reference media: the bytes db/seed/reference.sql
+# points at, deployed to every environment. Everything else there is demonstration media and
+# never leaves this machine — blob-seed.sh keeps no list of those, it sweeps what is not here.
+#
+# The one definition of the split. api/test/seedMedia.test.ts parses this very line rather than
+# repeating it: a folder the test called reference and this list did not would be uploaded by
+# the local --demo sweep and by nothing else, so it would look right on every machine and 404
+# in production.
+MEDIA_REFERENCE_DIRS=(technologies)
+
+# Content-Type of a media file, from its extension. Explicit, not guessed: an unknown
+# extension is a mistake in db/seed/media, and a blob served as application/octet-stream
+# renders nowhere. A `case` rather than an associative array — macOS ships bash 3.2.
+media_content_type() {
+  local ext="${1##*.}"
+  case "$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')" in
+    svg)      printf 'image/svg+xml' ;;
+    png)      printf 'image/png' ;;
+    jpg|jpeg) printf 'image/jpeg' ;;
+    webp)     printf 'image/webp' ;;
+    *)        return 1 ;;
+  esac
+}
 
 # ─── SQL connection ──────────────────────────────────────────────────────────
 # One sqlcmd code path for every environment. Local uses SQL authentication — the

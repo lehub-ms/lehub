@@ -1,16 +1,21 @@
-// Create the local media container and upload the demonstration media.
+// Create the local media container and upload the media it is given.
 //
 // Run through scripts/blob-seed.sh, which owns the argument parsing, the toolchain
-// checks and the MEDIA_CONTAINER value. The Node here exists for one reason: the
-// Azure Storage SDK is the only client that understands the emulator's conventional
-// `UseDevelopmentStorage=true` shortcut. Every other tool — the Azure CLI included —
-// wants the account key spelled out, which would put a storage key in a versioned
-// file. The SDK is consumed from api/node_modules, as dev-start.sh does for
-// concurrently; there is no root package.json, on purpose.
+// checks, which files belong to which tier and what Content-Type each carries. The Node
+// here exists for one reason: the Azure Storage SDK is the only client that understands
+// the emulator's conventional `UseDevelopmentStorage=true` shortcut. Every other tool —
+// the Azure CLI included — wants the account key spelled out, which would put a storage
+// key in a versioned file. Against a real account the CLI does the job and blob-seed.sh
+// calls it directly, so nothing here knows about the cloud.
+//
+// The SDK is consumed from api/node_modules, as dev-start.sh does for concurrently;
+// there is no root package.json, on purpose.
+//
+// Usage: node blob-seed.mjs <blob-name>=<content-type> ...
 
 import { createRequire } from 'node:module'
-import { readdir, readFile } from 'node:fs/promises'
-import { join, relative, resolve, sep, extname } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const LIB_DIR = fileURLToPath(new URL('.', import.meta.url))
@@ -20,49 +25,25 @@ const MEDIA_DIR = join(ROOT_DIR, 'db', 'seed', 'media')
 const require = createRequire(pathToFileURL(join(ROOT_DIR, 'api', 'package.json')))
 const { BlobServiceClient } = require('@azure/storage-blob')
 
-// Explicit, not guessed: an unknown extension is a mistake in db/seed/media, and a
-// blob served as application/octet-stream renders nowhere.
-const CONTENT_TYPES = {
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-}
-
-// What the media account will serve in the cloud: media are immutable, a new visual
-// is a new blob name. Set here too so the local loop shows the production headers.
-const CACHE_CONTROL = 'public, max-age=31536000, immutable'
-
-const container = process.env['MEDIA_CONTAINER']
-if (!container) {
-  fail('MEDIA_CONTAINER is not set. Run this through ./scripts/blob-seed.sh.')
-}
-
-const withDemo = process.argv.slice(2).includes('--demo')
-
-/** Everything under db/seed/media, as paths relative to it — the blob names. */
-async function mediaFiles(dir = MEDIA_DIR) {
-  const entries = await readdir(dir, { withFileTypes: true })
-  const files = []
-
-  for (const entry of entries) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...(await mediaFiles(full)))
-    } else if (entry.name !== 'README.md') {
-      // Blob names use forward slashes on every platform.
-      files.push(relative(MEDIA_DIR, full).split(sep).join('/'))
-    }
-  }
-
-  return files.sort()
-}
-
 function fail(message) {
   process.stderr.write(`${message}\n`)
   process.exit(1)
 }
+
+function fromEnv(name) {
+  const value = process.env[name]
+  if (!value) fail(`${name} is not set. Run this through ./scripts/blob-seed.sh.`)
+  return value
+}
+
+const container = fromEnv('MEDIA_CONTAINER')
+const cacheControl = fromEnv('MEDIA_CACHE_CONTROL')
+
+const uploads = process.argv.slice(2).map((pair) => {
+  const separator = pair.indexOf('=')
+  if (separator < 1) fail(`Malformed upload '${pair}'. Expected <blob-name>=<content-type>.`)
+  return { name: pair.slice(0, separator), contentType: pair.slice(separator + 1) }
+})
 
 const client = BlobServiceClient.fromConnectionString('UseDevelopmentStorage=true')
 const containerClient = client.getContainerClient(container)
@@ -87,26 +68,11 @@ try {
   throw error
 }
 
-if (!withDemo) {
-  process.exit(0)
-}
-
-const files = await mediaFiles()
-if (files.length === 0) {
-  fail(`  No media found under ${relative(ROOT_DIR, MEDIA_DIR)}.`)
-}
-
-for (const name of files) {
-  const contentType = CONTENT_TYPES[extname(name).toLowerCase()]
-  if (!contentType) {
-    fail(`  Unknown media type for ${name}. Add its extension to CONTENT_TYPES.`)
-  }
-
+for (const { name, contentType } of uploads) {
   const body = await readFile(join(MEDIA_DIR, ...name.split('/')))
   // upload() overwrites, so replaying neither fails nor duplicates.
   await containerClient.getBlockBlobClient(name).upload(body, body.byteLength, {
-    blobHTTPHeaders: { blobContentType: contentType, blobCacheControl: CACHE_CONTROL },
+    blobHTTPHeaders: { blobContentType: contentType, blobCacheControl: cacheControl },
   })
+  process.stdout.write(`  ${name}\n`)
 }
-
-process.stdout.write(`  ${files.length} demonstration media uploaded\n`)

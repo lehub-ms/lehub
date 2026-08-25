@@ -16,13 +16,20 @@ SET NOCOUNT ON;
 -- Identifiers are fixed so the link tables stay valid across replays.
 --
 -- Media are stored as blob paths relative to the media container, and the bytes live
--- in db/seed/media, uploaded to the local emulator by ./scripts/blob-seed.sh. Only
--- part of the rows carry one: the rest stay NULL so the colour fallbacks keep being
--- exercised locally, since that is what dev and prod actually show.
+-- in db/seed/media/{communities,events}, uploaded to the local emulator by
+-- ./scripts/blob-seed.sh local --demo and never anywhere else. Only part of the rows
+-- carry one: the rest stay NULL so the colour fallbacks keep being exercised locally,
+-- since that is what dev and prod actually show.
+--
+-- The technologies these events link to are reference data and live in reference.sql,
+-- with the icons the design project publishes. The guard below refuses to run without
+-- them, since every EventTechnology row here points at one.
 --
 -- Single batch, no GO: the guard below must be able to abort the whole file.
 
-IF NOT EXISTS (SELECT 1 FROM dbo.FormatType) OR NOT EXISTS (SELECT 1 FROM dbo.EventMode)
+IF NOT EXISTS (SELECT 1 FROM dbo.FormatType)
+   OR NOT EXISTS (SELECT 1 FROM dbo.EventMode)
+   OR NOT EXISTS (SELECT 1 FROM dbo.Technology)
   THROW 50001, 'Reference data is missing. Run ./scripts/db-seed.sh <env> first, without --demo.', 1;
 
 -- ─── Communities ─────────────────────────────────────────────────────────────
@@ -65,36 +72,6 @@ WHEN MATCHED AND (target.Description IS NULL OR target.LogoPath IS NULL) THEN
 WHEN NOT MATCHED THEN
   INSERT (Id, Name, LogoPath, Description)
   VALUES (source.Id, source.Name, source.LogoPath, source.Description);
-
--- ─── Technologies ────────────────────────────────────────────────────────────
-
--- The five carrying a logo are the Microsoft products the Claude Design project holds
--- an official icon for, and they keep its names — `Copilot` is the Microsoft product,
--- distinct from the `GitHub Copilot` below. The others have no official icon in the
--- design project and stay NULL, which is also what keeps the neutral avatar exercised.
-
-MERGE dbo.Technology AS target
-USING (VALUES
-  ('B1B1B1B1-0000-0000-0000-000000000001', N'Azure',            N'technologies/azure.svg'),
-  ('B2B2B2B2-0000-0000-0000-000000000002', N'.NET',             NULL),
-  ('B3B3B3B3-0000-0000-0000-000000000003', N'Microsoft 365',    N'technologies/microsoft-365.svg'),
-  ('B4B4B4B4-0000-0000-0000-000000000004', N'Power Platform',   NULL),
-  ('B5B5B5B5-0000-0000-0000-000000000005', N'GitHub',           NULL),
-  ('B6B6B6B6-0000-0000-0000-000000000006', N'TypeScript',       NULL),
-  ('B7B7B7B7-0000-0000-0000-000000000007', N'Python',           NULL),
-  ('B8B8B8B8-0000-0000-0000-000000000008', N'GitHub Copilot',   NULL),
-  ('B9B9B9B9-0000-0000-0000-000000000009', N'Azure OpenAI',     NULL),
-  ('BABABABA-0000-0000-0000-00000000000A', N'Kubernetes',       NULL),
-  ('BBBBBBBB-0000-0000-0000-00000000000B', N'Copilot',          N'technologies/copilot.svg'),
-  ('BCBCBCBC-0000-0000-0000-00000000000C', N'Dynamics 365',     N'technologies/dynamics-365.svg'),
-  ('BDBDBDBD-0000-0000-0000-00000000000D', N'Microsoft Fabric', N'technologies/microsoft-fabric.svg')
-) AS source (Id, Name, LogoPath)
-ON target.Id = source.Id
--- Backfills LogoPath on technologies seeded before the local media existed, on the
--- same terms as the communities above.
-WHEN MATCHED AND target.LogoPath IS NULL THEN
-  UPDATE SET LogoPath = source.LogoPath
-WHEN NOT MATCHED THEN INSERT (Id, Name, LogoPath) VALUES (source.Id, source.Name, source.LogoPath);
 
 -- ─── Events ──────────────────────────────────────────────────────────────────
 -- Formats:  F1 Conférence · F2 Meetup · F3 Webinaire · F4 Hackathon · F5 Atelier

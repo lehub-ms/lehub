@@ -152,7 +152,8 @@ ok "Azurite healthy"
 # ─── 5. Media container ──────────────────────────────────────────────────────
 
 # Before the data: the paths db-seed.sh writes are backed by real bytes from the
-# first page load. The cloud container is provisioned by Bicep instead.
+# first page load — the deployment chain runs the same script in the same order.
+# --demo is what adds the placeholders, and only local accepts it.
 "$SCRIPT_DIR/blob-seed.sh" local --demo
 
 # ─── 6. Schema and data ──────────────────────────────────────────────────────

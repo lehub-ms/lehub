@@ -73,7 +73,9 @@ Written down so they are decisions rather than discoveries.
 | Risk | Why it is accepted |
 |---|---|
 | No blob soft delete or versioning **on the host storage** | that account holds the deployment package, which a redeployment rebuilds. The media account is the opposite case and keeps 7-day blob and container retention |
-| No versioning on the media account | retention covers a deletion; overwriting a logo with a newer one is the intended operation, not an accident to undo |
+| No versioning on the media account | retention covers a deletion, and a replacement is a new blob name rather than an overwrite — see the row below |
+| Media served `immutable, max-age=1 year` | a browser that already fetched a blob will not ask again for up to a year, so replacing the bytes under an existing name is invisible. The rule that follows is that a new visual is a new blob name — and, since `reference.sql` fills a `LogoPath` only when it is `NULL`, changing the icon of a deployed technology is a migration under `db/migrations/`, not a seed edit |
+| Blobs of files deleted from the repository stay served | `blob-seed.sh` uploads and never deletes, because deleting is how a row's image breaks. Removing one is a deliberate manual act, and the account's 7-day retention covers a hasty one |
 | Point-in-time restore only, 7 days on prod Basic | long-term retention is billed per GB and the data is re-seedable |
 | No regional DR, no zone redundancy | a community agenda tolerates hours of downtime; geo-redundancy does not fit the budget |
 | Storage reachable from any network | `allowSharedKeyAccess: false` means Entra is the barrier, not the network |
@@ -133,10 +135,26 @@ not own, and taking ownership of one removes its line — which is exactly how t
 Bicep provisions the database; it never puts anything in it.
 
 ```bash
+./scripts/blob-seed.sh dev           # the reference icons, in the media container
 ./scripts/db-migrate.sh dev          # schema
 ./scripts/db-seed.sh dev --demo      # reference data, plus demo data
 ./scripts/db-bootstrap-mi.sh dev     # let the API's identity read the database
 ```
+
+`blob-seed.sh` writes through the signed-in identity, so running it by hand needs two
+different things. **Storage Blob Data Contributor on the media account**, for the writes:
+being Owner on the subscription grants nothing here, because blob data is a plane of its
+own and this account refuses shared keys, so there is no key or account SAS to fall back
+on. Grant yourself that role on the one account, never on the resource group. And
+**`Microsoft.Storage/storageAccounts/read` on `rg-lehub-<env>`**, which any Reader or
+Contributor already carries, because the script resolves the account by listing the group
+rather than taking a name — the data role alone leaves that listing empty. The deployment
+chain holds both already; an operator granted only the first gets an empty list and a
+message about a missing account.
+
+It refuses `--demo` outside `local`: the placeholders under
+`db/seed/media/{communities,events}` never reach an Azure environment, even when
+`db-seed.sh --demo` puts the rows that reference them on `dev`.
 
 `db-bootstrap-mi.sh` is not optional. A freshly created database has no users at all, so
 without it the API authenticates successfully and then finds it has access to nothing.
@@ -237,9 +255,12 @@ handed over; the 7-day retention would give you a week to notice, and nothing af
 | Microsoft Defender for Cloud plans | see "Accepted risks" — together they cost more than the whole budget |
 | Basic publishing credentials (SCM, FTP) | refused outright; deployment goes through the managed identity |
 
-The identity holds three role assignments and no more: **Storage Blob Data Owner** on the
-host storage account, **Storage Blob Data Contributor** on the media storage account, and
-**Monitoring Metrics Publisher** on the Application Insights component. Blob Data Owner is
+The runtime identity holds three role assignments and no more: **Storage Blob Data Owner**
+on the host storage account, **Storage Blob Data Contributor** on the media storage
+account, and **Monitoring Metrics Publisher** on the Application Insights component. The
+template declares a fourth, on a different principal — the deployment chain's, also
+**Storage Blob Data Contributor** on the media account, so it can upload the reference
+icons; see "The deployment identity" below. Blob Data Owner is
 wider than anyone would pick — Flex Consumption manages the host content store as well as
 reading the deployment package, and Blob Data Contributor does not cover it. It is a
 constraint accepted knowingly, not an oversight, and it is why the media account gets the
@@ -302,6 +323,15 @@ az role assignment create --assignee-object-id "$SP_ID" \
 #    there is no SQL login to hand it.
 az ad group member add --group sg-lehub-sql-admins --member-id "$SP_ID"
 
+# 4bis. Media access: the object ID goes into both bicepparam files, and the template
+#    grants Storage Blob Data Contributor on the media account with it. It is not
+#    created here, because the account's name carries a uniqueString hash and does not
+#    exist before the first deployment — and because a data-plane role scoped to one
+#    resource is exactly the kind of thing infra/ should own rather than a shell
+#    history. Contributor at group scope is control plane only and grants no blob
+#    access, so without this the reference icons cannot be uploaded.
+echo "$SP_ID"   # -> param deploymentPrincipalObjectId in infra/main.{dev,prod}.bicepparam
+
 # 5. The GitHub environment the federated credential's subject points at, restricted
 #    to the branch that deploys there. A workflow on any other branch fails the token
 #    exchange before it ever reaches Azure.
@@ -331,8 +361,10 @@ Three things to know before trusting a first run:
   rename the token exchange fails with AADSTS700213 until the credential is recreated
   from the new `sub_claim_prefix` — nothing on the GitHub side explains why.
 - **Verify the result, not the commands.** `az role assignment list --assignee "$APP_ID"
-  --all` must return exactly two assignments, both scoped to the resource group, and
-  `az ad app credential list --id "$APP_ID"` must return an empty list.
+  --all` must return exactly two assignments *before the first deployment*, both scoped to
+  the resource group; a third appears afterwards, `Storage Blob Data Contributor` scoped to
+  the media storage account, created by the template and not by hand. Anything else is one
+  too many. `az ad app credential list --id "$APP_ID"` must return an empty list.
 
 ## Branch protection
 
@@ -396,9 +428,17 @@ merges produce two complete deployments, in order.
    deployment `lehub-<run_id>` so the portal links back to the GitHub run. Every
    downstream job consumes resource names from its outputs; no name is hard-coded in a
    workflow.
-3. **database** — opens a single-IP firewall rule `gh-<run_id>` (removed even on
-   failure), waits for the serverless database to wake, then calls
-   `scripts/db-migrate.sh` and `scripts/db-seed.sh` (never `--demo`). A failure stops
+3. **database** — uploads the reference media with `scripts/blob-seed.sh`, then opens a
+   single-IP firewall rule `gh-<run_id>` (removed even on failure), waits for the
+   serverless database to wake, then calls `scripts/db-migrate.sh` and
+   `scripts/db-seed.sh` (never `--demo`). The upload comes first so the paths the seed
+   stores are backed by real bytes from the first page load; it resolves the media
+   account from the resource group, authenticates as the deployment principal through
+   `Storage Blob Data Contributor` scoped to that account, and uses no storage key —
+   there is none to use. It is the only thing in the chain that writes to the media
+   account, and the first exercise of that assignment: on a brand-new environment that
+   assignment is minutes old, so the script retries the read that exercises it before
+   giving up, the way the step below waits for the database to wake. A failure stops
    the chain: the API never runs against a schema older than itself. The converse is not
    guaranteed — a migration that is not backward compatible leaves the *previous* API
    answering 500 until step 4 publishes, and indefinitely if step 4 fails. Prefer

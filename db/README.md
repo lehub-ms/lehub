@@ -58,17 +58,22 @@ Applied by `scripts/db-seed.sh <local|dev> [--demo]`, idempotent, replayable.
 
 | File | Content | Environments |
 |---|---|---|
-| `seed/reference.sql` | Event formats and participation modes — real, stable business data | local, dev, prod |
-| `seed/demo.sql` | Fictitious communities, technologies and events | local, dev only |
-| `seed/media/` | Community and event placeholders, plus the official technology icons | local only |
+| `seed/reference.sql` | Event formats, participation modes and the technology reference — real, stable business data | local, dev, prod |
+| `seed/demo.sql` | Fictitious communities and events | local, dev only |
+| `seed/media/technologies/` | Official Microsoft product icons, the bytes `reference.sql` points at | local, dev, prod |
+| `seed/media/{communities,events}/` | Community and event placeholders, the bytes `demo.sql` points at | local only |
 
 The split is deliberate: reference data must be able to reach a public environment, demo
-data must never be able to.
+data must never be able to. Technologies are on the reference side because Azure or
+Dynamics 365 are what a real event is about — nothing about them is fictitious, and a
+filter has nothing to offer until they exist.
 
-`seed/media/` holds bytes, not SQL, and is applied by `scripts/blob-seed.sh local --demo`
-rather than by `db-seed.sh`: it is uploaded to the local storage emulator, where the
-directory tree is the blob container's tree. The paths `demo.sql` stores must match the files
-committed there — `api/test/demoMedia.test.ts` fails if either half drifts.
+`seed/media/` holds bytes, not SQL, and is applied by `scripts/blob-seed.sh` rather than by
+`db-seed.sh`, to the local emulator or to the environment's media storage account. There too
+the directory tree is the blob container's tree, and the tier is the top-level folder: the
+reference icons are deployed everywhere, the placeholders nowhere but this machine. The paths
+the seeds store must match the files committed there — `api/test/seedMedia.test.ts` fails if
+either half drifts, or if one tier names the other's media.
 
 The community and event files are placeholders created for the project; the technology files
 are official Microsoft product icons imported from the Claude Design project, and are

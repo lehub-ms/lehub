@@ -77,8 +77,8 @@ npm --prefix api test                         # vitest run
 ./scripts/db-migrate.sh local|dev [--dry-run] # apply pending db/migrations/*.sql
 ./scripts/db-seed.sh local|dev [--demo]       # reference data, + demo data on request
 
-# Local media storage (Azurite; the cloud container is provisioned by Bicep)
-./scripts/blob-seed.sh local [--demo]         # create the media container, + demo visuals
+# Media storage (the container itself is provisioned by Bicep; this only writes blobs)
+./scripts/blob-seed.sh local|dev [--demo]     # reference icons, + demo visuals (local only)
 
 # Infrastructure (resource groups are created by hand, never by Bicep)
 ./scripts/infra-deploy.sh dev --what-if       # preview, changes nothing

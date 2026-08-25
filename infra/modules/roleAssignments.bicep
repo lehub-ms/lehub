@@ -1,13 +1,20 @@
 // Every Azure RBAC assignment LeHub needs, and nothing more.
 //
-// Three, all on the user-assigned managed identity, each scoped to the one resource it
-// concerns. Nothing is granted at resource group or subscription scope.
+// Four, each scoped to the one resource it concerns. Nothing is granted at resource group
+// or subscription scope. Three are on the user-assigned managed identity, the runtime
+// identity; the fourth is on the deployment chain's own service principal, which writes
+// the reference media into the media container and holds nothing else on the data plane.
 //
 // The identity's access to Azure SQL is not here and is not an RBAC assignment: it is a
-// database user created by db/bootstrap/create-mi-user.sql.
+// database user created by db/bootstrap/create-mi-user.sql. The deployment principal's
+// two resource-group assignments are not here either — they are the bootstrap that makes
+// this template deployable at all, and docs/deployment.md creates them by hand.
 
 @description('principalId of the user-assigned managed identity.')
 param principalId string
+
+@description('Object ID of the service principal the deployment chain authenticates as.')
+param deploymentPrincipalObjectId string
 
 param storageAccountName string
 param mediaStorageAccountName string
@@ -63,6 +70,25 @@ resource mediaBlobDataContributor 'Microsoft.Authorization/roleAssignments@2022-
     // Consumption managing its content store, and nothing on this account does that. Writing
     // and replacing media blobs is all Contributor covers, and all this identity needs.
     description: 'Writes community and technology logos and event banners to the media container. Storage Blob Data Owner is not needed here.'
+  }
+}
+
+// The one assignment that is not on the runtime identity. scripts/blob-seed.sh uploads the
+// technology icons from the deployment chain, and Contributor on the resource group grants
+// nothing on blob data — with allowSharedKeyAccess false on this account, there is no key
+// and no account SAS to fall back on either. Scoped to the media account alone: the chain
+// has no business reading or writing the host storage's data.
+resource mediaBlobDataContributorDeployment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: mediaStorage
+  name: guid(mediaStorage.id, deploymentPrincipalObjectId, storageBlobDataContributorRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
+    principalId: deploymentPrincipalObjectId
+    principalType: 'ServicePrincipal'
+    description: 'Uploads the reference media — the technology icons — next to the reference data, from the deployment chain. Read-only would not do: the point is writing.'
   }
 }
 
