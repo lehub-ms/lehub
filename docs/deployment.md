@@ -449,10 +449,11 @@ merges produce two complete deployments, in order.
    them), then probes `GET /api/health` until it answers 200 — a published-but-dead API
    is a red job.
 5. **web** — builds both front-ends with `VITE_API_BASE_URL` from the infra outputs
-   (an empty value fails the build), adds the media account's host to the `img-src`
-   directive of each built `staticwebapp.config.json` (see below), reads each Static Web
-   App's deployment token at run time from the OIDC session — masked, never stored —
-   publishes both independently, and checks both hostnames answer 200.
+   (an empty value fails the build), points the `img-src` and `connect-src` directives of
+   each built `staticwebapp.config.json` at this environment's media account and Function
+   App (see below), reads each Static Web App's deployment token at run time from the OIDC
+   session — masked, never stored — publishes both independently, and checks both
+   hostnames answer 200.
 
 ### Common failures
 
@@ -492,21 +493,31 @@ serves the default page until the next merge republishes it.
 
 ### The published content security policy is not the committed one
 
-`frontend/*/public/staticwebapp.config.json` declares `img-src 'self' data:` and is
-committed that way in both applications. The media account's host carries a uniqueness
-hash, so it differs per environment and cannot live in a versioned file; the **web** job
-appends it to that one directive in `dist/`, after the build and before publication,
-using `mediaHostname` from the infra outputs.
+`frontend/*/public/staticwebapp.config.json` declares `img-src 'self' data:` and
+`connect-src 'self'`, and is committed that way in both applications. Neither origin can
+live in a versioned file: the media account's host carries a uniqueness hash, and the
+Function App's name carries the environment. The **web** job appends each to its directive
+in `dist/`, after the build and before publication, using `mediaHostname` and `apiBaseUrl`
+from the infra outputs — `apiBaseUrl` being the very value the bundle was built to call, so
+the policy and the fetch target cannot drift apart.
 
-The committed file therefore stays a valid policy on its own: a build run outside this
-chain produces a site that blocks media images, never a broken site. The step fails
-loudly if the directive it expects is not there, so rewording the CSP cannot silently
-publish a site whose images are blocked.
+The committed file therefore stays a valid policy on its own, and a fail-closed one: a
+build published outside this chain is refused by its own policy instead of trusting every
+host on a domain the whole platform shares. Be clear about what that costs — `connect-src`
+covers the only fetch the bundle makes, so a `dist/` that skipped this step serves empty
+pages, not merely images-less ones. The failure is visible rather than harmless, and the
+`Check both sites answer` probe will not catch it: it asks `/` for a 200, which a site with
+an over-restrictive CSP still returns.
+
+The step guards against introducing that here. After the rewrite it asserts each directive
+individually — not the policy as one string, which would pass as soon as the origin turned
+up anywhere in it — so rewording the CSP fails the job instead of publishing a site whose
+images are blocked or whose API calls are refused.
 
 Two consequences worth knowing:
 
-- A **custom domain on the media account** has to be added at that same step. Nothing
-  else in the chain knows about the media host.
+- A **custom domain**, on the media account or on the Function App, has to be added at that
+  same step. Nothing else in the chain knows about those hosts.
 - The policy is **not served locally** — the Vite dev server ignores
   `staticwebapp.config.json` — so a CSP regression is only observable on a deployed
   environment. Verify the header, not the file:
@@ -515,6 +526,9 @@ Two consequences worth knowing:
   curl -sI "https://<swa hostname>/" | grep -i content-security-policy
   ```
 
-No wildcard is used. `https://*.blob.core.windows.net` would allow any storage account,
-including one an attacker controls, which is precisely what the directive exists to
-prevent — the more so once Epic #2 introduces a per-user calendar token.
+No wildcard is used in either directive. `https://*.blob.core.windows.net` would allow any
+storage account and `https://*.azurewebsites.net` any Function App — including one an
+attacker controls, on domains where a subdomain is minutes away — which is precisely what
+these directives exist to prevent. `connect-src` the more so: it governs `fetch` and XHR,
+the most capable exfiltration channel an injection can take, and Epic #2 introduces a
+per-user calendar token for it to reach.

@@ -42,7 +42,7 @@ jobs:
       mediaHostname: ${{ steps.deploy.outputs.mediaHostname }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+      - uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -102,7 +102,7 @@ jobs:
             "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-amd64.tar.bz2"
           sudo tar -xjf /tmp/sqlcmd.tar.bz2 -C /usr/local/bin sqlcmd
           sqlcmd --version
-      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+      - uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -176,7 +176,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -194,7 +194,7 @@ jobs:
           npm ci --omit=dev
           mkdir publish
           cp -R dist host.json package.json node_modules publish/
-      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+      - uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -239,7 +239,7 @@ jobs:
       VITE_API_BASE_URL: ${{ needs.infra.outputs.apiBaseUrl }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -266,15 +266,21 @@ jobs:
         run: |
           npm ci
           npm run build
-      # The committed staticwebapp.config.json declares `img-src 'self' data:` and stays
-      # that way: it has to remain a valid policy on its own, so a build outside this
-      # chain produces a site that blocks images rather than a broken site. The media
-      # account's host carries a uniqueness hash and differs per environment, so it
-      # cannot be written into a versioned file — it comes from the deployment outputs,
-      # like every other resource name here. No wildcard: `*.blob.core.windows.net`
-      # would allow any storage account, an attacker's included, which is the opposite
-      # of what the directive is for.
-      - name: Allow the media account in both content security policies
+      # The committed staticwebapp.config.json declares `img-src 'self' data:` and
+      # `connect-src 'self'`, and stays that way: it has to remain a valid policy on its
+      # own, and a fail-closed one. A build published outside this chain is then refused
+      # by its own policy — no images, no API calls — instead of silently trusting every
+      # host on a domain the whole platform shares. That is a visible failure, not a safe
+      # one: `connect-src` carries the only fetch the bundle makes, so a `dist/` that
+      # skipped this step renders empty pages. Both origins carry an environment-specific
+      # name — a uniqueness hash on the media account, the environment's own Function App —
+      # so neither can be written into a versioned file; they come from the deployment
+      # outputs, like every other resource name here. No wildcard: `*.blob.core.windows.net`
+      # or `*.azurewebsites.net` would allow any storage account or any Function App, an
+      # attacker's included, which is the opposite of what the directives are for —
+      # `connect-src` the more so, since it governs fetch and XHR, the most capable
+      # exfiltration channel an injection can take.
+      - name: Point both content security policies at this environment
         env:
           MEDIA_HOSTNAME: ${{ needs.infra.outputs.mediaHostname }}
         run: |
@@ -282,24 +288,38 @@ jobs:
             echo "mediaHostname is empty — refusing to publish a site that blocks its own images" >&2
             exit 1
           fi
-          # Passed through --arg rather than interpolated into the jq program: the needle
-          # contains the single quotes of 'self', which would otherwise have to survive
-          # YAML, then shell, then jq.
+          # VITE_API_BASE_URL is the job-level apiBaseUrl, already proven non-empty by the
+          # step above and already carrying the scheme. Authorising the very value the
+          # bundle calls is what keeps the policy and the fetch target from drifting apart.
           for cfg in frontend/lehub.ms/dist/staticwebapp.config.json \
                      frontend/admin.lehub.ms/dist/staticwebapp.config.json; do
+            # Needles passed through --arg rather than interpolated into the jq program:
+            # they contain the single quotes of 'self', which would otherwise have to
+            # survive YAML, then shell, then jq.
             patched="$(jq \
-              --arg needle "img-src 'self' data:" \
-              --arg repl   "img-src 'self' data: https://$MEDIA_HOSTNAME" \
-              '.globalHeaders["Content-Security-Policy"] |= sub($needle; $repl)' "$cfg")"
-            # A renamed or reworded directive would leave the policy untouched and publish
-            # a site whose images are blocked, silently. Fail here instead.
+              --arg img_needle  "img-src 'self' data:" \
+              --arg img_repl    "img-src 'self' data: https://$MEDIA_HOSTNAME" \
+              --arg conn_needle "connect-src 'self'" \
+              --arg conn_repl   "connect-src 'self' $VITE_API_BASE_URL" \
+              '.globalHeaders["Content-Security-Policy"]
+                 |= (sub($img_needle; $img_repl) | sub($conn_needle; $conn_repl))' "$cfg")"
+            # Asserted on each directive, not on the policy as one string: a needle that
+            # stopped matching would leave its directive untouched, and a whole-string
+            # test would still pass as soon as the origin appeared anywhere else in the
+            # policy — publishing blocked images or refused API calls, silently, which is
+            # precisely what this guard exists to catch. `first` on no match yields null,
+            # which fails the containment check rather than passing it.
             printf '%s' "$patched" | jq -e \
-              --arg origin "https://$MEDIA_HOSTNAME" \
-              '.globalHeaders["Content-Security-Policy"] | contains($origin)' > /dev/null
+              --arg media "https://$MEDIA_HOSTNAME" \
+              --arg api   "$VITE_API_BASE_URL" \
+              '.globalHeaders["Content-Security-Policy"] | split("; ")
+                 | (map(select(startswith("img-src")))     | first | contains($media))
+                   and
+                   (map(select(startswith("connect-src"))) | first | contains($api))' > /dev/null
             printf '%s\n' "$patched" > "$cfg"
-            echo "$cfg: img-src now allows https://$MEDIA_HOSTNAME"
+            echo "$cfg: img-src allows https://$MEDIA_HOSTNAME, connect-src allows $VITE_API_BASE_URL"
           done
-      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+      - uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
