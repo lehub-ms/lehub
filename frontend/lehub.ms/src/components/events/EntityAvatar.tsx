@@ -18,7 +18,7 @@ interface EntityAvatarProps {
   kind: EntityKind
   size?: number
   className?: string
-  /** Set by callers that already name the entity (pill text, stack `aria-label`). */
+  /** Set by callers that already name the entity (pill text, the row's `aria-label`). */
   hidden?: boolean
 }
 

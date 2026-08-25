@@ -3,9 +3,7 @@ import { CalendarDays } from 'lucide-react'
 import type { EventSummary } from '@/lib/api'
 import { communityGradient } from '@/lib/communityPalette'
 import { formatEventDateRange } from '@/lib/formatEventDate'
-import { CommunityAvatar } from './CommunityAvatar'
-import { CommunityAvatarStack } from './CommunityAvatarStack'
-import { TechnologyPill } from './TechnologyPill'
+import { EntityRow } from './EntityRow'
 
 interface EventCardProps {
   event: EventSummary
@@ -71,20 +69,15 @@ export function EventCard({ event }: EventCardProps) {
 
         <hr className="my-1 border-primary/10" />
 
-        {event.communities.length === 1 && primaryCommunity && (
-          <span className="inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-slate-200 bg-slate-100 py-1 pr-2.5 pl-1 text-xs font-medium text-slate-600">
-            <CommunityAvatar community={primaryCommunity} size={18} />
-            <span className="truncate">{primaryCommunity.name}</span>
-          </span>
+        {/* Both lists follow the exact same rule, so they are the exact same component:
+            full pills while they fit, the logos alone otherwise, "+N" when even those
+            don't. Neither may ever wrap — a second line would make this card taller than
+            its neighbours in the grid. */}
+        {event.communities.length > 0 && (
+          <EntityRow entities={event.communities} kind="community" label="Organisé par" />
         )}
-        {event.communities.length > 1 && <CommunityAvatarStack communities={event.communities} />}
-
         {event.technologies.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {event.technologies.map((technology) => (
-              <TechnologyPill key={technology.id} technology={technology} />
-            ))}
-          </div>
+          <EntityRow entities={event.technologies} kind="technology" label="Technologies abordées" />
         )}
       </div>
     </article>

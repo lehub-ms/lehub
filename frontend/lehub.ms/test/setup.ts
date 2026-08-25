@@ -85,11 +85,97 @@ window.fetch = () =>
 // native listener for a pointer type it believes the environment can't emit.
 class PointerEventPolyfill extends MouseEvent {
   readonly pointerId: number
+  // Carried through because `EntityRow` branches on it: hover opens its popover only for a
+  // mouse, since on touch `pointerover` fires immediately before the tap Radix already
+  // handles. Dropping it here would make every synthetic pointer read as `undefined` and
+  // silently take the non-mouse path.
+  readonly pointerType: string
+  readonly isPrimary: boolean
 
   constructor(type: string, params: PointerEventInit = {}) {
     super(type, params)
     this.pointerId = params.pointerId ?? 0
+    this.pointerType = params.pointerType ?? ''
+    this.isPrimary = params.isPrimary ?? false
   }
 }
 
 window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent
+
+// jsdom ships no `ResizeObserver`, and `EntityRow` constructs one on mount — without this
+// every test that renders an `EventCard` throws. Kept observable rather than a bare no-op
+// so a test can fire the callbacks and assert that a row grows its pills back when its
+// column widens (see `entityRow.test.tsx`).
+interface ObservedTarget {
+  callback: ResizeObserverCallback
+  targets: Set<Element>
+}
+
+const resizeObservers = new Set<ObservedTarget>()
+
+/** Fire every live `ResizeObserver` callback, simulating a layout change. */
+export function triggerResizeObservers(): void {
+  for (const { callback, targets } of [...resizeObservers]) {
+    // `EntityRow` re-reads `clientWidth` from the element and ignores the entries, so
+    // these only have to satisfy the signature.
+    const entries = [...targets].map((target) => ({ target }) as ResizeObserverEntry)
+    callback(entries, {} as ResizeObserver)
+  }
+}
+
+class ResizeObserverStub {
+  private readonly registration: ObservedTarget
+
+  constructor(callback: ResizeObserverCallback) {
+    this.registration = { callback, targets: new Set() }
+    resizeObservers.add(this.registration)
+  }
+
+  observe(target: Element): void {
+    this.registration.targets.add(target)
+  }
+
+  unobserve(target: Element): void {
+    this.registration.targets.delete(target)
+  }
+
+  disconnect(): void {
+    this.registration.targets.clear()
+    resizeObservers.delete(this.registration)
+  }
+}
+
+window.ResizeObserver = ResizeObserverStub
+
+// jsdom implements no part of the CSS Font Loading API, and `EntityRow` awaits
+// `document.fonts.ready` to measure again once the real face has swapped in for the
+// `font-display: swap` fallback. Stubbed as a promise that stays pending until a test
+// settles it: harmless in every other file, and assertable here (see `entityRow.test.tsx`).
+let resolveFontsReady: () => void = () => undefined
+let fontsReady = new Promise<void>((resolve) => {
+  resolveFontsReady = resolve
+})
+
+/**
+ * Resolve `document.fonts.ready`, then re-arm it for whatever mounts next. Awaiting the
+ * returned promise lets the `.then` callbacks already attached to the old one run.
+ */
+export function settleFonts(): Promise<void> {
+  const resolve = resolveFontsReady
+  fontsReady = new Promise<void>((next) => {
+    resolveFontsReady = next
+  })
+  resolve()
+  return Promise.resolve()
+}
+
+Object.defineProperty(document, 'fonts', {
+  configurable: true,
+  // A getter, so a re-armed promise reaches the next mount. Only `ready` is stubbed —
+  // nothing in the app touches the rest of the interface.
+  get: () => ({
+    get ready() {
+      return fontsReady
+    },
+  }),
+})

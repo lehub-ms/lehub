@@ -46,13 +46,15 @@ describe('EventCard', () => {
     expect(screen.getByText(community.name)).not.toBeNull()
   })
 
-  it('shows a stacked-avatar accessible summary for several organizing communities', () => {
+  it('lists every organizing community on one line', () => {
     const communities = [buildNamedRef('community', 1), buildNamedRef('community', 2)]
-    render(<EventCard event={buildEvent({ communities })} />)
-    const stack = screen.getByRole('img', { name: /Organisé par/ })
-    expect(stack.getAttribute('aria-label')).toBe(
-      `Organisé par : ${communities.map((c) => c.name).join(', ')}`,
-    )
+    const { container } = render(<EventCard event={buildEvent({ communities })} />)
+
+    // jsdom computes no layout, so the row reads "everything fits" and stays in its full
+    // form. The stacked and "+N" forms, and their popover, are covered against a fake
+    // layout engine in `entityRow.test.tsx`.
+    for (const community of communities) expect(screen.getByText(community.name)).not.toBeNull()
+    expect(container.querySelectorAll('[data-testid="entity-row"]')).toHaveLength(2)
   })
 
   it('renders a technology pill per associated technology', () => {
@@ -104,9 +106,15 @@ describe('EventCard', () => {
     })
   })
 
-  it('is not an interactive element — no link or button role', () => {
-    render(<EventCard event={buildEvent()} />)
+  it('is not an interactive element — the card itself is neither a link nor a button', () => {
+    const { container } = render(<EventCard event={buildEvent()} />)
+    const card = container.querySelector('article')
+
     expect(screen.queryByRole('link')).toBeNull()
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(card?.getAttribute('role')).toBeNull()
+    expect(card?.getAttribute('tabindex')).toBeNull()
+    // Scoped to the card itself on purpose: once a list is reduced to logos it legitimately
+    // carries a button of its own, the popover trigger that hands the names back.
+    expect(card?.closest('a')).toBeNull()
   })
 })

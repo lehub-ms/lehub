@@ -5,7 +5,7 @@ interface CommunityAvatarProps {
   community: NamedRef
   size?: number
   className?: string
-  /** Set by callers that provide their own accessible name (e.g. `EntityRow`'s stack). */
+  /** Set by callers that provide their own accessible name (e.g. a filter summary chip). */
   hidden?: boolean
 }
 
