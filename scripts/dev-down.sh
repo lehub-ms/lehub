@@ -62,6 +62,9 @@ if [[ "$DROP_DB" == true && "$WIPE" == true ]]; then
 elif [[ "$DROP_DB" == true ]]; then
   if ! container_running lehub-sql; then
     dim "SQL Server is not running — start it to drop $LEHUB_DB_NAME"
+  elif ! workspace_sa_password_known; then
+    dim "The shared SA password is not recoverable from this clone, so $LEHUB_DB_NAME cannot"
+    dim "be dropped. --volumes deletes the volume without authenticating."
   else
     sql_configure local
     if instance_db_exists "$LEHUB_DB_NAME"; then
@@ -77,7 +80,9 @@ fi
 if [[ "$WIPE" == true ]]; then
   # The volume is shared, so this is never "this workspace's data". Say so, and make the
   # contributor say yes, whenever another workspace has a database on the instance.
-  if container_running lehub-sql; then
+  # The volume is shared, so this is never "this workspace's data". Say so, and make the
+  # contributor say yes, whenever anything else has a database on the instance.
+  if container_running lehub-sql && workspace_sa_password_known; then
     sql_configure local
     databases="$(instance_list_dbs || true)"
     # grep -c, not `wc -l`: the captured output has no trailing newline, so wc would count
@@ -87,10 +92,18 @@ if [[ "$WIPE" == true ]]; then
       warn "The shared instance holds $count LeHub databases:"
       printf '%s\n' "$databases" | sed 's/^/    /'
       dim "--volumes deletes the volume, so all of them go — not just $LEHUB_DB_NAME."
-      [[ -t 0 ]] || die "Refusing to delete $count databases without a terminal to confirm on."
-      read -r -p "  Type 'yes' to delete every LeHub database: " confirmation
-      [[ "$confirmation" == "yes" ]] || die "Aborted — nothing was deleted."
+      confirm_destruction "Type 'yes' to delete every LeHub database: " \
+        "Refusing to delete $count databases without a terminal to confirm on."
     fi
+  elif container_running lehub-sql; then
+    # Enumerating is impossible without credentials, but silence would be the wrong answer:
+    # this is the second-clone case the docs describe, where the databases about to go are
+    # precisely the ones this clone cannot see.
+    warn "The shared SA password is not recoverable from this clone, so the databases on the"
+    warn "volume cannot be listed — and they may well belong to another clone."
+    dim "--volumes deletes the volume, so every LeHub database on this machine goes with it."
+    confirm_destruction "Type 'yes' to delete the volume and every database on it: " \
+      "Refusing to delete an instance whose databases cannot be listed, without a terminal to confirm on."
   fi
 
   info "Stopping SQL Server and Azurite, and deleting their data"

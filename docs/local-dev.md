@@ -126,6 +126,13 @@ The state shared between workspaces — the slot registry and the SA password �
 common directory, `$(git rev-parse --git-common-dir)/lehub-dev`. It is the one place every
 working tree shares by construction, and nothing there is ever versioned.
 
+**One clone per machine.** That state is shared by the worktrees of a clone, while the SQL
+Server instance, the volume and the ports belong to the machine. A second, independent clone
+would resolve as a main working tree too, claim slot 0, and end up on the same ports and the
+same `lehub-local` with a second SA password against one volume. Use `git worktree` — that is
+what the slots are for. Bootstrapping a second clone against an existing volume stops with an
+explanation rather than a stuck container, but it is not a supported layout.
+
 ## Testing from a phone or tablet
 
 Everything listens on the loopback by default, so another device on the same network sees
@@ -294,7 +301,7 @@ Same scripts in `frontend/admin.lehub.ms`.
 | Browser console: `blocked by CORS policy` | the app is served from an origin the API does not allow | rerun `./scripts/dev-start.sh`, which re-renders `Host.CORS` from this workspace's slot; check it lists the ports Vite actually bound |
 | Page shows `Aucune réponse de http://localhost:<port>` | the API is not running | check the `api` pane of `dev-start.sh` |
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |
-| `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | an `api/local.settings.json` created before the media setting existed — `dev-up.sh` never overwrites an existing one | copy the `MEDIA_BASE_URL` line from `api/local.settings.json.example` into it |
+| `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | the setting was removed by hand from `api/local.settings.json` | rerun `./scripts/dev-start.sh` — `MEDIA_BASE_URL` is a managed key, rendered on every run |
 | `0001_….sql changed after it was applied` | a merged migration was edited | revert the file; corrections go in a **new** migration |
 | `npm ci` fails on a lockfile mismatch | `package.json` changed without refreshing the lockfile | `npm --prefix <pkg> install`, and commit the lockfile |
 

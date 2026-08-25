@@ -92,7 +92,39 @@ stop_dev_processes() {
 # .env: the shell environment wins over .env in Compose's interpolation, which makes the
 # shared store the single source whatever a stale .env happens to hold.
 compose() {
-  MSSQL_SA_PASSWORD="$(workspace_sa_password)" docker compose -f "$ROOT_DIR/docker-compose.yml" "$@"
+  local password
+
+  # Tearing down has to work even when the password is unrecoverable — `--volumes` is the
+  # documented way out of exactly that situation, and demanding the password first made the
+  # escape hatch unreachable. Compose interpolates the whole file whatever the command, so
+  # it still needs *a* value; only the commands that start a container care which one.
+  case "${1:-}" in
+    up|start|restart|run)
+      password="$(workspace_sa_password)"
+      # No fallback on this branch, ever. SQL Server bakes MSSQL_SA_PASSWORD in when it
+      # initialises an empty data directory and never again, so starting with a placeholder
+      # would leave a container permanently unhealthy on "Login failed for user 'sa'" while
+      # .env and api/local.settings.json carry something else — the exact failure this file
+      # exists to prevent, made silent.
+      [[ -n "$password" ]] || die "The shared SA password resolved to an empty value.
+  Check $(workspace_state_dir)/sa-password, or start from an empty database:
+  ./scripts/dev-down.sh --volumes, then rerun."
+      ;;
+    *)
+      # Teardown has to work without it. Compose interpolates the whole file whatever the
+      # command, so it needs *a* value; nothing reads it as the container goes away.
+      password="$(workspace_sa_password_if_known || true)"
+      password="${password:-unused-for-teardown}"
+      ;;
+  esac
+
+  # Still a prefix assignment, but of an already-resolved variable. The lookup happens above
+  # in a plain assignment, whose declaration is separate from it — `local password="$(...)"`
+  # would mask the status the same way a prefix assignment does — so a `die` in there stops
+  # the script instead of letting docker compose run with an empty password and fail on a
+  # message pointing at a .env that is no longer the source of it.
+  MSSQL_SA_PASSWORD="$password" \
+    docker compose -f "$ROOT_DIR/docker-compose.yml" "$@"
 }
 
 container_running() {
@@ -121,6 +153,15 @@ assert_container_port_free() {
   die "Port $port is needed by the $container container but something else is holding it.
   Identify it with: lsof -i:$port -sTCP:LISTEN
   Stop that process, or stop a previous stack with ./scripts/dev-down.sh, then retry."
+}
+
+# Ask before something irreversible, and refuse outright with no terminal to ask on. Shared
+# by every branch of dev-down.sh --volumes so none of them can quietly skip the question.
+confirm_destruction() {
+  local prompt="$1" no_tty_message="$2" answer
+  [[ -t 0 ]] || die "$no_tty_message"
+  read -r -p "  $prompt" answer
+  [[ "$answer" == "yes" ]] || die "Aborted — nothing was deleted."
 }
 
 # Block until a container reports healthy, or give up with a diagnostic.
@@ -243,10 +284,23 @@ instance_db_create() {
 # SINGLE_USER WITH ROLLBACK IMMEDIATE first: a Functions host left connected would
 # otherwise hold the drop open until it exits.
 instance_db_drop() {
+  # The MULTI_USER reset is the point of the CATCH: if anything takes the single connection
+  # slot between the two statements — a Functions host reconnecting, a sqlcmd left open in
+  # another terminal — the ALTER succeeds and the DROP fails. Left in SINGLE_USER, the
+  # database would then fail the next dev-up.sh with a login error saying nothing about it.
   sql_exec_master "IF DB_ID('$1') IS NOT NULL
     BEGIN
-      ALTER DATABASE [$1] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-      DROP DATABASE [$1];
+      BEGIN TRY
+        ALTER DATABASE [$1] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+        DROP DATABASE [$1];
+      END TRY
+      BEGIN CATCH
+        -- WITH ROLLBACK IMMEDIATE here too: without a termination clause this waits
+        -- indefinitely for the exclusive access the session that broke the DROP is holding,
+        -- so the recovery would hang on the very race it exists for.
+        IF DB_ID('$1') IS NOT NULL ALTER DATABASE [$1] SET MULTI_USER WITH ROLLBACK IMMEDIATE;
+        THROW;
+      END CATCH
     END"
 }
 

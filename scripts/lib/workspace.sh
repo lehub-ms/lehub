@@ -100,8 +100,14 @@ workspace_slug() {
 # Sets LEHUB_SLOT, LEHUB_SLUG and LEHUB_DB_NAME once per process. The slot comes from the
 # registry, never from probing ports: a workspace that is merely stopped keeps its slot.
 
+_LEHUB_RESOLVED=''
+
 workspace_resolve() {
-  [[ -n "${LEHUB_SLOT:-}" ]] && return 0
+  # A private name, deliberately: .env publishes LEHUB_SLOT, and the docs tell contributors
+  # to `source .env`. Memoising on a variable that file sets would return early with
+  # LEHUB_DB_NAME and DEV_PORTS never computed, and every script would then die on an
+  # unbound variable.
+  [[ -n "$_LEHUB_RESOLVED" ]] && return 0
 
   local state registry git_dir common_dir is_main slug slot entry
   state="$(workspace_state_dir)"
@@ -200,6 +206,7 @@ $(sed 's/\t/  /g; s/^/    /' "$registry")
 
   export LEHUB_SLOT LEHUB_SLUG LEHUB_DB_NAME
   export LEHUB_API_PORT LEHUB_WEB_PORT LEHUB_ADMIN_PORT LEHUB_INSPECT_PORT
+  _LEHUB_RESOLVED=1
 }
 
 # Who is holding a port. A contributor needs to know whether to switch worktrees or to go
@@ -235,14 +242,23 @@ workspace_describe_port_holder() {
 # workspace against a shared volume is what left the container stuck unhealthy on
 # "Login failed for user 'sa'" as soon as a second worktree was bootstrapped.
 
-workspace_sa_password() {
-  local state file
+# The password when it can be known, nothing and a non-zero status when it cannot. Callers
+# that must carry on regardless — tearing the stack down, deleting the volume — use this;
+# the ones that genuinely need it use workspace_sa_password below, which explains and stops.
+workspace_sa_password_if_known() {
+  local state file stored
   state="$(workspace_state_dir)"
   file="$state/sa-password"
 
-  if [[ -s "$file" ]]; then
-    cat "$file"
-    return 0
+  if [[ -f "$file" ]]; then
+    # -s alone would not do: a file holding just a newline passes it and yields an empty
+    # password once the substitution has stripped it, and an unreadable file would report
+    # "known" too. An empty value here is worse than none — it reaches sqlcmd as -P ''.
+    stored="$(cat "$file" 2>/dev/null || true)"
+    if [[ -n "$stored" ]]; then
+      printf '%s' "$stored"
+      return 0
+    fi
   fi
 
   # Adopt the password of a working tree bootstrapped before this shared state existed: the
@@ -260,12 +276,11 @@ workspace_sa_password() {
     fi
   done < <(git -C "$ROOT_DIR" worktree list --porcelain | sed -n 's/^worktree //p')
 
+  # Generating one is only correct against a volume that does not exist yet: SQL Server
+  # applies MSSQL_SA_PASSWORD when it initialises an empty data directory and never again,
+  # so inventing one here would produce a container stuck on a login failure.
   if docker volume inspect "$INSTANCE_SQL_VOLUME" >/dev/null 2>&1; then
-    die "The shared SQL volume $INSTANCE_SQL_VOLUME exists, but its password is gone:
-  $file was deleted and no workspace .env holds it any more.
-  SQL Server only applies a password when it initialises an empty data directory, so no
-  new password can ever authenticate against this volume.
-  Start from an empty database: ./scripts/dev-down.sh --volumes, then rerun this script."
+    return 1
   fi
 
   # Generated rather than templated: a working password committed to the repository would
@@ -276,6 +291,32 @@ workspace_sa_password() {
   printf '%s' "$generated" > "$file"
   chmod 600 "$file"
   printf '%s' "$generated"
+}
+
+# A predicate, not quite a pure one: on a machine with no volume yet it generates the
+# password as a side effect. That case has nothing to protect, and both callers check that a
+# container is running first, which implies a volume.
+workspace_sa_password_known() {
+  workspace_sa_password_if_known >/dev/null 2>&1
+}
+
+workspace_sa_password() {
+  local password
+  # A plain assignment, unlike a prefix assignment on a command: this one does propagate the
+  # substitution's exit status, so `set -e` and the branch below both see the failure.
+  if password="$(workspace_sa_password_if_known)"; then
+    printf '%s' "$password"
+    return 0
+  fi
+
+  die "The shared SQL volume $INSTANCE_SQL_VOLUME exists, but its password is gone:
+  $(workspace_state_dir)/sa-password holds nothing and no working tree of this clone has a
+  .env carrying it. A second clone of the repository is the usual cause — the volume belongs
+  to the machine, this state belongs to the clone.
+  SQL Server only applies a password when it initialises an empty data directory, so no new
+  password can ever authenticate against this volume.
+  Either bootstrap from the clone that still holds it, or start from an empty database:
+  ./scripts/dev-down.sh --volumes, then rerun this script."
 }
 
 # .env and api/local.settings.json are rendered from the workspace and the shared store on
