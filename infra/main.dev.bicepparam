@@ -11,6 +11,10 @@ using './main.bicep'
 //   Azure SQL storage       0.1202 €/GB/month (General Purpose data stored)
 //   Function App FC1        pay-per-execution, alwaysReady 0 => idles at zero
 //   Static Web Apps         Free tier, 0 €
+//   Media storage           Hot LRS: 0.0172 €/GB/month stored, 0.0038 €/10K reads.
+//                           A few hundred logos and a community agenda's traffic
+//                           land under 0.10 €/month; egress stays inside the free
+//                           monthly allowance.
 //   Storage, Log Analytics  a few cents at this volume
 //
 // Realistically 5-10 €/month for a database woken a few hours on the days someone

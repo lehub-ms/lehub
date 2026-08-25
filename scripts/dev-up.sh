@@ -81,6 +81,23 @@ set +a
 
 if [[ -f api/local.settings.json ]]; then
   dim "api/local.settings.json already present, left untouched"
+  # Left untouched is the right default — it holds a password this script must not
+  # regenerate — but it also means a workspace bootstrapped before a setting existed never
+  # learns about it. The API refuses to start a request on an incomplete configuration, so
+  # the symptom would otherwise be a 500 on /api/events with a healthy-looking stack.
+  # Node is already a prerequisite, and it parses JSON without adding a dependency.
+  MISSING="$(node -e '
+    const fs = require("node:fs")
+    const read = (f) => JSON.parse(fs.readFileSync(f, "utf8")).Values ?? {}
+    const example = read("api/local.settings.json.example")
+    const actual = read("api/local.settings.json")
+    process.stdout.write(Object.keys(example).filter((k) => !(k in actual)).join(" "))
+  ')"
+  if [[ -n "$MISSING" ]]; then
+    warn "api/local.settings.json is missing: $MISSING"
+    dim "Copy the missing key(s) from api/local.settings.json.example — the API refuses"
+    dim "to serve a request on an incomplete configuration rather than guessing a value."
+  fi
 else
   cp api/local.settings.json.example api/local.settings.json
   # The password reaches perl through the environment, never through the program

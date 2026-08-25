@@ -1,3 +1,4 @@
+import { getMediaConfig, mediaUrl } from './mediaUrls'
 import { getPool } from './sqlClient'
 
 export interface CommunitySummary {
@@ -10,7 +11,8 @@ export interface CommunitySummary {
 interface CommunityRow {
   Id: string
   Name: string
-  LogoUrl: string | null
+  /** Blob path inside the media container, not a URL — see mediaUrls. */
+  LogoPath: string | null
   Description: string | null
 }
 
@@ -20,19 +22,20 @@ interface CommunityRow {
  * a plain cacheable list rather than reshuffling on every request.
  */
 const LIST_COMMUNITIES_QUERY = `
-SELECT Id, Name, LogoUrl, Description
+SELECT Id, Name, LogoPath, Description
 FROM dbo.Community
 ORDER BY Name
 `
 
 export async function listCommunities(): Promise<CommunitySummary[]> {
+  const media = getMediaConfig()
   const pool = await getPool()
   const result = await pool.request().query<CommunityRow>(LIST_COMMUNITIES_QUERY)
 
   return result.recordset.map((row) => ({
     id: row.Id,
     name: row.Name,
-    logoUrl: row.LogoUrl,
+    logoUrl: mediaUrl(row.LogoPath, media),
     description: row.Description,
   }))
 }

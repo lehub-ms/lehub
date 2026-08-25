@@ -1,8 +1,21 @@
+import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import { getPool } from './sqlClient'
 
 export interface NamedRef {
   id: string
   name: string
+  /**
+   * Communities and technologies are treated identically: both carry a logo, and both expose
+   * it here, so a caller does not have to fetch /api/communities to render an event's chips.
+   */
+  logoUrl: string | null
+}
+
+/** What FOR JSON PATH actually produces. `logoPath` is absent, not null, when there is none. */
+interface NamedRefRow {
+  id: string
+  name: string
+  logoPath?: string
 }
 
 export interface EventSummary {
@@ -24,7 +37,8 @@ interface EventRow {
   Description: string | null
   StartDate: Date
   EndDate: Date
-  BannerImageUrl: string | null
+  /** Blob path inside the media container, not a URL — see mediaUrls. */
+  BannerImagePath: string | null
   Format: string
   Mode: string
   /** JSON arrays produced by FOR JSON PATH — null when the event has no link. */
@@ -49,16 +63,16 @@ SELECT
   e.Description,
   e.StartDate,
   e.EndDate,
-  e.BannerImageUrl,
+  e.BannerImagePath,
   ft.Name AS Format,
   em.Name AS Mode,
-  (SELECT c.Id AS id, c.Name AS name
+  (SELECT c.Id AS id, c.Name AS name, c.LogoPath AS logoPath
      FROM dbo.EventCommunity ec
      JOIN dbo.Community c ON c.Id = ec.CommunityId
     WHERE ec.EventId = e.Id
     ORDER BY c.Name
       FOR JSON PATH) AS Communities,
-  (SELECT t.Id AS id, t.Name AS name
+  (SELECT t.Id AS id, t.Name AS name, t.LogoPath AS logoPath
      FROM dbo.EventTechnology et
      JOIN dbo.Technology t ON t.Id = et.TechnologyId
     WHERE et.EventId = e.Id
@@ -71,12 +85,22 @@ WHERE e.EndDate > SYSUTCDATETIME()
 ORDER BY e.StartDate
 `
 
-function parseRefs(json: string | null): NamedRef[] {
+/**
+ * FOR JSON PATH omits a null property rather than emitting it, which is why the row type has
+ * `logoPath` optional and why this maps instead of casting straight through. Adding
+ * INCLUDE_NULL_VALUES would emit nulls for every column of every ref, not just this one.
+ */
+function parseRefs(json: string | null, media: MediaConfig): NamedRef[] {
   if (!json) return []
-  return JSON.parse(json) as NamedRef[]
+  return (JSON.parse(json) as NamedRefRow[]).map((ref) => ({
+    id: ref.id,
+    name: ref.name,
+    logoUrl: mediaUrl(ref.logoPath, media),
+  }))
 }
 
 export async function listUpcomingEvents(): Promise<EventSummary[]> {
+  const media = getMediaConfig()
   const pool = await getPool()
   const result = await pool.request().query<EventRow>(UPCOMING_EVENTS_QUERY)
 
@@ -86,10 +110,10 @@ export async function listUpcomingEvents(): Promise<EventSummary[]> {
     description: row.Description,
     startDate: row.StartDate.toISOString(),
     endDate: row.EndDate.toISOString(),
-    bannerImageUrl: row.BannerImageUrl,
+    bannerImageUrl: mediaUrl(row.BannerImagePath, media),
     format: row.Format,
     mode: row.Mode,
-    communities: parseRefs(row.Communities),
-    technologies: parseRefs(row.Technologies),
+    communities: parseRefs(row.Communities, media),
+    technologies: parseRefs(row.Technologies, media),
   }))
 }

@@ -45,6 +45,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export interface HealthStatus {
   status: string
   sqlConfigured: boolean
+  mediaConfigured: boolean
   timestamp: string
 }
 

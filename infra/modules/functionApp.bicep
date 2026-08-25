@@ -17,6 +17,9 @@ param deploymentContainerUri string
 param sqlServerFqdn string
 param sqlDatabaseName string
 
+@description('Absolute base of the media container. The API composes every media URL from it.')
+param mediaBaseUrl string
+
 param appInsightsConnectionString string
 
 @description('Resource id of the Application Insights component, for the portal link tag.')
@@ -125,6 +128,11 @@ resource appSettings 'Microsoft.Web/sites/config@2024-04-01' = {
     SQL_DATABASE: sqlDatabaseName
     SQL_AUTH_MODE: 'mi'
     SQL_MI_CLIENT_ID: managedIdentityClientId
+
+    // The API stores blob paths and composes absolute URLs from this. Not a secret: it is the
+    // public read endpoint of the media container, and it is about to be printed in the CSP of
+    // both front-ends anyway.
+    MEDIA_BASE_URL: mediaBaseUrl
 
     // Safe in the clear: the component refuses local authentication, so the connection
     // string alone cannot publish anything. The authentication string is what actually

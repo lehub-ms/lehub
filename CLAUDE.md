@@ -227,7 +227,8 @@ These are enforceable rules; a PR violating one does not merge.
   `swa-lehub-<env>` (public), `swa-admin-lehub-<env>` (backoffice), `func-lehub-<env>`,
   `sql-lehub-<env>`, `id-lehub-<env>`, `appi-lehub-<env>`, `log-lehub-<env>`,
   `asp-lehub-<env>-func`. Globally-unique names append a hash:
-  `kv-lehub-<env>-<uniqueString:5>`, `stlehub<env><uniqueString:6>`. Resource groups:
+  `kv-lehub-<env>-<uniqueString:5>`, `stlehub<env><uniqueString:6>` (Function App host
+  storage) and `stlehubmedia<env><uniqueString:6>` (public media). Resource groups:
   `rg-lehub-<env>`. Tags `env` and `project=lehub` on everything.
 - **Branches**: `main` = production (CD → Azure prod), `develop` = integration (CD → Azure
   dev). Naming and flow: `github-workflow` skill.

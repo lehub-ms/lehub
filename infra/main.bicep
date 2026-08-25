@@ -59,6 +59,10 @@ var managedIdentityName = 'id-lehub-${environmentName}'
 var logAnalyticsName = 'log-lehub-${environmentName}'
 var appInsightsName = 'appi-lehub-${environmentName}'
 var storageAccountName = 'stlehub${environmentName}${substring(uniqueSuffix, 0, 6)}'
+// The public media store, a second account rather than a container on the one above: the two
+// need opposite settings, and the module says why. 22 characters at most, inside the 24 a
+// storage account name allows.
+var mediaStorageAccountName = 'stlehubmedia${environmentName}${substring(uniqueSuffix, 0, 6)}'
 var appServicePlanName = 'asp-lehub-${environmentName}-func'
 var sqlServerName = 'sql-lehub-${environmentName}'
 var sqlDatabaseName = 'lehub'
@@ -133,6 +137,15 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
+module mediaStorage 'modules/mediaStorage.bicep' = {
+  name: 'mediaStorage'
+  params: {
+    name: mediaStorageAccountName
+    location: location
+    tags: tags
+  }
+}
+
 module appServicePlan 'modules/appServicePlan.bicep' = {
   name: 'appServicePlan'
   params: {
@@ -199,6 +212,7 @@ module roleAssignments 'modules/roleAssignments.bicep' = {
   params: {
     principalId: managedIdentity.outputs.principalId
     storageAccountName: storage.outputs.name
+    mediaStorageAccountName: mediaStorage.outputs.name
     appInsightsName: monitoring.outputs.componentName
   }
 }
@@ -216,6 +230,7 @@ module functionApp 'modules/functionApp.bicep' = {
     deploymentContainerUri: storage.outputs.deploymentContainerUri
     sqlServerFqdn: sqlServer.outputs.fullyQualifiedDomainName
     sqlDatabaseName: sqlDatabase.outputs.name
+    mediaBaseUrl: mediaStorage.outputs.baseUrl
     appInsightsConnectionString: monitoring.outputs.connectionString
     appInsightsId: monitoring.outputs.componentId
     allowedOrigins: allowedOrigins
@@ -261,3 +276,9 @@ output managedIdentityClientId string = managedIdentity.outputs.clientId
 output managedIdentityPrincipalId string = managedIdentity.outputs.principalId
 
 output storageAccountName string = storage.outputs.name
+
+@description('Enumerated in the img-src directive of both Static Web Apps by the deployment workflow.')
+output mediaHostname string = mediaStorage.outputs.hostname
+
+@description('Absolute base of the media container. Bicep injects it as MEDIA_BASE_URL itself.')
+output mediaBaseUrl string = mediaStorage.outputs.baseUrl

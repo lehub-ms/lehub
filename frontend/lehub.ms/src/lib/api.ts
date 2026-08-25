@@ -41,6 +41,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 export interface NamedRef {
   id: string
   name: string
+  /** Absolute, composed by the API from the blob path it stores. Null when there is no logo. */
+  logoUrl: string | null
 }
 
 export interface EventSummary {
