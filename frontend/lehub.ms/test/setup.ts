@@ -31,9 +31,9 @@ export function resetViewport(): void {
   listeners.clear()
 }
 
-// jsdom ships no `matchMedia` at all, and NavBar/EventFilterDrawer call it on mount.
+// jsdom ships no `matchMedia` at all, and NavBar/CommunitiesCarousel call it on mount.
 // Query-aware because two independent stubs share this one function: NavBar's desktop
-// breakpoint check and EventFilterDrawer's `prefers-reduced-motion` check.
+// breakpoint check and CommunitiesCarousel's `prefers-reduced-motion` check.
 window.matchMedia = (query: string): MediaQueryList => {
   const matchesFor = () => (query === '(prefers-reduced-motion: reduce)' ? reducedMotionMatches : desktopMatches)
   const list = {
@@ -101,6 +101,35 @@ class PointerEventPolyfill extends MouseEvent {
 }
 
 window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent
+
+// jsdom implements no part of the Pointer Capture API either, and `vaul` captures the
+// pointer on every press inside the drawer so the gesture survives the finger leaving
+// the sheet. Without these, that single call throws out of React's dispatch and turns
+// every pointer interaction in the drawer — a checkbox tap included — into an unhandled
+// error. Capture semantics themselves don't matter here: jsdom has no compositor, so
+// events already reach their target either way.
+Element.prototype.setPointerCapture = () => undefined
+Element.prototype.releasePointerCapture = () => undefined
+Element.prototype.hasPointerCapture = () => false
+
+// jsdom resolves no stylesheet, so `getComputedStyle(el).transform` comes back as the
+// empty string where a browser always yields `'none'` or a matrix. `vaul` reads it on
+// every pointer event to know how far the sheet has already been dragged and calls
+// `.match()` on it without a guard, so the empty string — falsy, and with no
+// `webkitTransform`/`mozTransform` behind it to fall back to — throws out of the pointer
+// handler and the drag never starts. Substituting the CSS-wide initial value is enough:
+// jsdom would not resolve an inline `translate3d` into a matrix either way, so vaul reads
+// "not dragged yet" and drives the sheet from the pointer positions the test dispatches.
+// Everything jsdom does compute is passed straight through.
+const nativeGetComputedStyle = window.getComputedStyle.bind(window)
+
+window.getComputedStyle = (element: Element, pseudoElement?: string | null) => {
+  const style = nativeGetComputedStyle(element, pseudoElement)
+  if (!style.transform) {
+    Object.defineProperty(style, 'transform', { value: 'none', configurable: true })
+  }
+  return style
+}
 
 // jsdom ships no `ResizeObserver`, and `EntityRow` constructs one on mount — without this
 // every test that renders an `EventCard` throws. Kept observable rather than a bare no-op

@@ -1,6 +1,6 @@
-import { type PointerEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as Accordion from '@radix-ui/react-accordion'
-import * as Dialog from '@radix-ui/react-dialog'
+import { Drawer } from 'vaul'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { activeFilterCount, type EventFilterSelection, type FilterOptionsData } from '@/lib/eventFilters'
@@ -19,16 +19,22 @@ function toggleId(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
 }
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
-
-/** Swipe released before this snaps back open, matching the mock. */
-const DRAG_CLOSE_THRESHOLD_PX = 80
-
 /**
  * Mobile bottom-sheet filter drawer. Owns its own open/accordion state — `EventsPage`
  * only shares the filter `selection` it has in common with `EventFilterPanel`.
+ *
+ * The sheet itself is `vaul`, not a bare `@radix-ui/react-dialog`: it *is* a Radix
+ * dialog underneath (same portal, focus trap, Escape and outside-click dismissal), with
+ * the touch gesture layered on top. A hand-rolled `pointerdown/move/up` drag bound to
+ * the grab handle could only ever move the sheet from that one 4px strip, snapped back
+ * on a fast short flick because it compared distance alone, and left the scrollable body
+ * unable to hand the gesture over once it was already scrolled to the top (#114). All of
+ * that — follow-the-finger with rubber-banding, a velocity-aware release, the overlay
+ * fading as the sheet descends, and the scroll/drag handover — is what vaul brings.
+ *
+ * Motion preferences need no branch here: `index.css`'s `prefers-reduced-motion` block
+ * zeroes `animation-duration`/`transition-duration` with `!important`, which outranks the
+ * inline transitions vaul writes while dragging.
  */
 export function EventFilterDrawer({ options, selection, onChange, onReset }: EventFilterDrawerProps) {
   const [open, setOpen] = useState(false)
@@ -40,8 +46,6 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
     options.communities.length > 0 ? 'communities' : 'technologies',
   )
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const dragStartY = useRef<number | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -56,46 +60,9 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
 
   const count = activeFilterCount(selection)
 
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    dragStartY.current = event.clientY
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (dragStartY.current === null || !contentRef.current || prefersReducedMotion()) return
-    const dy = Math.max(0, event.clientY - dragStartY.current)
-    contentRef.current.style.transition = 'none'
-    contentRef.current.style.transform = `translateY(${dy}px)`
-  }
-
-  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
-    if (dragStartY.current === null) return
-    const dy = Math.max(0, event.clientY - dragStartY.current)
-    resetDrag()
-    if (dy > DRAG_CLOSE_THRESHOLD_PX) setOpen(false)
-  }
-
-  /**
-   * The browser can end a drag without ever firing `pointerup` — an OS edge-swipe
-   * gesture or the browser revoking pointer capture mid-drag fires `pointercancel`
-   * instead. Without handling it too, `dragStartY` never clears and the sheet is left
-   * visually stuck at its last dragged offset for the rest of the open session.
-   */
-  function handlePointerCancel() {
-    resetDrag()
-  }
-
-  function resetDrag() {
-    dragStartY.current = null
-    if (contentRef.current) {
-      contentRef.current.style.transition = ''
-      contentRef.current.style.transform = ''
-    }
-  }
-
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="relative inline-flex min-h-11 items-center gap-1.5 rounded-xl border-[1.5px] border-primary/35 px-4 text-sm font-semibold text-primary lg:hidden">
+    <Drawer.Root open={open} onOpenChange={setOpen}>
+      <Drawer.Trigger className="relative inline-flex min-h-11 items-center gap-1.5 rounded-xl border-[1.5px] border-primary/35 px-4 text-sm font-semibold text-primary lg:hidden">
         <SlidersHorizontal aria-hidden="true" className="size-4" />
         Filtrer
         {count > 0 && (
@@ -111,34 +78,29 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
             {count}
           </span>
         )}
-      </Dialog.Trigger>
+      </Drawer.Trigger>
 
-      <Dialog.Portal>
-        <Dialog.Overlay data-testid="filter-backdrop" className="fixed inset-0 z-[290] bg-slate-900/40" />
-        <Dialog.Content
-          ref={contentRef}
+      <Drawer.Portal>
+        <Drawer.Overlay data-testid="filter-backdrop" className="fixed inset-0 z-[290] bg-slate-900/40" />
+        <Drawer.Content
           aria-modal="true"
           aria-describedby={undefined}
           onOpenAutoFocus={(event) => {
             event.preventDefault()
             closeButtonRef.current?.focus()
           }}
-          className="animate-drawer-in glass-strong fixed inset-x-0 bottom-0 z-[300] flex h-[85dvh] flex-col rounded-t-[20px]"
+          className="glass-strong fixed inset-x-0 bottom-0 z-[300] flex h-[85dvh] flex-col rounded-t-[20px]"
         >
-          <div
-            className="flex shrink-0 touch-none justify-center pt-2.5 pb-1"
-            style={{ cursor: 'grab' }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerCancel}
-          >
+          {/* Purely an affordance now: vaul drags the sheet from anywhere on it, so this
+              strip carries no handler of its own — only the cursor hint desktop pointers
+              expect on a draggable surface. */}
+          <div className="flex shrink-0 cursor-grab justify-center pt-2.5 pb-1 active:cursor-grabbing">
             <span aria-hidden="true" className="h-1 w-9 rounded-full bg-slate-300" />
           </div>
 
           <div className="flex shrink-0 items-center justify-between px-8 pt-1.5 pb-3">
-            <Dialog.Title className="font-heading text-lg font-bold text-ink">Filtres</Dialog.Title>
-            <Dialog.Close asChild>
+            <Drawer.Title className="font-heading text-lg font-bold text-ink">Filtres</Drawer.Title>
+            <Drawer.Close asChild>
               <button
                 ref={closeButtonRef}
                 type="button"
@@ -147,9 +109,12 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
               >
                 <X aria-hidden="true" className="size-5" />
               </button>
-            </Dialog.Close>
+            </Drawer.Close>
           </div>
 
+          {/* Its own scrollport, which is what lets vaul hand the gesture back and forth:
+              a downward drag starting here scrolls the list, and only drags the sheet
+              once the list is already at the top. */}
           <div className="thin-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-8">
             <Accordion.Root type="single" collapsible value={openSection} onValueChange={setOpenSection}>
               {options.communities.length > 0 && (
@@ -214,8 +179,8 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
               </div>
             </div>
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   )
 }
