@@ -13,9 +13,10 @@
 targetScope = 'resourceGroup'
 
 // ─── Parameters ──────────────────────────────────────────────────────────────
-// Three, and only three. Everything else is either derived from the environment
-// name or fixed by a module — a value that cannot differ between environments has
-// no business being a parameter.
+// Four, and only four. Everything else is either derived from the environment name
+// or fixed by a module — a value that cannot differ between environments has no
+// business being a parameter. The two object IDs are here because an identity that
+// exists outside this template cannot be derived from anything inside it.
 
 @description('Environment this deployment targets. Drives every name and every SKU.')
 @allowed([
@@ -37,6 +38,14 @@ param sqlDatabaseSku string
 @minLength(36)
 @maxLength(36)
 param sqlAadAdminGroupObjectId string
+
+@description('Object ID of the service principal the deployment chain authenticates as.')
+// It writes the reference media to the media container, which resource group Contributor
+// does not allow: blob data is a plane of its own. Granted by modules/roleAssignments.bicep,
+// scoped to that one account. Same constraint as above, for the same reason.
+@minLength(36)
+@maxLength(36)
+param deploymentPrincipalObjectId string
 
 // ─── Naming and tags ─────────────────────────────────────────────────────────
 // Computed once here and passed down; no module rebuilds them.
@@ -211,6 +220,7 @@ module roleAssignments 'modules/roleAssignments.bicep' = {
   name: 'roleAssignments'
   params: {
     principalId: managedIdentity.outputs.principalId
+    deploymentPrincipalObjectId: deploymentPrincipalObjectId
     storageAccountName: storage.outputs.name
     mediaStorageAccountName: mediaStorage.outputs.name
     appInsightsName: monitoring.outputs.componentName

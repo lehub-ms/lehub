@@ -27,3 +27,9 @@ param sqlDatabaseSku = 'GP_S_Gen5_1'
 // Entra group sg-lehub-sql-admins. A directory object ID is an identifier, not a
 // credential: it grants nothing on its own, so committing it is not a secret leak.
 param sqlAadAdminGroupObjectId = '55cd4180-4ca7-414e-a3ca-d12948084404'
+
+// Object ID of the service principal github-lehub-cicd, which the deployment chain
+// authenticates as. The same one in both environments: one Entra application, one
+// service principal, one federated credential per GitHub environment. Like the group
+// above, a directory object ID is an identifier and not a credential.
+param deploymentPrincipalObjectId = '6e283300-b1a3-4d93-a41d-37fcca46a7d0'
