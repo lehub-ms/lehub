@@ -8,14 +8,16 @@ no Azure subscription is needed for the local loop.
 | Tool | Version | Install |
 |---|---|---|
 | Docker Desktop | any recent | <https://docs.docker.com/desktop/> — must be **running** |
-| Node.js | **22** | `brew install fnm`, then `fnm install 22` |
+| Node.js | **22.22.0** or a later 22.x | `brew install fnm`, then `fnm install` from the repository root |
 | Azure Functions Core Tools | 4.x | `npm install -g azure-functions-core-tools@4` |
 | go-sqlcmd | 1.x | `brew install sqlcmd` |
 | git | any recent | — |
 
-Node 22 is not a preference: Azure Functions v4 no longer supports Node 20, and the Function
-App runs 22. The version is pinned in `.nvmrc` and `scripts/dev-up.sh` refuses to run on
-anything else.
+The version is not a preference, and `.nvmrc` carries two constraints at once. The major must
+be 22: Azure Functions v4 no longer supports Node 20 and the Function App runs 22. The patch
+floor is 22.22.0: React Router v8, in `frontend/lehub.ms`, declares `engines: node >=22.22.0`.
+`scripts/dev-up.sh` checks both, and `engine-strict=true` in each package's `.npmrc` makes
+`npm ci` fail rather than warn below the floor — so skipping `dev-up.sh` does not skip the rule.
 
 Add fnm to your shell so `.nvmrc` is picked up when you `cd` into the repository:
 

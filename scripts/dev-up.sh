@@ -29,14 +29,31 @@ PACKAGES=(api frontend/lehub.ms frontend/admin.lehub.ms)
 
 info "Checking the toolchain"
 
+# .nvmrc is a repository-wide pin: one Node runs the four processes of dev-start.sh, and
+# ci.yml/cd.yml hand the same file to actions/setup-node. It therefore holds the
+# intersection of what the packages need, and the guard below checks both halves of it —
+# neither is redundant:
+#
+#   major 22    Azure Functions v4 runs the API on Node 22 (api/package.json engines).
+#   >= 22.22.0  react-router, in frontend/lehub.ms only, declares engines node >=22.22.0.
+#
+# Comparing the major against the raw file content — as this guard used to — made the pin
+# uncorrectable: writing a full version into .nvmrc then failed for everyone, including
+# someone running exactly that version.
 REQUIRED_NODE="$(tr -d '[:space:]' < .nvmrc)"
+REQUIRED_MAJOR="${REQUIRED_NODE%%.*}"
 need_cmd node "Install Node ${REQUIRED_NODE} — see docs/local-dev.md"
 CURRENT_NODE="$(node --version)"           # e.g. v22.23.2
-CURRENT_MAJOR="${CURRENT_NODE#v}"; CURRENT_MAJOR="${CURRENT_MAJOR%%.*}"
+CURRENT_VERSION="${CURRENT_NODE#v}"
+CURRENT_MAJOR="${CURRENT_VERSION%%.*}"
 
-if [[ "$CURRENT_MAJOR" != "$REQUIRED_NODE" ]]; then
-  die "Node ${REQUIRED_NODE} is required, found ${CURRENT_NODE}.
-  Azure Functions v4 does not support this version, and the Function App runs Node ${REQUIRED_NODE}.
+# sort -V orders versions rather than strings, so 22.9.0 sorts below 22.22.0 as it must.
+OLDEST_NODE="$(printf '%s\n%s\n' "$REQUIRED_NODE" "$CURRENT_VERSION" | sort -V | head -1)"
+
+if [[ "$CURRENT_MAJOR" != "$REQUIRED_MAJOR" || "$OLDEST_NODE" != "$REQUIRED_NODE" ]]; then
+  die "Node ${REQUIRED_NODE} or a later ${REQUIRED_MAJOR}.x is required, found ${CURRENT_NODE}.
+  Azure Functions v4 pins the API to the ${REQUIRED_MAJOR} major, and React Router v8 refuses
+  anything below ${REQUIRED_NODE}. .nvmrc carries both constraints at once.
   With fnm:   fnm use            (reads .nvmrc)
   Without it: brew install fnm && fnm install ${REQUIRED_NODE} && fnm use"
 fi
