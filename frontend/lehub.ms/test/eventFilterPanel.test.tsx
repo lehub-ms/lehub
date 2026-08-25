@@ -83,6 +83,22 @@ describe('EventFilterPanel', () => {
     expect(screen.getByText('T', { selector: 'span' })).not.toBeNull()
   })
 
+  it('shows an option\u2019s logo when it has one, and the initial fallback when it does not', () => {
+    const withLogo = buildNamedRef('community', 3, 'https://media.example/communities/three.svg')
+    const { container } = render(
+      <EventFilterPanel
+        options={{ communities: [withLogo, communities[0]!], technologies }}
+        selection={EMPTY_FILTER_SELECTION}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(withLogo.logoUrl)
+    // The logo-less option next to it still renders its initial, same slot, same row.
+    expect(screen.getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
+  })
+
   it('toggles a community on click', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

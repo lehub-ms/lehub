@@ -1,33 +1,15 @@
 import type { NamedRef } from '@/lib/api'
-import { communityColor } from '@/lib/communityPalette'
-import { cn } from '@/lib/cn'
+import { EntityAvatar } from './EntityAvatar'
 
 interface CommunityAvatarProps {
-  // Not the full NamedRef: filter options are handed to this too, and they carry no logo.
-  community: Pick<NamedRef, 'id' | 'name'>
+  community: NamedRef
   size?: number
   className?: string
-  /** Set by callers that provide their own accessible name (e.g. `CommunityAvatarStack`). */
+  /** Set by callers that provide their own accessible name (e.g. a filter summary chip). */
   hidden?: boolean
 }
 
-/** A community's initial on a deterministic, AA-safe background color. */
-export function CommunityAvatar({ community, size = 24, className, hidden }: CommunityAvatarProps) {
-  return (
-    <span
-      aria-hidden={hidden}
-      className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full font-heading font-bold text-white',
-        className,
-      )}
-      style={{
-        width: size,
-        height: size,
-        fontSize: Math.round(size * 0.4375),
-        backgroundColor: communityColor(community.id),
-      }}
-    >
-      {community.name.charAt(0).toUpperCase()}
-    </span>
-  )
+/** A community's logo, or its initial on a deterministic AA-safe background. */
+export function CommunityAvatar({ community, size, className, hidden }: CommunityAvatarProps) {
+  return <EntityAvatar entity={community} kind="community" size={size} className={className} hidden={hidden} />
 }

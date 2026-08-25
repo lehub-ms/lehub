@@ -12,6 +12,14 @@ export function EventCardSkeleton() {
         <div className="h-3 w-full animate-pulse rounded bg-primary/10" />
         <div className="h-3 w-2/3 animate-pulse rounded bg-primary/10" />
         <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-primary/10" />
+        {/* The two `EntityRow`s, which hold a fixed height in both of their modes — so the
+            grid must reserve it here too, or every card jumps when the data lands. */}
+        <div className="flex h-11 items-center">
+          <div className="h-5 w-2/3 animate-pulse rounded-full bg-primary/10" />
+        </div>
+        <div className="flex h-11 items-center">
+          <div className="h-5 w-1/2 animate-pulse rounded-full bg-primary/10" />
+        </div>
       </div>
     </div>
   )

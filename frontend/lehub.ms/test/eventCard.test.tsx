@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { EventCard } from '@/components/events/EventCard'
 import { buildEvent, buildNamedRef } from './support/event-fixtures'
 
@@ -46,13 +46,15 @@ describe('EventCard', () => {
     expect(screen.getByText(community.name)).not.toBeNull()
   })
 
-  it('shows a stacked-avatar accessible summary for several organizing communities', () => {
+  it('lists every organizing community on one line', () => {
     const communities = [buildNamedRef('community', 1), buildNamedRef('community', 2)]
-    render(<EventCard event={buildEvent({ communities })} />)
-    const stack = screen.getByRole('img', { name: /Organisé par/ })
-    expect(stack.getAttribute('aria-label')).toBe(
-      `Organisé par : ${communities.map((c) => c.name).join(', ')}`,
-    )
+    const { container } = render(<EventCard event={buildEvent({ communities })} />)
+
+    // jsdom computes no layout, so the row reads "everything fits" and stays in its full
+    // form. The stacked and "+N" forms, and their popover, are covered against a fake
+    // layout engine in `entityRow.test.tsx`.
+    for (const community of communities) expect(screen.getByText(community.name)).not.toBeNull()
+    expect(container.querySelectorAll('[data-testid="entity-row"]')).toHaveLength(2)
   })
 
   it('renders a technology pill per associated technology', () => {
@@ -68,9 +70,51 @@ describe('EventCard', () => {
     expect(within(container).queryAllByText(/technology/)).toHaveLength(0)
   })
 
-  it('is not an interactive element — no link or button role', () => {
-    render(<EventCard event={buildEvent()} />)
+  describe('bannière', () => {
+    const BANNER_URL = 'https://media.example/events/banner.svg'
+
+    function banner(container: HTMLElement): HTMLImageElement | null {
+      return container.querySelector<HTMLImageElement>('article > div > img')
+    }
+
+    it('renders the banner as an image, not a CSS background — only an image reports a failed load', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: BANNER_URL })} />)
+      expect(banner(container)?.getAttribute('src')).toBe(BANNER_URL)
+      // Decorative: the <h3> already names the event.
+      expect(banner(container)?.getAttribute('alt')).toBe('')
+    })
+
+    it('falls back to the gradient when the banner fails to load', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: BANNER_URL })} />)
+      const image = banner(container)
+      expect(image).not.toBeNull()
+
+      fireEvent.error(image!)
+
+      expect(banner(container)).toBeNull()
+      // The gradient was never conditional — it is painted underneath, so removing the
+      // image reveals it rather than leaving an empty frame.
+      const frame = container.querySelector<HTMLElement>('article > div')
+      expect(frame?.style.background).toMatch(/^linear-gradient\(135deg,/)
+    })
+
+    it('renders no banner image at all when the event declares none', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: null })} />)
+      expect(banner(container)).toBeNull()
+      const frame = container.querySelector<HTMLElement>('article > div')
+      expect(frame?.style.background).toMatch(/^linear-gradient\(135deg,/)
+    })
+  })
+
+  it('is not an interactive element — the card itself is neither a link nor a button', () => {
+    const { container } = render(<EventCard event={buildEvent()} />)
+    const card = container.querySelector('article')
+
     expect(screen.queryByRole('link')).toBeNull()
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(card?.getAttribute('role')).toBeNull()
+    expect(card?.getAttribute('tabindex')).toBeNull()
+    // Scoped to the card itself on purpose: once a list is reduced to logos it legitimately
+    // carries a button of its own, the popover trigger that hands the names back.
+    expect(card?.closest('a')).toBeNull()
   })
 })

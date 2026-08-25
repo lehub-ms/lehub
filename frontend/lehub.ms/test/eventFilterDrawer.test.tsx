@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { EventFilterDrawer } from '@/components/events/EventFilterDrawer'
 import { EMPTY_FILTER_SELECTION } from '@/lib/eventFilters'
 import { buildNamedRef } from './support/event-fixtures'
-import { resetViewport, setPrefersReducedMotion } from './setup'
+import { resetViewport } from './setup'
 
 // Radix puts `pointer-events: none` on <body> while the dialog is open, which
 // user-event refuses to click through — same guard as navbar.test.tsx.
@@ -242,74 +242,73 @@ describe('EventFilterDrawer', () => {
     expect(within(dialog).getByText('T', { selector: 'span' })).not.toBeNull()
   })
 
-  describe('glisser pour fermer', () => {
-    it('below the threshold snaps back open', async () => {
-      render(
-        <EventFilterDrawer
-          options={{ communities, technologies }}
-          selection={EMPTY_FILTER_SELECTION}
-          onChange={vi.fn()}
-          onReset={vi.fn()}
-        />,
-      )
-      const dialog = await openDrawer()
-      const handle = dialog.firstElementChild as HTMLElement
+  it('shows an option\u2019s logo in the drawer rows and in the collapsed-section summary chips', async () => {
+    const withLogo = buildNamedRef('community', 3, 'https://media.example/communities/three.svg')
+    render(
+      <EventFilterDrawer
+        options={{ communities: [withLogo], technologies }}
+        selection={{ communityIds: [withLogo.id], technologyIds: [] }}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+    const dialog = await openDrawer()
 
-      fireDrag(handle, 40)
+    // One image in the expanded row, one in the trigger's summary chip.
+    const images = [...dialog.querySelectorAll<HTMLImageElement>('img')]
+    expect(images.length).toBe(2)
+    for (const image of images) expect(image.getAttribute('src')).toBe(withLogo.logoUrl)
+  })
 
-      expect(screen.queryByRole('dialog')).not.toBeNull()
-    })
+  // The gesture's physics — the rubber-banding, the velocity-aware release threshold, the
+  // overlay fading with the sheet — belong to vaul and are covered by its own suite. What
+  // this guards is the wiring #114 got wrong: that the sheet is drag-enabled at all, and
+  // that the drag is not fenced off to the grab handle. The release itself is out of
+  // reach here — vaul reads the sheet's travel back from `getComputedStyle().transform`,
+  // and jsdom resolves no transform into a matrix, so it always reads zero.
+  it('follows the finger when the drag starts away from the grab handle', async () => {
+    render(
+      <EventFilterDrawer
+        options={{ communities, technologies }}
+        selection={EMPTY_FILTER_SELECTION}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+    const dialog = await openDrawer()
+    expect(dialog.getAttribute('data-vaul-drawer-direction')).toBe('bottom')
 
-    it('at or above the threshold closes the drawer', async () => {
-      render(
-        <EventFilterDrawer
-          options={{ communities, technologies }}
-          selection={EMPTY_FILTER_SELECTION}
-          onChange={vi.fn()}
-          onReset={vi.fn()}
-        />,
-      )
-      await openDrawer()
-      const dialog = screen.getByRole('dialog')
-      const handle = dialog.firstElementChild as HTMLElement
+    // vaul lets the entrance animation finish before it accepts a drag, and reads a real
+    // clock to decide — hence the wait rather than fake timers.
+    await settleDrawerEntrance()
 
-      fireDrag(handle, 120)
+    // The title sits in the header, well clear of the handle strip the hand-rolled drag
+    // of #114 was bound to.
+    dragDown(within(dialog).getByText('Filtres'), 90)
 
-      expect(screen.queryByRole('dialog')).toBeNull()
-    })
-
-    it('still closes synchronously with prefers-reduced-motion, without depending on a CSS transition', async () => {
-      setPrefersReducedMotion(true)
-      render(
-        <EventFilterDrawer
-          options={{ communities, technologies }}
-          selection={EMPTY_FILTER_SELECTION}
-          onChange={vi.fn()}
-          onReset={vi.fn()}
-        />,
-      )
-      await openDrawer()
-      const dialog = screen.getByRole('dialog')
-      const handle = dialog.firstElementChild as HTMLElement
-
-      fireDrag(handle, 120)
-
-      expect(screen.queryByRole('dialog')).toBeNull()
-    })
+    expect(dialog.style.transform).toBe('translate3d(0, 90px, 0)')
   })
 })
 
+/** vaul's `shouldDrag` refuses to drag for the first 500ms after the drawer opens. */
+function settleDrawerEntrance(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 550))
+}
+
 /**
- * Simulates a vertical pointer drag of `deltaY` px on the drawer's drag handle.
- * Dispatched outside React's synthetic event system (a raw DOM dispatch, not a
- * user-event click), so the resulting state updates need an explicit `act()` —
- * same reasoning as `navbar.test.tsx`'s `setDesktopViewport`.
+ * Presses `target` and drags `deltaY` px downwards. Dispatched outside React's synthetic
+ * event system (a raw DOM dispatch, not a user-event click), so the resulting state
+ * updates need an explicit `act()` — same reasoning as `navbar.test.tsx`'s
+ * `setDesktopViewport`. Two `act()` blocks rather than one, because the press flips
+ * vaul's `isDragging` state and a move dispatched in the same batch would still read the
+ * pre-press render's `false` and be ignored. vaul reads `pageY`, which jsdom derives
+ * from `clientY`.
  */
-function fireDrag(handle: HTMLElement, deltaY: number) {
-  handle.setPointerCapture = () => undefined
+function dragDown(target: HTMLElement, deltaY: number) {
   act(() => {
-    handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: 0, pointerId: 1 }))
-    handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: deltaY, pointerId: 1 }))
-    handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientY: deltaY, pointerId: 1 }))
+    target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientY: 0, pointerId: 1 }))
+  })
+  act(() => {
+    target.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientY: deltaY, pointerId: 1 }))
   })
 }
