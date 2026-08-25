@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { EventCard } from '@/components/events/EventCard'
 import { buildEvent, buildNamedRef } from './support/event-fixtures'
 
@@ -66,6 +66,42 @@ describe('EventCard', () => {
   it('omits the technology block entirely when there are none', () => {
     const { container } = render(<EventCard event={buildEvent({ technologies: [] })} />)
     expect(within(container).queryAllByText(/technology/)).toHaveLength(0)
+  })
+
+  describe('bannière', () => {
+    const BANNER_URL = 'https://media.example/events/banner.svg'
+
+    function banner(container: HTMLElement): HTMLImageElement | null {
+      return container.querySelector<HTMLImageElement>('article > div > img')
+    }
+
+    it('renders the banner as an image, not a CSS background — only an image reports a failed load', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: BANNER_URL })} />)
+      expect(banner(container)?.getAttribute('src')).toBe(BANNER_URL)
+      // Decorative: the <h3> already names the event.
+      expect(banner(container)?.getAttribute('alt')).toBe('')
+    })
+
+    it('falls back to the gradient when the banner fails to load', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: BANNER_URL })} />)
+      const image = banner(container)
+      expect(image).not.toBeNull()
+
+      fireEvent.error(image!)
+
+      expect(banner(container)).toBeNull()
+      // The gradient was never conditional — it is painted underneath, so removing the
+      // image reveals it rather than leaving an empty frame.
+      const frame = container.querySelector<HTMLElement>('article > div')
+      expect(frame?.style.background).toMatch(/^linear-gradient\(135deg,/)
+    })
+
+    it('renders no banner image at all when the event declares none', () => {
+      const { container } = render(<EventCard event={buildEvent({ bannerImageUrl: null })} />)
+      expect(banner(container)).toBeNull()
+      const frame = container.querySelector<HTMLElement>('article > div')
+      expect(frame?.style.background).toMatch(/^linear-gradient\(135deg,/)
+    })
   })
 
   it('is not an interactive element — no link or button role', () => {
