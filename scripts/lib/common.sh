@@ -155,7 +155,8 @@ $diagnostic"
 #
 # Exported because scripts/lib/blob-seed.mjs reads MEDIA_CONTAINER from the
 # environment rather than repeating the literal.
-AZURITE_BLOB_ENDPOINT='http://127.0.0.1:10000/devstoreaccount1'
+AZURITE_BLOB_PORT='10000'
+AZURITE_BLOB_ENDPOINT="http://127.0.0.1:$AZURITE_BLOB_PORT/devstoreaccount1"
 MEDIA_CONTAINER='media'
 export MEDIA_CONTAINER
 

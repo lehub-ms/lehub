@@ -7,7 +7,8 @@
 //
 //   Values.SQL_DATABASE   the workspace's own database on the shared SQL instance
 //   Values.SQL_PASSWORD   the shared instance password, from the Git common directory
-//   Host.CORS             the two front-end origins of this workspace's slot
+//   Values.MEDIA_BASE_URL absolute base of the media container, on the host in use
+//   Host.CORS             the front-end origins of this workspace's slot
 //
 // Rewriting rather than "leaving untouched" is the point: a workspace bootstrapped before
 // this state existed, or one whose slot was reassigned, would otherwise keep pointing at
@@ -16,7 +17,8 @@
 //   node local-settings.mjs <settings.json> <settings.json.example>
 //
 // Managed values arrive through the environment — LEHUB_DB_NAME, MSSQL_SA_PASSWORD,
-// LEHUB_CORS_ORIGINS — never through argv, where a password would show up in `ps`.
+// LEHUB_MEDIA_BASE_URL, LEHUB_CORS_ORIGINS — never through argv, where a password would
+// show up in `ps`.
 
 import { readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs'
 
@@ -47,6 +49,9 @@ settings.Host ??= {}
 const managedValues = {
   SQL_DATABASE: required('LEHUB_DB_NAME'),
   SQL_PASSWORD: required('MSSQL_SA_PASSWORD'),
+  // Follows the host the applications are served on: an image served from the loopback is
+  // unreachable from a phone, so the page would render with every visual missing.
+  MEDIA_BASE_URL: required('LEHUB_MEDIA_BASE_URL'),
 }
 
 const changed = []
@@ -73,10 +78,12 @@ if (missing.length > 0) {
   process.stderr.write(`missing key(s) in ${settingsPath}: ${missing.join(' ')}\n`)
 }
 
+// mode on the write and a chmod after it: the first keeps a newly created file from ever
+// existing world-readable, the second fixes a file that predates this rule. It carries the
+// local SQL password, so it is readable by its owner only — as .env is.
 if (created || changed.length > 0) {
-  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 })
 }
-// It carries the local SQL password, so it is readable by its owner only — as .env is.
 chmodSync(settingsPath, 0o600)
 
 process.stdout.write(created ? 'created' : changed.join(' '))

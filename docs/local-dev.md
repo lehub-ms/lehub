@@ -126,6 +126,39 @@ The state shared between workspaces — the slot registry and the SA password �
 common directory, `$(git rev-parse --git-common-dir)/lehub-dev`. It is the one place every
 working tree shares by construction, and nothing there is ever versioned.
 
+## Testing from a phone or tablet
+
+Everything listens on the loopback by default, so another device on the same network sees
+nothing. Exposing the stack is an explicit choice, never the default — a development machine
+is not put on the network by accident:
+
+```bash
+./scripts/dev-start.sh --network            # address taken from the default route
+./scripts/dev-start.sh --network=192.168.1.42
+```
+
+The banner prints the address and the URL to type on the device. `LEHUB_NETWORK_HOST` sets it
+too, for a shell that always works this way.
+
+Three values follow the address, and all three have to, or the page loads and then half fails:
+the API's CORS allow-list, the API origin injected into both applications, and the media base
+URL — an image served on the loopback is unreachable from the phone. The loopback origins stay
+allowed while the option is on, so the desktop browser keeps working during the test.
+
+Nothing has to be undone afterwards: the environment files are rendered on **every** start, so
+the next `./scripts/dev-start.sh` without `--network` puts everything back on the loopback,
+including after a Ctrl-C or a killed terminal.
+
+Known limits:
+
+- **Several interfaces** — Wi-Fi, Ethernet, an active VPN. The address comes from the default
+  route, which is where a packet leaving this machine would actually go; with a VPN up that is
+  the VPN's address, which is rarely what the phone can reach. Pass `--network=<ip>` then.
+- **Client isolation.** Guest Wi-Fi and many corporate networks forbid two clients from talking
+  to each other. Nothing on this side can work around it; use a phone hotspot instead.
+- **The machine's address changes** — a new lease, a network switch — while the stack runs. The
+  rendered values still name the old one; stop and start again.
+
 ## Environment files
 
 None of them are committed. `.env` and `api/local.settings.json` are **rendered on every**
@@ -166,7 +199,7 @@ which `docker-compose.yml` starts alongside SQL Server and `dev-up.sh` waits for
 bootstrap then creates the `media` container with anonymous blob-level read — the same
 `publicAccess` the Bicep module provisions — and uploads the demonstration visuals committed
 under `db/seed/media`, which `db/seed/demo.sql` references. Logos and banners are therefore
-real from the first page load, fetched cross-origin from `127.0.0.1:10000` exactly as they
+real from the first page load, fetched cross-origin from the emulator's port `10000` exactly as they
 are fetched from the storage account in Azure.
 
 Community and event visuals are placeholders created for the project. Technology icons are the
