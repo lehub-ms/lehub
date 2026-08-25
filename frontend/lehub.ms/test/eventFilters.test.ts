@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { NamedRef } from '@/lib/api'
 import {
   activeFilterCount,
   applyEventFilters,
@@ -7,13 +6,6 @@ import {
   EMPTY_FILTER_SELECTION,
 } from '@/lib/eventFilters'
 import { buildEvent, buildNamedRef } from './support/event-fixtures'
-
-/**
- * A filter option is narrower than the ref it is derived from: it carries no logo, because
- * nothing in the filter UI renders one. Comparing a ref to an option directly would fail on
- * that field alone.
- */
-const optionOf = ({ id, name }: NamedRef) => ({ id, name })
 
 const communityA = buildNamedRef('community', 1)
 const communityB = buildNamedRef('community', 2)
@@ -29,8 +21,14 @@ describe('deriveFilterOptions', () => {
 
     const options = deriveFilterOptions(events)
 
-    expect(options.communities).toEqual([communityA, communityB].map(optionOf))
-    expect(options.technologies).toEqual([techX, techY].map(optionOf))
+    expect(options.communities).toEqual([communityA, communityB])
+    expect(options.technologies).toEqual([techX, techY])
+  })
+
+  it('carries each ref\u2019s logo through to the option, instead of dropping it', () => {
+    const withLogo = buildNamedRef('community', 9, 'https://media.example/communities/nine.svg')
+    const options = deriveFilterOptions([buildEvent({ communities: [withLogo] })])
+    expect(options.communities[0]?.logoUrl).toBe(withLogo.logoUrl)
   })
 
   it('computes options from the full set, independent of any filter applied elsewhere', () => {
@@ -46,7 +44,7 @@ describe('deriveFilterOptions', () => {
     // ...but community B must still be a listed option, computed from the full `events`
     // array, not from `visible`.
     const options = deriveFilterOptions(events)
-    expect(options.communities).toContainEqual(optionOf(communityB))
+    expect(options.communities).toContainEqual(communityB)
   })
 })
 

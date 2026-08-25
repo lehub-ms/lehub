@@ -7,7 +7,10 @@ interface FilterCheckboxRowProps {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
-  /** A `CommunityAvatar` or a technology color swatch, injected by the caller. */
+  /**
+   * The option's mark, injected by the caller — and decorative, always: the row already
+   * renders `label` as text, so an avatar that named itself would be announced twice.
+   */
   leading: ReactNode
 }
 

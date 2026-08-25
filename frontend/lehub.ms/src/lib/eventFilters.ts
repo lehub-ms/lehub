@@ -1,9 +1,11 @@
 import type { EventSummary, NamedRef } from './api'
 
-export interface FilterOption {
-  id: string
-  name: string
-}
+/**
+ * A filter option is exactly the ref it was derived from — id, name *and* logo. It used
+ * to be a `{ id, name }` projection, which silently dropped the `logoUrl` the API
+ * already sends and left the filter UI with nothing but initials to render.
+ */
+export type FilterOption = NamedRef
 
 export interface EventFilterSelection {
   communityIds: string[]
@@ -23,7 +25,7 @@ export interface FilterOptionsData {
 function dedupeById(refs: NamedRef[]): FilterOption[] {
   const seen = new Map<string, FilterOption>()
   for (const ref of refs) {
-    if (!seen.has(ref.id)) seen.set(ref.id, { id: ref.id, name: ref.name })
+    if (!seen.has(ref.id)) seen.set(ref.id, ref)
   }
   return [...seen.values()]
 }

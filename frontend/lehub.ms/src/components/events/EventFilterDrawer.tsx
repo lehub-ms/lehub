@@ -165,7 +165,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
                     onChange({ ...selection, communityIds: [] })
                   }}
                   renderSummaryChip={(option) => <CommunityAvatar community={option} size={22} hidden />}
-                  renderLeading={(option) => <CommunityAvatar community={option} size={22} />}
+                  renderLeading={(option) => <CommunityAvatar community={option} size={22} hidden />}
                 />
               )}
               {options.technologies.length > 0 && (
@@ -181,7 +181,7 @@ export function EventFilterDrawer({ options, selection, onChange, onReset }: Eve
                     onChange({ ...selection, technologyIds: [] })
                   }}
                   renderSummaryChip={(option) => <TechnologyAvatar technology={option} size={22} hidden />}
-                  renderLeading={(option) => <TechnologyAvatar technology={option} size={22} />}
+                  renderLeading={(option) => <TechnologyAvatar technology={option} size={22} hidden />}
                 />
               )}
             </Accordion.Root>

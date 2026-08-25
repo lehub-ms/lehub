@@ -242,6 +242,24 @@ describe('EventFilterDrawer', () => {
     expect(within(dialog).getByText('T', { selector: 'span' })).not.toBeNull()
   })
 
+  it('shows an option\u2019s logo in the drawer rows and in the collapsed-section summary chips', async () => {
+    const withLogo = buildNamedRef('community', 3, 'https://media.example/communities/three.svg')
+    render(
+      <EventFilterDrawer
+        options={{ communities: [withLogo], technologies }}
+        selection={{ communityIds: [withLogo.id], technologyIds: [] }}
+        onChange={vi.fn()}
+        onReset={vi.fn()}
+      />,
+    )
+    const dialog = await openDrawer()
+
+    // One image in the expanded row, one in the trigger's summary chip.
+    const images = [...dialog.querySelectorAll<HTMLImageElement>('img')]
+    expect(images.length).toBe(2)
+    for (const image of images) expect(image.getAttribute('src')).toBe(withLogo.logoUrl)
+  })
+
   describe('glisser pour fermer', () => {
     it('below the threshold snaps back open', async () => {
       render(

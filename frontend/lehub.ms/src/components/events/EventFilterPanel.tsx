@@ -55,7 +55,7 @@ export function EventFilterPanel({ options, selection, onChange, onReset }: Even
                     communityIds: toggleId(selection.communityIds, community.id),
                   })
                 }}
-                leading={<CommunityAvatar community={community} size={22} />}
+                leading={<CommunityAvatar community={community} size={22} hidden />}
               />
             ))}
           </div>
@@ -84,7 +84,7 @@ export function EventFilterPanel({ options, selection, onChange, onReset }: Even
                     technologyIds: toggleId(selection.technologyIds, technology.id),
                   })
                 }}
-                leading={<TechnologyAvatar technology={technology} size={22} />}
+                leading={<TechnologyAvatar technology={technology} size={22} hidden />}
               />
             ))}
           </div>
