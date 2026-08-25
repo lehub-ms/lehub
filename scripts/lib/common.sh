@@ -201,6 +201,16 @@ AZURITE_BLOB_ENDPOINT="http://127.0.0.1:$AZURITE_BLOB_PORT/devstoreaccount1"
 MEDIA_CONTAINER='media'
 export MEDIA_CONTAINER
 
+# Top-level folders of db/seed/media that hold reference media: the bytes db/seed/reference.sql
+# points at, deployed to every environment. Everything else there is demonstration media and
+# never leaves this machine — blob-seed.sh keeps no list of those, it sweeps what is not here.
+#
+# The one definition of the split. api/test/seedMedia.test.ts parses this very line rather than
+# repeating it: a folder the test called reference and this list did not would be uploaded by
+# the local --demo sweep and by nothing else, so it would look right on every machine and 404
+# in production.
+MEDIA_REFERENCE_DIRS=(technologies)
+
 # ─── SQL connection ──────────────────────────────────────────────────────────
 # One sqlcmd code path for every environment. Local uses SQL authentication — the
 # only place it is allowed; Azure SQL is Entra-only and reuses the current `az`
