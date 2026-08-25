@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# Workspace resolution for the LeHub local stack. Sourced by lib/common.sh, never executed.
+#
+# A workspace is one working tree — the main clone or any `git worktree`. Each gets a slug,
+# a stable numeric slot, and its own database on the single shared SQL Server instance.
+#
+# Isolating the database rather than the engine is deliberate: the useful isolation between
+# branches is the schema and the data, which a separate database provides in full, whereas a
+# SQL Server container per worktree would cost about 2 GB of RAM each. A container per
+# workspace stays the documented fallback for the one case a database does not cover —
+# testing an engine version change.
+
+# ─── Shared state ────────────────────────────────────────────────────────────
+# The Git common directory is the one place every working tree of a clone shares by
+# construction. Putting the cross-workspace state there keeps it out of every working tree,
+# so it can never be committed, without inventing machine-level state under $HOME.
+
+# The shared SQL data volume, as Compose names it: project `lehub` + volume `lehub-sql-data`.
+INSTANCE_SQL_VOLUME='lehub_lehub-sql-data'
+
+# Slots 0..3. Each slot will add two redirect URIs to declare on the Entra External ID
+# application once local authentication lands (Epic #2), which is what caps the count.
+LEHUB_MAX_SLOTS=4
+
+workspace_state_dir() {
+  if [[ -z "${LEHUB_STATE_DIR:-}" ]]; then
+    local common
+    common="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+      || die "$ROOT_DIR is not a Git working tree — the shared workspace state lives in the Git common directory."
+    LEHUB_STATE_DIR="${common%/}/lehub-dev"
+    mkdir -p "$LEHUB_STATE_DIR"
+    chmod 700 "$LEHUB_STATE_DIR"
+  fi
+  printf '%s' "$LEHUB_STATE_DIR"
+}
+
+# ─── Registry lock ───────────────────────────────────────────────────────────
+# mkdir is atomic on every filesystem this repository cares about, and macOS ships no flock.
+# Two `dev-up.sh` started at the same second in two worktrees must not read the same free
+# slot and both claim it.
+
+_LEHUB_LOCK_DIR=''
+
+workspace_lock() {
+  local dir
+  dir="$(workspace_state_dir)/.lock"
+
+  for _ in $(seq 1 100); do
+    if mkdir "$dir" 2>/dev/null; then
+      _LEHUB_LOCK_DIR="$dir"
+      # Released on every exit path, including `die`. Callers install their own traps only
+      # after workspace_resolve has returned, so nothing of theirs is clobbered here.
+      trap 'workspace_unlock' EXIT INT TERM
+      return 0
+    fi
+    # A lock older than a minute belongs to a script that died without releasing it.
+    if [[ -n "$(find "$dir" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
+      rmdir "$dir" 2>/dev/null || true
+    fi
+    sleep 0.1
+  done
+
+  die "Could not acquire the workspace registry lock at $dir after 10s.
+  Another LeHub script is holding it, or it was left behind: remove the directory and retry."
+}
+
+workspace_unlock() {
+  if [[ -n "$_LEHUB_LOCK_DIR" ]]; then
+    rmdir "$_LEHUB_LOCK_DIR" 2>/dev/null || true
+    _LEHUB_LOCK_DIR=''
+    trap - EXIT INT TERM
+  fi
+  return 0
+}
+
+# ─── Slug ────────────────────────────────────────────────────────────────────
+# Derived from the working tree's directory name, normalised to what a SQL Server database
+# name and a shell variable both tolerate.
+
+_sha256_of_string() {
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s' "$1" | sha256sum | awk '{print $1}'
+  fi
+}
+
+workspace_slug() {
+  local slug
+  slug="$(basename "$ROOT_DIR")"
+  slug="$(printf '%s' "$slug" | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+    | LC_ALL=C sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//')"
+  slug="${slug:0:32}"
+  slug="${slug%%-}"
+  [[ -n "$slug" ]] || slug='workspace'
+  printf '%s' "$slug"
+}
+
+# ─── Resolution ──────────────────────────────────────────────────────────────
+# Sets LEHUB_SLOT, LEHUB_SLUG and LEHUB_DB_NAME once per process. The slot comes from the
+# registry, never from probing ports: a workspace that is merely stopped keeps its slot.
+
+workspace_resolve() {
+  [[ -n "${LEHUB_SLOT:-}" ]] && return 0
+
+  local state registry git_dir common_dir is_main slug slot entry
+  state="$(workspace_state_dir)"
+  registry="$state/workspaces"
+
+  # In the main working tree these two are the same directory; in a linked worktree the
+  # first points into `.git/worktrees/<name>`. That is an exact test, independent of where
+  # the worktree happens to live on disk.
+  git_dir="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-dir)"
+  common_dir="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir)"
+  [[ "${git_dir%/}" == "${common_dir%/}" ]] && is_main=true || is_main=false
+
+  workspace_lock
+  [[ -f "$registry" ]] || : > "$registry"
+
+  # Purge entries whose working tree is gone — `git worktree remove`, or a plain rm -rf.
+  local kept=() r_slot r_slug r_path
+  while IFS=$'\t' read -r r_slot r_slug r_path; do
+    [[ -n "${r_path:-}" && -d "$r_path" ]] || continue
+    kept+=("$r_slot"$'\t'"$r_slug"$'\t'"$r_path")
+  done < "$registry"
+
+  # An entry for this exact path wins: slot and slug are stable from one run to the next.
+  slot=''; slug=''
+  for entry in ${kept[@]+"${kept[@]}"}; do
+    IFS=$'\t' read -r r_slot r_slug r_path <<< "$entry"
+    [[ "$r_path" == "$ROOT_DIR" ]] || continue
+    slot="$r_slot"; slug="$r_slug"
+  done
+
+  if [[ -z "$slot" ]]; then
+    slug="$(workspace_slug)"
+
+    # Two worktrees named alike under different parents would otherwise share a database.
+    for entry in ${kept[@]+"${kept[@]}"}; do
+      IFS=$'\t' read -r r_slot r_slug r_path <<< "$entry"
+      if [[ "$r_slug" == "$slug" && "$r_path" != "$ROOT_DIR" ]]; then
+        slug="${slug:0:25}-$(_sha256_of_string "$ROOT_DIR" | cut -c1-6)"
+        break
+      fi
+    done
+
+    if [[ "$is_main" == true ]]; then
+      # Slot 0 belongs to the main clone by construction, not by arrival order: that is what
+      # keeps its ports and its database exactly what they were before workspaces existed.
+      slot=0
+    else
+      local used=' ' candidate
+      for entry in ${kept[@]+"${kept[@]}"}; do
+        used+="${entry%%$'\t'*} "
+      done
+      for candidate in $(seq 1 $((LEHUB_MAX_SLOTS - 1))); do
+        [[ "$used" == *" $candidate "* ]] && continue
+        slot="$candidate"; break
+      done
+      [[ -n "$slot" ]] || die "All $LEHUB_MAX_SLOTS workspace slots are taken.
+  Slot 0 is reserved for the main clone; slots 1-$((LEHUB_MAX_SLOTS - 1)) are in use:
+$(sed 's/\t/  /g; s/^/    /' "$registry")
+  Free one with ./scripts/dev-down.sh --drop-db then git worktree remove, and retry."
+    fi
+
+    kept+=("$slot"$'\t'"$slug"$'\t'"$ROOT_DIR")
+  fi
+
+  : > "$registry"
+  for entry in ${kept[@]+"${kept[@]}"}; do
+    printf '%s\n' "$entry" >> "$registry"
+  done
+
+  workspace_unlock
+
+  LEHUB_SLOT="$slot"
+  LEHUB_SLUG="$slug"
+  # Slot 0 keeps `lehub-local`, the name every existing document and habit refers to.
+  if [[ "$slot" -eq 0 ]]; then
+    LEHUB_DB_NAME='lehub-local'
+  else
+    LEHUB_DB_NAME="lehub-$slug"
+  fi
+  export LEHUB_SLOT LEHUB_SLUG LEHUB_DB_NAME
+}
+
+# Describe a registered workspace by its working-tree path, for messages that need to tell
+# another LeHub workspace apart from an unrelated process.
+workspace_describe_path() {
+  local registry r_slot r_slug r_path
+  registry="$(workspace_state_dir)/workspaces"
+  [[ -f "$registry" ]] || return 1
+  while IFS=$'\t' read -r r_slot r_slug r_path; do
+    if [[ "$1" == "$r_path" ]]; then
+      printf 'slot %s (%s)' "$r_slot" "$r_path"
+      return 0
+    fi
+  done < "$registry"
+  return 1
+}
+
+# ─── SQL Server instance password ────────────────────────────────────────────
+# The SA password is a property of the instance, not of a workspace: SQL Server applies
+# MSSQL_SA_PASSWORD only when it initialises an empty data directory. Generating one per
+# workspace against a shared volume is what left the container stuck unhealthy on
+# "Login failed for user 'sa'" as soon as a second worktree was bootstrapped.
+
+workspace_sa_password() {
+  local state file
+  state="$(workspace_state_dir)"
+  file="$state/sa-password"
+
+  if [[ -s "$file" ]]; then
+    cat "$file"
+    return 0
+  fi
+
+  # Adopt the password of a working tree bootstrapped before this shared state existed: the
+  # volume was initialised with it, and no other password will ever log in. Every working
+  # tree is scanned, not just this one — the clone that holds it is usually another.
+  local tree adopted
+  while read -r tree; do
+    [[ -f "$tree/.env" ]] || continue
+    adopted="$(sed -n 's/^MSSQL_SA_PASSWORD=//p' "$tree/.env" | head -1)"
+    if [[ -n "$adopted" ]]; then
+      printf '%s' "$adopted" > "$file"
+      chmod 600 "$file"
+      printf '%s' "$adopted"
+      return 0
+    fi
+  done < <(git -C "$ROOT_DIR" worktree list --porcelain | sed -n 's/^worktree //p')
+
+  if docker volume inspect "$INSTANCE_SQL_VOLUME" >/dev/null 2>&1; then
+    die "The shared SQL volume $INSTANCE_SQL_VOLUME exists, but its password is gone:
+  $file was deleted and no workspace .env holds it any more.
+  SQL Server only applies a password when it initialises an empty data directory, so no
+  new password can ever authenticate against this volume.
+  Start from an empty database: ./scripts/dev-down.sh --volumes, then rerun this script."
+  fi
+
+  # Generated rather than templated: a working password committed to the repository would
+  # be the real one on every default workspace. The suffix guarantees SQL Server's
+  # complexity requirement whatever rand produces.
+  local generated
+  generated="$(LC_ALL=C openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)aA1!"
+  printf '%s' "$generated" > "$file"
+  chmod 600 "$file"
+  printf '%s' "$generated"
+}
+
+# ─── Derived environment files ───────────────────────────────────────────────
+# .env and api/local.settings.json are rendered from the workspace and the shared store on
+# every run, not merely created when absent. "Left untouched" is exactly what let a
+# workspace keep a password the shared volume had never been initialised with, and what
+# would let a reassigned slot inherit the previous occupant's database.
+
+workspace_render_env() {
+  workspace_resolve
+  need_cmd node "Install Node — see docs/local-dev.md"
+
+  local password rendered
+  password="$(workspace_sa_password)"
+
+  cat > "$ROOT_DIR/.env" <<EOF
+# Generated by ./scripts/dev-up.sh and ./scripts/dev-start.sh — every run rewrites it.
+# See .env.example for what these values are, and docs/local-dev.md for the workspace model.
+
+LEHUB_SLOT=$LEHUB_SLOT
+LEHUB_SLUG=$LEHUB_SLUG
+LEHUB_DB=$LEHUB_DB_NAME
+
+# A property of the shared SQL Server instance, not of this workspace: the single copy lives
+# in the Git common directory and is never regenerated.
+MSSQL_SA_PASSWORD=$password
+EOF
+  chmod 600 "$ROOT_DIR/.env"
+
+  rendered="$(LEHUB_DB_NAME="$LEHUB_DB_NAME" MSSQL_SA_PASSWORD="$password" \
+    node "$LIB_DIR/local-settings.mjs" \
+      "$ROOT_DIR/api/local.settings.json" "$ROOT_DIR/api/local.settings.json.example")"
+
+  case "$rendered" in
+    created) ok "Created api/local.settings.json" ;;
+    '')      dim "api/local.settings.json already up to date" ;;
+    *)       ok "Updated api/local.settings.json ($rendered)" ;;
+  esac
+}

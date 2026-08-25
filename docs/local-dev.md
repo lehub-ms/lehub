@@ -41,7 +41,8 @@ git clone https://github.com/lehub-ms/lehub.git && cd lehub
 Then open <http://localhost:5173>. You should see the demonstration events.
 
 `dev-up.sh` is idempotent: run it whenever you want, it re-creates only what is missing and
-never overwrites a file you have edited.
+rewrites the files it derives from the workspace — `.env` and `api/local.settings.json` — and
+never touches anything else you have edited.
 
 ## What runs where
 
@@ -50,7 +51,7 @@ never overwrites a file you have edited.
 | `api` | 7071 | Azure Functions host — `/api/health`, `/api/events` |
 | `web` | 5173 | public site, `frontend/lehub.ms` |
 | `admin` | 5174 | backoffice, `frontend/admin.lehub.ms` |
-| SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` |
+| SQL Server | 1433 | Docker container `lehub-sql`, database `lehub-local` — one instance shared by every workspace, one database each |
 | Azurite | 10000 | Docker container `lehub-azurite`, blob container `media` |
 
 Both applications call the API **cross-origin**, exactly as they do in production: a Function
@@ -59,19 +60,67 @@ anywhere. That is why the API declares `Host.CORS` in `api/local.settings.json` 
 Vite ports are strict — an unexpected origin would simply be refused.
 
 `dev-start.sh` stops everything if any one process fails, so a half-running stack never hides
-a problem. To stop the whole thing — the three processes *and* the database — run
-`./scripts/dev-down.sh`; Ctrl+C in the `dev-start.sh` terminal stops the processes but leaves
-the database up, which is usually what you want between two runs.
+a problem. `./scripts/dev-down.sh` stops the three processes; the containers are shared with
+every other working tree, so they stay up unless you ask for `--sql`. Ctrl+C in the
+`dev-start.sh` terminal does the same thing, which is usually what you want between two runs.
+
+## Working on several worktrees
+
+Every working tree — the main clone and each `git worktree` — is a **workspace**: it gets a
+slug taken from its directory name and a numeric slot, assigned by its first `dev-up.sh` and
+kept from then on. The main clone always holds slot 0, so nothing about it changes.
+
+Each workspace has **its own database** on the one shared SQL Server instance: `lehub-local`
+at slot 0, `lehub-<slug>` after that. Migrations are recorded per database, so applying one on
+a branch leaves every other workspace's history alone. Isolating the database rather than the
+engine is deliberate — a SQL Server container per worktree would cost about 2 GB of RAM each,
+while the useful isolation between branches is the schema and the data. Running a second
+container remains the fallback for the one case a database does not cover, testing an engine
+version change.
+
+```bash
+git worktree add ../lehub.worktrees/feat-42-something feat/42-something
+cd ../lehub.worktrees/feat-42-something
+./scripts/dev-up.sh          # slot 1, database lehub-feat-42-something
+```
+
+At most **four** workspaces can exist at once — slot 0 plus three worktrees. Each slot will add
+two redirect URIs to declare on the Entra External ID application once local authentication
+lands, which is what caps the count. Removing a worktree frees its slot at the next
+`dev-up.sh` or `dev-down.sh`.
+
+Stopping is selective, and the containers are opt-in because they belong to the machine rather
+than to a workspace:
+
+| Command | Effect |
+|---|---|
+| `./scripts/dev-down.sh` | stops this workspace's processes; instance and databases untouched |
+| `./scripts/dev-down.sh --sql` | also stops the shared containers, keeping their data |
+| `./scripts/dev-down.sh --drop-db` | also drops this workspace's database |
+| `./scripts/dev-down.sh --volumes` | also deletes the volumes — **every** workspace's data, with a confirmation |
+
+The state shared between workspaces — the slot registry and the SA password — lives in the Git
+common directory, `$(git rev-parse --git-common-dir)/lehub-dev`. It is the one place every
+working tree shares by construction, and nothing there is ever versioned.
 
 ## Environment files
 
-None of them are committed; `dev-up.sh` creates each from its template.
+None of them are committed. `.env` and `api/local.settings.json` are **rendered on every**
+`dev-up.sh`, from the workspace and from the shared state, rather than created once and left
+alone: that is what stops a workspace from drifting onto another one's database, or onto a
+password the shared volume was never initialised with.
 
-| File | From | Holds |
+| File | Rendered how | Holds |
 |---|---|---|
-| `.env` | `.env.example` | the local SQL password, read by Docker Compose and the scripts |
-| `api/local.settings.json` | `api/local.settings.json.example` | Functions settings, SQL password propagated from `.env` |
-| `frontend/*/.env.local` | `frontend/*/.env.example` | `VITE_API_BASE_URL` |
+| `.env` | rewritten every run | this workspace's slot, slug and database, plus the shared SA password |
+| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE` and `SQL_PASSWORD` are managed |
+| `frontend/*/.env.local` | created from `frontend/*/.env.example` | `VITE_API_BASE_URL` |
+
+The SA password is a property of the **instance**, not of a workspace: SQL Server applies
+`MSSQL_SA_PASSWORD` only when it initialises an empty data directory, so every workspace has to
+present the same one. It is generated once into the Git common directory, in `0600`, and read
+back from there. Generating one per workspace is what used to leave the second worktree's
+container stuck unhealthy on `Login failed for user 'sa'`.
 
 `VITE_*` values are inlined into the bundle at build time, so they are public by construction:
 never put a secret in one.
@@ -138,21 +187,28 @@ Inspect the database directly:
 
 ```bash
 source .env
-sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d lehub-local \
+sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d "$LEHUB_DB" \
   -Q "SELECT COUNT(*) FROM dbo.Event"
 ```
 
 ### Starting over
 
+For this workspace alone:
+
+```bash
+./scripts/dev-down.sh --drop-db && ./scripts/dev-up.sh
+```
+
+For the whole machine — every workspace's database and the media container:
+
 ```bash
 ./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh
 ```
 
-This deletes both data volumes and rebuilds the database from the migrations and seeds, and
-the media container from `db/seed/media`. It is
-also the fix for a container that will not become healthy after you change the password in
-`.env`: SQL Server only applies `MSSQL_SA_PASSWORD` when it initialises an empty data
-directory.
+`--volumes` deletes the shared volumes, so it asks for confirmation as soon as another
+workspace has a database on the instance. It is also the only way out once the shared SA
+password has been lost: SQL Server applies `MSSQL_SA_PASSWORD` solely when it initialises an
+empty data directory, so no new password can ever authenticate against an existing volume.
 
 ## Everyday commands
 
@@ -171,8 +227,8 @@ Same scripts in `frontend/admin.lehub.ms`.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `The Docker daemon is not reachable` | Docker Desktop is not running | Start it, then rerun `dev-up.sh` |
-| `Node 22 is required, found v20.x` / `v25.x` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
-| Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a different password | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
+| `Node 22.22.0 or a later 22.x is required` | wrong Node on `PATH` | `fnm use` (reads `.nvmrc`), or add the `--use-on-cd` line above |
+| Container stuck `unhealthy`, logs repeat `Login failed for user 'sa'` | the volume was initialised with a password no workspace holds any more | `./scripts/dev-down.sh --volumes && ./scripts/dev-up.sh` |
 | `Port 7071 is already in use` | a previous `dev-start.sh` left the Functions host behind | `./scripts/dev-down.sh` |
 | `Port 10000 is needed by the lehub-azurite container` | another storage emulator is running — a standalone `azurite`, or Visual Studio's | stop it, or `lsof -i:10000 -sTCP:LISTEN` to find it |
 | `@azure/storage-blob is not installed` | dependencies installed before this package was added — `dev-up.sh` skips `npm ci` when `node_modules` exists | `npm --prefix api ci` |

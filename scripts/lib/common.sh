@@ -36,6 +36,13 @@ sha256_of() {
   fi
 }
 
+# ─── Workspaces ──────────────────────────────────────────────────────────────
+# Slot, slug and database of the current working tree, plus the shared SQL instance
+# password. Sourced here so every script gets it from the one `source lib/common.sh` it
+# already does.
+# shellcheck source=workspace.sh
+source "$LIB_DIR/workspace.sh"
+
 # ─── Local processes ─────────────────────────────────────────────────────────
 # The ports the local stack listens on, in the order dev-start.sh names them.
 DEV_PORTS=(7071 5173 5174)
@@ -77,6 +84,27 @@ stop_dev_processes() {
 }
 
 # ─── Containers ──────────────────────────────────────────────────────────────
+# One SQL Server instance and one Azurite instance are shared by every workspace, so the
+# Compose project stays `lehub` with its fixed container names, ports and volumes.
+#
+# The password reaches Compose through the environment rather than through the workspace's
+# .env: the shell environment wins over .env in Compose's interpolation, which makes the
+# shared store the single source whatever a stale .env happens to hold.
+compose() {
+  MSSQL_SA_PASSWORD="$(workspace_sa_password)" docker compose -f "$ROOT_DIR/docker-compose.yml" "$@"
+}
+
+container_running() {
+  [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == "true" ]]
+}
+
+# True when both shared containers are up, so a bootstrap can leave a running instance
+# alone instead of recreating it under another workspace's feet.
+instance_running() {
+  container_running lehub-sql && container_running lehub-azurite
+}
+
+
 # Refuse to start a container whose published port is already taken by something
 # else, with a message naming both. Without this the failure surfaces as Docker's
 # raw "bind: address already in use", which says nothing about what to stop.
@@ -86,7 +114,7 @@ stop_dev_processes() {
 assert_container_port_free() {
   local container="$1" port="$2"
 
-  [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" == "true" ]] && return 0
+  container_running "$container" && return 0
   [[ -z "$(port_listeners "$port")" ]] && return 0
 
   die "Port $port is needed by the $container container but something else is holding it.
@@ -147,15 +175,13 @@ sql_configure() {
 
   case "$env_name" in
     local)
-      if [[ -z "${MSSQL_SA_PASSWORD:-}" ]]; then
-        # Not `cp .env.example .env`: the template carries no password, dev-up.sh
-        # generates one.
-        [[ -f "$ROOT_DIR/.env" ]] || die ".env not found. Run ./scripts/dev-up.sh"
-        set -a; . "$ROOT_DIR/.env"; set +a
-      fi
-      [[ -n "${MSSQL_SA_PASSWORD:-}" ]] || die "MSSQL_SA_PASSWORD is not set — see .env.example"
+      # The instance is shared by every workspace; the database is not. The password is a
+      # property of the instance and comes from the shared store, never from a .env that
+      # may have drifted.
+      workspace_resolve
+      MSSQL_SA_PASSWORD="$(workspace_sa_password)"
       SQL_SERVER_NAME='localhost,1433'
-      SQL_DB_NAME='lehub-local'
+      SQL_DB_NAME="$LEHUB_DB_NAME"
       SQL_ARGS=(-S "$SQL_SERVER_NAME" -U sa -P "$MSSQL_SA_PASSWORD" -C)
       ;;
     dev)
@@ -191,6 +217,40 @@ sql_exec() {
 # Run a statement against master (used to create the local database).
 sql_exec_master() {
   sqlcmd "${SQL_ARGS[@]}" -d master -b -r 1 -Q "SET NOCOUNT ON; $1" >/dev/null
+}
+
+# Same as sql_query, against master: the workspace database may not exist yet, and
+# connecting to a missing database fails before the statement runs.
+sql_query_master() {
+  sqlcmd "${SQL_ARGS[@]}" -d master -b -r 1 -h -1 -W -s '|' -Q "SET NOCOUNT ON; $1" \
+    | sed '/^$/d'
+}
+
+# ─── Databases on the shared instance ────────────────────────────────────────
+# Workspace slugs are [a-z0-9-] by construction (workspace_slug), so a name never needs
+# escaping beyond the brackets and the N'' literal below.
+
+instance_db_exists() {
+  [[ -n "$(sql_query_master "SELECT 1 FROM sys.databases WHERE name = N'$1'")" ]]
+}
+
+instance_db_create() {
+  sql_exec_master "IF DB_ID('$1') IS NULL CREATE DATABASE [$1];"
+}
+
+# SINGLE_USER WITH ROLLBACK IMMEDIATE first: a Functions host left connected would
+# otherwise hold the drop open until it exits.
+instance_db_drop() {
+  sql_exec_master "IF DB_ID('$1') IS NOT NULL
+    BEGIN
+      ALTER DATABASE [$1] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+      DROP DATABASE [$1];
+    END"
+}
+
+# Every LeHub database on the instance, one per line — what --volumes must warn about.
+instance_list_dbs() {
+  sql_query_master "SELECT name FROM sys.databases WHERE name LIKE 'lehub%' ORDER BY name"
 }
 
 # Run a whole file.

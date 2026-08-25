@@ -50,6 +50,7 @@ esac
 # ─── 1. Prerequisites ────────────────────────────────────────────────────────
 
 need_cmd az "Install the Azure CLI, then run: az login"
+need_cmd perl "Install Perl — needed to render the bootstrap script below."
 
 TEMPLATE="$ROOT_DIR/db/bootstrap/create-mi-user.sql"
 [[ -f "$TEMPLATE" ]] || die "Bootstrap script not found: $TEMPLATE"
