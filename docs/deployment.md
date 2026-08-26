@@ -159,6 +159,9 @@ It refuses `--demo` outside `local`: the placeholders under
 `db-bootstrap-mi.sh` is not optional. A freshly created database has no users at all, so
 without it the API authenticates successfully and then finds it has access to nothing.
 
+`scripts/entra-bootstrap.sh` belongs to this list in spirit but not in sequence: it runs against
+the external tenant, from a different `az` session, and has its own section below.
+
 All three connect from your workstation, and the server's only firewall rule admits
 Azure-hosted callers. Open your own address first, and close it afterwards — the rule is
 a tool, not part of the environment:
@@ -324,6 +327,59 @@ sign-up flow all survive.
 The one case that does need action is an application registration deleted by hand: rerun
 `scripts/entra-bootstrap.sh <env>`, which recreates it — with a **new client ID**, which then has
 to be carried back into `infra/main.<env>.bicepparam`. The script says so when it happens.
+
+## Inside the tenant: the application and the sign-up flow
+
+An application registration and a sign-up flow are Microsoft Graph objects, not ARM resources.
+Bicep cannot describe them, so `scripts/entra-bootstrap.sh` does — created when missing, updated
+when not, one run per environment.
+
+A human runs it. The deployment chain cannot: its federated identity holds no rights in the
+external tenant, and granting it any would mean giving the pipeline directory permissions over
+the identity provider of the whole project. Same reasoning, and same place in the order, as
+`db-bootstrap-mi.sh`.
+
+**Two sessions, in this order.** The Static Web App hostnames live in the subscription; the
+application registration lives in the external tenant, which has no subscription at all. Read
+the first, then sign in to the second:
+
+```bash
+# 1. Still signed in to the subscription — the two origins the applications are served on.
+az staticwebapp list -g rg-lehub-dev --query "[].{name:name,host:defaultHostname}" -o table
+
+# 2. The external tenant. --allow-no-subscriptions is not optional: there is none.
+az login --tenant lehubextiddev.onmicrosoft.com --allow-no-subscriptions
+
+# 3. Converge.
+./scripts/entra-bootstrap.sh dev \
+  --origin https://<swa-lehub-dev host> \
+  --origin https://<swa-admin-lehub-dev host>
+```
+
+The script refuses to run from a session on any other tenant, and names both the tenant it
+expected and the one it found. It identifies the target through the tenant's public OpenID
+configuration, so that check needs no directory permission — and it is also how running it
+against an environment whose tenant does not exist yet fails with a sentence instead of a stack
+trace.
+
+**Reading the sign-up flow needs `EventListener.ReadWrite.All`** on the signed-in account. Graph
+answers 403 without it, and the script says so rather than leaving a half-applied state.
+
+**About `--origin`.** The script owns the `localhost` redirect URIs completely — eight of them,
+two per workspace slot, recomputed on every run from `LEHUB_MAX_SLOTS` in
+`scripts/lib/workspace.sh`, so every contributor's ports are declared whether or not that slot
+exists on any machine yet. It owns the `https` ones only when `--origin` says which: run without
+the flag and the ones already declared are kept. Forgetting it must never silently unpublish an
+environment. Every URI the run removes is printed before the write.
+
+**What it never touches.** The identity providers of the flow are read, never declared. A
+federated provider configured in the portal carries a client secret, which this repository must
+never hold, and declaring the list would delete it. The script checks that the local account
+method is present and reports the others by name.
+
+**Afterwards**, carry the client ID and the tenant ID into `infra/main.<env>.bicepparam`. The
+script prints them, and on the next run tells you if they no longer match what the tenant serves
+— which is what happens when a registration is deleted and recreated.
 
 ## The deployment identity
 

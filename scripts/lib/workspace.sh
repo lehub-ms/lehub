@@ -18,9 +18,20 @@
 # The shared SQL data volume, as Compose names it: project `lehub` + volume `lehub-sql-data`.
 INSTANCE_SQL_VOLUME='lehub_lehub-sql-data'
 
-# Slots 0..3. Each slot will add two redirect URIs to declare on the Entra External ID
-# application once local authentication lands (Epic #2), which is what caps the count.
+# Slots 0..3. Each slot adds two redirect URIs to declare on the Entra External ID
+# application, which is what caps the count — scripts/entra-bootstrap.sh derives them from
+# the bases below, so raising this number widens the declaration on its next run.
 LEHUB_MAX_SLOTS=4
+
+# One hundred per slot, so slot 0 keeps exactly the ports the main clone always had and the
+# numbers stay readable: 7071/5173/5174, then 7171/5273/5274, and so on. Named constants
+# rather than literals inside workspace_resolve, because entra-bootstrap.sh has to reach the
+# same numbers from outside a workspace: a second copy of "5173 + slot * 100" would drift.
+LEHUB_PORT_STRIDE=100
+LEHUB_API_PORT_BASE=7071
+LEHUB_WEB_PORT_BASE=5173
+LEHUB_ADMIN_PORT_BASE=5174
+LEHUB_INSPECT_PORT_BASE=9229
 
 workspace_state_dir() {
   if [[ -z "${LEHUB_STATE_DIR:-}" ]]; then
@@ -188,16 +199,14 @@ $(sed 's/\t/  /g; s/^/    /' "$registry")
     LEHUB_DB_NAME="lehub-$slug"
   fi
 
-  # One hundred per slot, so slot 0 keeps exactly the ports the main clone always had and
-  # the numbers stay readable: 7071/5173/5174, then 7171/5273/5274, and so on.
-  LEHUB_API_PORT=$((7071 + slot * 100))
-  LEHUB_WEB_PORT=$((5173 + slot * 100))
-  LEHUB_ADMIN_PORT=$((5174 + slot * 100))
+  LEHUB_API_PORT=$((LEHUB_API_PORT_BASE + slot * LEHUB_PORT_STRIDE))
+  LEHUB_WEB_PORT=$((LEHUB_WEB_PORT_BASE + slot * LEHUB_PORT_STRIDE))
+  LEHUB_ADMIN_PORT=$((LEHUB_ADMIN_PORT_BASE + slot * LEHUB_PORT_STRIDE))
   # `func start` opens no inspector of its own — only the HTTP port above and a random
   # loopback channel to its language worker — so nothing needs this to avoid a clash. It is
   # published so `func start --inspect $LEHUB_INSPECT_PORT` is collision-free when a
   # contributor does attach a debugger in two workspaces at once.
-  LEHUB_INSPECT_PORT=$((9229 + slot * 100))
+  LEHUB_INSPECT_PORT=$((LEHUB_INSPECT_PORT_BASE + slot * LEHUB_PORT_STRIDE))
 
   # Consumed by port_listeners/stop_dev_processes in lib/common.sh: every port check and
   # every kill is scoped to this workspace, so dev-down.sh here cannot reach another one.

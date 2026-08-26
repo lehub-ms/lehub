@@ -84,13 +84,19 @@ npm --prefix api test                         # vitest run
 ./scripts/infra-deploy.sh dev --what-if       # preview, changes nothing
 ./scripts/infra-deploy.sh dev                 # apply infra/main.dev.bicepparam
 ./scripts/db-bootstrap-mi.sh dev              # grant the managed identity on the database
+
+# Identity (Microsoft Graph objects, not ARM — a human runs it, signed in to the
+# external tenant with `az login --tenant ... --allow-no-subscriptions`)
+./scripts/entra-bootstrap.sh dev --origin https://<swa> --origin https://<swa-admin>
 ```
 
 Requires: Docker, Node via `fnm` (`.nvmrc` pins `22.22.0`, the intersection of the API's
 major-22 ceiling and React Router v8's floor; enforced by `dev-up.sh` and by `engine-strict`
 in each package's `.npmrc`), `func` (Core Tools 4), Azure CLI 2.60+,
-`az bicep`, `go-sqlcmd`, `gh`, membership in the `sg-lehub-sql-admins` Entra group for any cloud
-DB operation. Setup instructions live in `docs/local-dev.md`.
+`az bicep`, `go-sqlcmd`, `gh`, `jq` (Graph payloads are built with it, never by string
+concatenation), membership in the `sg-lehub-sql-admins` Entra group for any cloud DB operation,
+and `EventListener.ReadWrite.All` in the external tenant for `entra-bootstrap.sh`. Setup
+instructions live in `docs/local-dev.md`.
 
 Two deliberate absences, both settled — do not reintroduce either:
 

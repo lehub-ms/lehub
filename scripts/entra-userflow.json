@@ -1,0 +1,85 @@
+{
+  "@odata.type": "#microsoft.graph.externalUsersSelfServiceSignUpEventsFlow",
+  "displayName": "signupsignin_v1",
+  "description": "LeHub sign-up and sign-in. Managed by scripts/entra-bootstrap.sh.",
+  "onInteractiveAuthFlowStart": {
+    "@odata.type": "#microsoft.graph.onInteractiveAuthFlowStartExternalUsersSelfServiceSignUp",
+    "isSignUpAllowed": true
+  },
+  "onAttributeCollection": {
+    "@odata.type": "#microsoft.graph.onAttributeCollectionExternalUsersSelfServiceSignUp",
+    "attributes": [
+      {
+        "id": "email",
+        "dataType": "string",
+        "displayName": "Email Address",
+        "description": "Email address of the user",
+        "userFlowAttributeType": "builtIn"
+      },
+      {
+        "id": "givenName",
+        "dataType": "string",
+        "displayName": "Given Name",
+        "description": "The user's given name (also known as first name).",
+        "userFlowAttributeType": "builtIn"
+      },
+      {
+        "id": "surname",
+        "dataType": "string",
+        "displayName": "Surname",
+        "description": "The user's surname (also known as family name or last name).",
+        "userFlowAttributeType": "builtIn"
+      }
+    ],
+    "attributeCollectionPage": {
+      "views": [
+        {
+          "title": null,
+          "description": null,
+          "inputs": [
+            {
+              "attribute": "email",
+              "label": "Adresse de messagerie",
+              "inputType": "text",
+              "defaultValue": null,
+              "hidden": true,
+              "editable": false,
+              "writeToDirectory": true,
+              "required": true,
+              "validationRegEx": "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*$",
+              "options": []
+            },
+            {
+              "attribute": "givenName",
+              "label": "Prénom",
+              "inputType": "text",
+              "defaultValue": null,
+              "hidden": false,
+              "editable": true,
+              "writeToDirectory": true,
+              "required": true,
+              "validationRegEx": "^.*",
+              "options": []
+            },
+            {
+              "attribute": "surname",
+              "label": "Nom",
+              "inputType": "text",
+              "defaultValue": null,
+              "hidden": false,
+              "editable": true,
+              "writeToDirectory": true,
+              "required": true,
+              "validationRegEx": "^.*",
+              "options": []
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "onUserCreateStart": {
+    "@odata.type": "#microsoft.graph.onUserCreateStartExternalUsersSelfServiceSignUp",
+    "userTypeToCreate": "member"
+  }
+}
