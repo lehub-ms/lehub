@@ -269,6 +269,62 @@ narrower role: nothing manages a content store there.
 Access to SQL is not an Azure RBAC assignment at all: it is a database user, created by
 `scripts/db-bootstrap-mi.sh`.
 
+## The identity tenants
+
+Entra External ID is a tenant of its own, one per environment, and neither is described in
+`/infra`. Its ARM type, `Microsoft.AzureActiveDirectory/ciamDirectories`, exists only in the
+`2023-05-17-preview` API version, while every module under `infra/modules` is hand-written
+against stable versions on purpose. A tenant is also created once per environment and never
+touched again — the same shape as the resource groups, created by hand here for the same
+reason.
+
+They live **outside** `rg-lehub-<env>`, and that is the part worth remembering. "Resetting an
+environment" above empties and rebuilds everything in that group; an identity tenant caught in
+the blast radius would take every account with it.
+
+| | Tenant | Resource group |
+|---|---|---|
+| dev | `lehubextiddev.onmicrosoft.com` | `rg-lehubextid-dev` |
+| prod | `lehubextidprod.onmicrosoft.com` | `rg-lehubextid-prod` |
+
+The name breaks the `<abbr>-lehub-<env>` convention deliberately: `rg-lehubextid-<env>` reads as
+"not the application's group", which is exactly the property that matters here. The dev tenant
+already exists, in a subscription separate from the one holding the application resources. Prod
+does not exist yet.
+
+### Creating one
+
+Not scriptable, and not worth pretending otherwise:
+
+1. Microsoft Entra admin center → **External Identities** → **Create external tenant**.
+2. Pick the region. **It is chosen at creation and can never be changed** — the same class of
+   irreversible decision that makes `infra-deploy.sh` refuse a resource group outside
+   `westeurope`.
+3. Name it per the table above.
+4. Creation takes up to about thirty minutes. A wait is not a failure.
+5. In the new tenant, enable the local account sign-in method with **email and password**. The
+   sign-up flow rests on it.
+
+Then record three values. None is a secret — they are identifiers, and they end up committed to
+`infra/main.<env>.bicepparam` like every other directory object ID in this repository:
+
+- the **subdomain**, `lehubextid<env>`
+- the **tenant ID**
+- the **authority**, `https://lehubextid<env>.ciamlogin.com/<tenant-id>/v2.0`
+
+Everything inside the tenant — the application registration and the sign-up flow — is then the
+job of `scripts/entra-bootstrap.sh`, described in the next section.
+
+### When an environment is rebuilt
+
+Nothing to do. The tenant lives in another resource group, in another subscription, and neither
+`infra-deploy.sh` nor the reset procedure can reach it. Accounts, application registration and
+sign-up flow all survive.
+
+The one case that does need action is an application registration deleted by hand: rerun
+`scripts/entra-bootstrap.sh <env>`, which recreates it — with a **new client ID**, which then has
+to be carried back into `infra/main.<env>.bicepparam`. The script says so when it happens.
+
 ## The deployment identity
 
 GitHub Actions authenticates to Azure with OIDC federated credentials: the workflow

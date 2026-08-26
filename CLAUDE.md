@@ -239,6 +239,10 @@ These are enforceable rules; a PR violating one does not merge.
   `kv-lehub-<env>-<uniqueString:5>`, `stlehub<env><uniqueString:6>` (Function App host
   storage) and `stlehubmedia<env><uniqueString:6>` (public media). Resource groups:
   `rg-lehub-<env>`. Tags `env` and `project=lehub` on everything.
+- **Identity tenants**: `lehubextid<env>.onmicrosoft.com` in `rg-lehubextid-<env>`, deliberately
+  outside `rg-lehub-<env>` — resetting an environment empties that group, and an identity tenant
+  in the blast radius would take every account with it. Created by hand, never in Bicep; see
+  `docs/deployment.md`.
 - **Branches**: `main` = production (CD → Azure prod), `develop` = integration (CD → Azure
   dev). Naming and flow: `github-workflow` skill.
 - **TypeScript strict** everywhere, both frontends and the API. No `any`, no `@ts-ignore`.
