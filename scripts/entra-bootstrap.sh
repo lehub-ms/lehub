@@ -264,6 +264,20 @@ FLOW_FILE="$ROOT_DIR/scripts/entra-userflow.json"
 
 FLOW_NAME="$(jq -r '.displayName' "$FLOW_FILE")"
 
+# The branches the versioned payload actually claims, normalised so the file and the tenant
+# can be compared. Everything else in the flow belongs to the tenant rather than to this
+# repository — the identity providers above all, which is why they are absent here too.
+# `attributes` is dropped from both sides: it is a navigation property Graph derives from the
+# collection page and refuses to be handed inline.
+flow_shape() {
+  jq -S '{
+    description,
+    onInteractiveAuthFlowStart,
+    onAttributeCollection: (.onAttributeCollection | del(.attributes)),
+    onUserCreateStart
+  }'
+}
+
 info "Looking for the sign-up flow '$FLOW_NAME'"
 
 # Filtered here rather than with $filter: the collection holds a handful of flows at most,
@@ -279,16 +293,28 @@ FLOW_COUNT="$(printf '%s' "$FLOW_MATCHES" | jq 'length')"
 case "$FLOW_COUNT" in
   0)
     info "Not found — creating it"
-    # The only place the identity providers are ever written. Graph requires the node at
-    # creation, so it is composed here with the local account method alone; it is never part
-    # of the versioned payload, and never rewritten afterwards. That is what lets a federated
-    # provider configured in the portal — with a secret this repository must never hold —
-    # survive every subsequent run of this script.
+    # Two things the versioned payload cannot carry, both composed here.
+    #
+    # The identity providers, because this is the only place they are ever written: Graph
+    # requires the node at creation, so it gets the local account method alone, and nothing
+    # rewrites it afterwards. That is what lets a federated provider configured in the portal
+    # — with a secret this repository must never hold — survive every later run.
+    #
+    # And the attribute bindings, because `attributes` is a navigation property: Graph
+    # rejects it inline with "The request body is null or in bad format". It is derived from
+    # the collection page rather than listed a second time, so the file stays the one place
+    # that says which attributes this flow collects.
     jq '. + {
       onAuthenticationMethodLoadStart: {
         "@odata.type": "#microsoft.graph.onAuthenticationMethodLoadStartExternalUsersSelfServiceSignUp",
         identityProviders: [{ id: "EmailPassword-OAUTH" }]
-      }
+      },
+      onAttributeCollection: (.onAttributeCollection + {
+        "attributes@odata.bind": [
+          .onAttributeCollection.attributeCollectionPage.views[].inputs[].attribute
+          | "https://graph.microsoft.com/v1.0/identity/userFlowAttributes(\u0027\(.)\u0027)"
+        ]
+      })
     }' "$FLOW_FILE" > "$BODY_FILE"
     FLOW_ID="$(graph POST "$GRAPH/identity/authenticationEventsFlows" | jq -r '.id')"
     : > "$BODY_FILE"
@@ -297,10 +323,14 @@ case "$FLOW_COUNT" in
   1)
     FLOW_ID="$(printf '%s' "$FLOW_MATCHES" | jq -r '.[0].id')"
     dim "Found $FLOW_ID"
-    cp "$FLOW_FILE" "$BODY_FILE"
-    graph PATCH "$GRAPH/identity/authenticationEventsFlows/$FLOW_ID" >/dev/null
-    : > "$BODY_FILE"
-    ok "Sign-up flow converged — email, given name and surname all required"
+    if [[ "$(flow_shape < "$FLOW_FILE")" == "$(printf '%s' "$FLOW_MATCHES" | jq '.[0]' | flow_shape)" ]]; then
+      dim "Sign-up flow already as declared"
+    else
+      cp "$FLOW_FILE" "$BODY_FILE"
+      graph PATCH "$GRAPH/identity/authenticationEventsFlows/$FLOW_ID" >/dev/null
+      : > "$BODY_FILE"
+      ok "Sign-up flow converged — email, given name and surname all required"
+    fi
     ;;
   *)
     die "$FLOW_COUNT sign-up flows are named '$FLOW_NAME' in this tenant.
