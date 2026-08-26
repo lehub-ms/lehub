@@ -8,6 +8,29 @@
   },
   "onAttributeCollection": {
     "@odata.type": "#microsoft.graph.onAttributeCollectionExternalUsersSelfServiceSignUp",
+    "attributes": [
+      {
+        "id": "email",
+        "dataType": "string",
+        "displayName": "Email Address",
+        "description": "Email address of the user",
+        "userFlowAttributeType": "builtIn"
+      },
+      {
+        "id": "givenName",
+        "dataType": "string",
+        "displayName": "Given Name",
+        "description": "The user's given name (also known as first name).",
+        "userFlowAttributeType": "builtIn"
+      },
+      {
+        "id": "surname",
+        "dataType": "string",
+        "displayName": "Surname",
+        "description": "The user's surname (also known as family name or last name).",
+        "userFlowAttributeType": "builtIn"
+      }
+    ],
     "attributeCollectionPage": {
       "views": [
         {

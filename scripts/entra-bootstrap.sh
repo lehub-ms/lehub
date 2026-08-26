@@ -77,6 +77,9 @@ GRAPH='https://graph.microsoft.com/v1.0'
 need_cmd az "Install the Azure CLI, then sign in to the external tenant — see docs/deployment.md"
 need_cmd jq "Install jq — the Graph payloads are built with it rather than by string concatenation."
 need_cmd curl "Install curl — the tenant is identified through its public OpenID configuration."
+# Its substitution sits in an argument position, where a failure does not trip `set -e`: the
+# scope would go out with an empty id and come back as an opaque Graph 400.
+need_cmd uuidgen "Install uuidgen (util-linux on Linux; already present on macOS)."
 
 for origin in ${ORIGINS[@]+"${ORIGINS[@]}"}; do
   [[ "$origin" == https://* ]] || die "--origin must be an https URL: '$origin'"
@@ -118,6 +121,18 @@ ok "Signed in to $TENANT_SUBDOMAIN.onmicrosoft.com ($EXPECTED_TENANT_ID)"
 # first sign-in: the client points at the subdomain, the token is issued by the GUID.
 AUTHORITY="https://$TENANT_SUBDOMAIN.ciamlogin.com/$EXPECTED_TENANT_ID/v2.0"
 ISSUER="$(printf '%s' "$DISCOVERY_DOC" | jq -r '.issuer')"
+
+# infra/main.bicep builds the issuer from the tenant ID alone rather than asking the tenant.
+# Two independent derivations of one string, with nothing between them: if they ever part
+# company, the API is handed an issuer no token carries and rejects every request while
+# looking perfectly healthy. Cheaper to assert here than to debug there.
+BICEP_ISSUER="https://$EXPECTED_TENANT_ID.ciamlogin.com/$EXPECTED_TENANT_ID/v2.0"
+[[ "$ISSUER" == "$BICEP_ISSUER" ]] || die \
+  "This tenant publishes an issuer infra/main.bicep does not derive.
+  published  $ISSUER
+  derived    $BICEP_ISSUER
+  The API would validate tokens against a string none of them carries. Fix entraIssuer in
+  infra/main.bicep before going any further."
 
 # Bodies go to `az rest` through files: a Graph payload on a command line would be re-parsed
 # by the shell, and a label carrying an apostrophe is enough to break that.
@@ -206,7 +221,13 @@ while IFS= read -r uri; do
   warn "dropping redirect URI $uri"
 done <<< "$CURRENT_URIS"
 
-DESIRED_JSON="$(printf '%s\n' ${DESIRED[@]+"${DESIRED[@]}"} | jq -R . | jq -s 'unique')"
+# `printf '%s\n'` with no arguments still prints one empty line, so an empty DESIRED would
+# serialise to [""] and declare a redirect URI that is the empty string.
+if [[ ${#DESIRED[@]} -eq 0 ]]; then
+  DESIRED_JSON='[]'
+else
+  DESIRED_JSON="$(printf '%s\n' "${DESIRED[@]}" | jq -R . | jq -s 'unique')"
+fi
 CURRENT_JSON="$(printf '%s' "$APP_CURRENT" | jq '(.spa.redirectUris // []) | unique')"
 
 PUBLIC_CLIENT="$(printf '%s' "$APP_CURRENT" | jq -r '.isFallbackPublicClient // false')"
@@ -223,9 +244,9 @@ fi
 
 # ─── 3b. The API the two front-ends call ─────────────────────────────────────
 # One registration is both the client and the resource: that is what "a single application
-# identity, whatever the entry point" means. Only ever created, never rewritten — changing an
-# enabled scope in place is rejected by Graph, and regenerating its ID would revoke every
-# consent already granted.
+# identity, whatever the entry point" means. The scope is only ever added, never rewritten —
+# changing an enabled scope in place is rejected by Graph, and regenerating its ID would
+# revoke every consent already granted.
 
 HAS_SCOPE="$(printf '%s' "$APP_CURRENT" | jq -r --arg v "$APP_SCOPE" '[(.api.oauth2PermissionScopes // [])[] | select(.value == $v)] | length')"
 
@@ -233,11 +254,15 @@ if [[ "$HAS_SCOPE" -gt 0 ]]; then
   dim "Scope $APP_ID_URI/$APP_SCOPE already exposed"
 else
   info "Exposing $APP_ID_URI/$APP_SCOPE"
-  jq -n --arg uri "$APP_ID_URI" --arg scope "$APP_SCOPE" --arg id "$(uuidgen | LC_ALL=C tr '[:upper:]' '[:lower:]')" '
+  # Appended to whatever the registration already exposes, never substituted for it. This
+  # property replaces the whole collection on write, so declaring one scope would delete any
+  # other — along with the consents granted for it — for a registration that had been given a
+  # second scope by hand. identifierUris is merged for the same reason.
+  jq --arg uri "$APP_ID_URI" --arg scope "$APP_SCOPE" --arg id "$(uuidgen | LC_ALL=C tr '[:upper:]' '[:lower:]')" '
     {
-      identifierUris: [$uri],
+      identifierUris: ((.identifierUris // []) + [$uri] | unique),
       api: {
-        oauth2PermissionScopes: [{
+        oauth2PermissionScopes: ((.api.oauth2PermissionScopes // []) + [{
           id: $id,
           value: $scope,
           type: "User",
@@ -246,9 +271,9 @@ else
           adminConsentDescription: "Allows the LeHub applications to call the LeHub API on behalf of the signed-in user.",
           userConsentDisplayName: "Access LeHub on your behalf",
           userConsentDescription: "Allows LeHub to read and write your data in the agenda on your behalf."
-        }]
+        }])
       }
-    }' > "$BODY_FILE"
+    }' <<< "$APP_CURRENT" > "$BODY_FILE"
   graph PATCH "$GRAPH/applications/$APP_OBJECT_ID" >/dev/null
   : > "$BODY_FILE"
   ok "Exposed $APP_ID_URI/$APP_SCOPE"
@@ -293,28 +318,23 @@ FLOW_COUNT="$(printf '%s' "$FLOW_MATCHES" | jq 'length')"
 case "$FLOW_COUNT" in
   0)
     info "Not found — creating it"
-    # Two things the versioned payload cannot carry, both composed here.
+    # The identity providers are the one thing the versioned payload cannot carry, and this
+    # is the only place they are ever written: Graph requires the node at creation, so it
+    # gets the local account method alone and nothing rewrites it afterwards. That is what
+    # lets a federated provider configured in the portal — carrying a secret this repository
+    # must never hold — survive every later run.
     #
-    # The identity providers, because this is the only place they are ever written: Graph
-    # requires the node at creation, so it gets the local account method alone, and nothing
-    # rewrites it afterwards. That is what lets a federated provider configured in the portal
-    # — with a secret this repository must never hold — survive every later run.
-    #
-    # And the attribute bindings, because `attributes` is a navigation property: Graph
-    # rejects it inline with "The request body is null or in bad format". It is derived from
-    # the collection page rather than listed a second time, so the file stays the one place
-    # that says which attributes this flow collects.
+    # Everything else goes out whole, `attributes` included. Creation is the only operation
+    # that binds them and it wants them inline, exactly as the payload declares them. The
+    # annotation form `attributes@odata.bind` looks like the modern spelling and is accepted
+    # without complaint, but it binds the first attribute and silently drops the rest — which
+    # is how a flow ends up showing a given name field it never writes to the directory.
+    # Measured against the tenant, not inferred.
     jq '. + {
       onAuthenticationMethodLoadStart: {
         "@odata.type": "#microsoft.graph.onAuthenticationMethodLoadStartExternalUsersSelfServiceSignUp",
         identityProviders: [{ id: "EmailPassword-OAUTH" }]
-      },
-      onAttributeCollection: (.onAttributeCollection + {
-        "attributes@odata.bind": [
-          .onAttributeCollection.attributeCollectionPage.views[].inputs[].attribute
-          | "https://graph.microsoft.com/v1.0/identity/userFlowAttributes(\u0027\(.)\u0027)"
-        ]
-      })
+      }
     }' "$FLOW_FILE" > "$BODY_FILE"
     FLOW_ID="$(graph POST "$GRAPH/identity/authenticationEventsFlows" | jq -r '.id')"
     : > "$BODY_FILE"
@@ -323,10 +343,32 @@ case "$FLOW_COUNT" in
   1)
     FLOW_ID="$(printf '%s' "$FLOW_MATCHES" | jq -r '.[0].id')"
     dim "Found $FLOW_ID"
+
+    # Updating cannot bind an attribute: Graph only ever adds one at creation, or through the
+    # dedicated attributes endpoint. A PATCH that carries a collection page referencing an
+    # unbound attribute is accepted and quietly ignored for that field, so the run would
+    # report convergence, change nothing, and repeat forever. Refuse instead, and name it —
+    # a field collected but never written to the directory is the very defect this flow is
+    # versioned to prevent.
+    MISSING_ATTRS="$(jq -r --argjson flow "$(printf '%s' "$FLOW_MATCHES" | jq '.[0]')" '
+      [ .onAttributeCollection.attributes[].id ]
+      - [ ($flow.onAttributeCollection.attributes // [])[].id ]
+      | join(", ")' "$FLOW_FILE")"
+
+    [[ -z "$MISSING_ATTRS" ]] || die \
+      "'$FLOW_NAME' does not collect: $MISSING_ATTRS
+  An attribute can only be bound when the flow is created, so this script cannot add it and
+  refuses to report a convergence it did not perform. Either add it from the portal, or
+  delete the flow and run this again to have it recreated from scripts/entra-userflow.json.
+  Deleting it signs nobody out — it holds no accounts."
+
     if [[ "$(flow_shape < "$FLOW_FILE")" == "$(printf '%s' "$FLOW_MATCHES" | jq '.[0]' | flow_shape)" ]]; then
       dim "Sign-up flow already as declared"
     else
-      cp "$FLOW_FILE" "$BODY_FILE"
+      # Everything the file declares except the attribute bindings: creation takes those
+      # inline, an update refuses them outright — "The request body is null or in bad format",
+      # which names nothing. They are verified above instead.
+      jq 'del(.onAttributeCollection.attributes)' "$FLOW_FILE" > "$BODY_FILE"
       graph PATCH "$GRAPH/identity/authenticationEventsFlows/$FLOW_ID" >/dev/null
       : > "$BODY_FILE"
       ok "Sign-up flow converged — email, given name and surname all required"
@@ -374,6 +416,7 @@ fi
 
 BICEPPARAM="$ROOT_DIR/infra/main.$ENV_NAME.bicepparam"
 COMMITTED_CLIENT_ID="$(sed -n "s/^param entraClientId = '\\(.*\\)'.*/\\1/p" "$BICEPPARAM" 2>/dev/null | head -1)"
+COMMITTED_TENANT_ID="$(sed -n "s/^param entraTenantId = '\\(.*\\)'.*/\\1/p" "$BICEPPARAM" 2>/dev/null | head -1)"
 
 printf '\n'
 info "Identifiers for $ENV_NAME"
@@ -384,10 +427,17 @@ dim "authority  $AUTHORITY"
 dim "issuer     $ISSUER"
 printf '\n'
 
-if [[ -z "$COMMITTED_CLIENT_ID" ]]; then
+if [[ -z "$COMMITTED_CLIENT_ID" || -z "$COMMITTED_TENANT_ID" ]]; then
   warn "infra/main.$ENV_NAME.bicepparam declares no entraClientId yet. Add:
     param entraTenantId = '$EXPECTED_TENANT_ID'
     param entraClientId = '$APP_ID'"
+elif [[ "$COMMITTED_TENANT_ID" != "$EXPECTED_TENANT_ID" ]]; then
+  # Checked as closely as the client ID: a tenant ID copied from the other environment leaves
+  # the client ID looking right while every issued token is rejected as coming from elsewhere.
+  warn "The tenant ID in infra/main.$ENV_NAME.bicepparam is not this tenant.
+    the file holds   $COMMITTED_TENANT_ID
+    this tenant is   $EXPECTED_TENANT_ID
+  The API would derive its issuer from the wrong tenant and refuse every token."
 elif [[ "$COMMITTED_CLIENT_ID" != "$APP_ID" ]]; then
   warn "The client ID changed and has to be carried back — the registration was recreated.
     infra/main.$ENV_NAME.bicepparam holds  $COMMITTED_CLIENT_ID
