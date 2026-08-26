@@ -237,6 +237,11 @@ jobs:
       contents: read
     env:
       VITE_API_BASE_URL: ${{ needs.infra.outputs.apiBaseUrl }}
+      # Declared for the whole job because two steps need it: the one that writes it
+      # into img-src before the upload, and the one that asserts it on the response
+      # after it. A single declaration is what keeps the policy that gets published
+      # and the policy that gets verified from drifting apart.
+      MEDIA_HOSTNAME: ${{ needs.infra.outputs.mediaHostname }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -281,8 +286,6 @@ jobs:
       # `connect-src` the more so, since it governs fetch and XHR, the most capable
       # exfiltration channel an injection can take.
       - name: Point both content security policies at this environment
-        env:
-          MEDIA_HOSTNAME: ${{ needs.infra.outputs.mediaHostname }}
         run: |
           if [ -z "$MEDIA_HOSTNAME" ]; then
             echo "mediaHostname is empty — refusing to publish a site that blocks its own images" >&2
@@ -360,19 +363,122 @@ jobs:
           app_location: frontend/admin.lehub.ms/dist
           skip_app_build: true
           skip_api_build: true
-      - name: Check both sites answer
+      - name: Check both sites answer with this environment's headers
+        # A 200 on / proves the site is up, not that it serves the policy this job
+        # just wrote. A configuration uploaded but never applied, a publication that
+        # changed nothing and left the previous deployment serving, a dist/ published
+        # outside this chain and so never patched at all: each of them keeps
+        # answering 200 while serving someone else's headers, or none. And because
+        # connect-src now carries the only fetch the bundles make, the visible result
+        # is empty pages behind a green job. The guard before the upload can only see
+        # the file on the runner; what a browser obeys is the response, so that is
+        # what is asserted here. It extends the existing retry loop instead of
+        # standing as its own step: Static Web Apps propagates a publication in its
+        # own time, and a single request fired straight after the upload would race
+        # that propagation and fail a healthy deployment.
         run: |
-          for host in "${{ needs.infra.outputs.webAppHostname }}" \
-                      "${{ needs.infra.outputs.adminAppHostname }}"; do
-            for attempt in $(seq 1 5); do
-              code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://$host/" || true)"
-              if [ "$code" = "200" ]; then
-                echo "https://$host/ answers 200"
+          # HTTP/2 lower-cases every header name, so the name is matched folded. The
+          # status line carries no colon and therefore matches nothing.
+          header_of() {
+            tr -d '\r' < "$1" | awk -v want="$2" '
+              tolower(substr($0, 1, index($0, ":") - 1)) == want {
+                sub(/^[^:]*:[[:space:]]*/, ""); print; exit
+              }'
+          }
+          # Read one directive at a time, as the guard before the upload does: testing
+          # the policy as a single string would pass as soon as an origin turned up in
+          # any other directive. A directive that is absent — or a policy that is —
+          # yields the empty string, which contains neither origin and so fails.
+          directive_of() {
+            printf '%s\n' "$1" | tr ';' '\n' \
+              | awk -v want="$2" '{ $1 = $1 } $1 == want { print; exit }'
+          }
+          note() { problem="${problem:+$problem; }$1"; }
+
+          # This step is the last thing standing between a policy that never took
+          # effect and a green pipeline, so it does not inherit its own preconditions
+          # from the steps that ran before it. An empty needle would turn every
+          # containment test below into a match-anything and pronounce a site serving
+          # no policy at all conformant — the one outcome this step exists to prevent.
+          if [ -z "$MEDIA_HOSTNAME" ] || [ -z "$VITE_API_BASE_URL" ]; then
+            echo "media hostname or API URL is empty — there is nothing to assert against" >&2
+            exit 1
+          fi
+
+          media_origin="https://$MEDIA_HOSTNAME"
+          headers="$(mktemp)"
+          failed=""
+          # Indexing is asserted in both directions. noindex protects the backoffice;
+          # its absence on the public application is just as much a requirement, since
+          # a header leaking from one configuration into the other would deindex the
+          # very site the project exists to publish.
+          for target in "${{ needs.infra.outputs.webAppHostname }} indexable" \
+                        "${{ needs.infra.outputs.adminAppHostname }} noindex"; do
+            host="${target% *}"
+            indexing="${target##* }"
+            # Ten attempts fifteen seconds apart, the budget the API health probe
+            # already uses: this waits on a configuration reaching the edge, not just
+            # on a process accepting connections, and the old forty-second window was
+            # sized for the latter. Failing a healthy deployment would teach the
+            # pipeline's readers to replay the job rather than believe it.
+            for attempt in $(seq 1 10); do
+              problem=""
+              : > "$headers"
+              # A distinct query per attempt. The sites answer max-age=30, so
+              # requesting one unchanging URL every fifteen seconds can be served the
+              # pre-publication response out of a cache for the whole window — the
+              # probe would then assert the deployment it was meant to replace. The
+              # path is untouched, so the same configuration governs the answer.
+              code="$(curl -s -o /dev/null -D "$headers" -w '%{http_code}' --max-time 30 \
+                "https://$host/?cd=${GITHUB_RUN_ID}-$attempt" || true)"
+              csp="$(header_of "$headers" content-security-policy)"
+              robots="$(header_of "$headers" x-robots-tag)"
+              if [ "$code" != "200" ]; then
+                note "answered $code"
+              else
+                case "$(directive_of "$csp" img-src)" in
+                  *"$media_origin"*) ;;
+                  *) note "img-src does not allow $media_origin" ;;
+                esac
+                case "$(directive_of "$csp" connect-src)" in
+                  *"$VITE_API_BASE_URL"*) ;;
+                  *) note "connect-src does not allow $VITE_API_BASE_URL" ;;
+                esac
+                # Containment, like the directives above, and for the same reason:
+                # the expectation is deliberately not read back from the file that
+                # was uploaded — an artefact whose patch silently failed would then
+                # agree with itself and pass — but an independent expectation must
+                # not turn every legitimate addition to the header, noarchive say,
+                # into a red pipeline discovered only after the merge.
+                if [ "$indexing" = noindex ]; then
+                  for token in noindex nofollow; do
+                    case "$robots" in
+                      *"$token"*) ;;
+                      *) note "X-Robots-Tag is '${robots:-absent}', missing $token" ;;
+                    esac
+                  done
+                fi
+                if [ "$indexing" = indexable ] && [ -n "$robots" ]; then
+                  note "X-Robots-Tag is '$robots' on a site that has to stay indexable"
+                fi
+              fi
+              if [ -z "$problem" ]; then
+                echo "https://$host/ answers 200 with this environment's headers"
                 continue 2
               fi
-              echo "attempt $attempt on $host: got $code, waiting 10s"
-              sleep 10
+              echo "attempt $attempt on $host: $problem, waiting 15s"
+              sleep 15
             done
-            echo "https://$host/ never answered 200" >&2
-            exit 1
+            # The whole served policy, not just the failing directive: when nothing
+            # was applied at all, seeing the committed 'self'-only policy come back
+            # names the cause immediately.
+            echo "https://$host/ never served this environment's headers: $problem" >&2
+            echo "  Content-Security-Policy: ${csp:-absent}" >&2
+            echo "  X-Robots-Tag: ${robots:-absent}" >&2
+            failed=1
           done
+          # Both hostnames are probed before the job gives up. A rewrite gone wrong
+          # affects both applications, and stopping at the first would hide the
+          # backoffice behind the public site — including the one assertion only the
+          # backoffice carries.
+          [ -z "$failed" ] || exit 1

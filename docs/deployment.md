@@ -452,8 +452,9 @@ merges produce two complete deployments, in order.
    (an empty value fails the build), points the `img-src` and `connect-src` directives of
    each built `staticwebapp.config.json` at this environment's media account and Function
    App (see below), reads each Static Web App's deployment token at run time from the OIDC
-   session — masked, never stored — publishes both independently, and checks both
-   hostnames answer 200.
+   session — masked, never stored — publishes both independently, and checks both hostnames
+   answer 200 *and* serve this environment's headers — the policy Azure returns, not the
+   file the runner wrote.
 
 ### Common failures
 
@@ -505,19 +506,37 @@ The committed file therefore stays a valid policy on its own, and a fail-closed 
 build published outside this chain is refused by its own policy instead of trusting every
 host on a domain the whole platform shares. Be clear about what that costs — `connect-src`
 covers the only fetch the bundle makes, so a `dist/` that skipped this step serves empty
-pages, not merely images-less ones. The failure is visible rather than harmless, and the
-`Check both sites answer` probe will not catch it: it asks `/` for a 200, which a site with
-an over-restrictive CSP still returns.
+pages, not merely images-less ones. That failure is loud in a browser and invisible to a
+status code: an over-restrictive CSP still answers 200 on `/`.
 
-The step guards against introducing that here. After the rewrite it asserts each directive
-individually — not the policy as one string, which would pass as soon as the origin turned
-up anywhere in it — so rewording the CSP fails the job instead of publishing a site whose
-images are blocked or whose API calls are refused.
+Two guards therefore stand on either side of the publication.
+
+**Before the upload**, the rewrite asserts each directive individually — not the policy as
+one string, which would pass as soon as the origin turned up anywhere in it — so rewording
+the CSP fails the job instead of publishing a site whose images are blocked or whose API
+calls are refused.
+
+**After the upload**, `Check both sites answer with this environment's headers` asserts the
+response rather than the file. Per hostname, `/` must return 200 *and* serve an `img-src`
+carrying this environment's media host, a `connect-src` carrying its API, an
+`X-Robots-Tag` forbidding both indexing and following on the backoffice, and no
+`X-Robots-Tag` at all on the public application, which has to stay indexable. That covers what a check on the runner
+cannot see: a configuration uploaded but never applied, a publication that changed nothing
+and left the previous deployment serving, a `dist/` published outside the chain. Both
+hostnames are probed before the job gives up, so a bad rewrite is reported on both
+applications in one run rather than one merge at a time.
+
+The assertions live inside the probe's own retry loop — ten attempts, fifteen seconds
+apart, the budget the API health probe already uses — because Static Web Apps propagates a
+publication in its own time and a request fired once, straight after the upload, would race
+it. Each attempt carries a distinct query string: the sites answer `max-age=30`, and one
+unchanging URL can be served the pre-publication response out of a cache for the whole
+window.
 
 Two consequences worth knowing:
 
-- A **custom domain**, on the media account or on the Function App, has to be added at that
-  same step. Nothing else in the chain knows about those hosts.
+- A **custom domain**, on the media account or on the Function App, has to be added to the
+  rewrite step. Nothing else in the chain knows about those hosts.
 - The policy is **not served locally** — the Vite dev server ignores
   `staticwebapp.config.json` — so a CSP regression is only observable on a deployed
   environment. Verify the header, not the file:
