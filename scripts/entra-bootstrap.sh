@@ -69,6 +69,13 @@ APP_NAME="LeHub SPA - $ENV_UPPER"
 APP_ID_URI='api://lehub-api'
 APP_SCOPE='access_as_user'
 
+# Claims the applications and the API read off the token rather than fetching. Optional in
+# Entra's sense — absent unless asked for — and asked for on *both* token types here, which is
+# the whole point: the legacy emitted given_name and family_name in the access token and not in
+# the ID token, the code papered over it with a local derivation from the email address, and
+# users ended up with their email address showing in the navigation.
+APP_CLAIMS='["email", "given_name", "family_name"]'
+
 TENANT_SUBDOMAIN="lehubextid$ENV_NAME"
 GRAPH='https://graph.microsoft.com/v1.0'
 
@@ -277,6 +284,43 @@ else
   graph PATCH "$GRAPH/applications/$APP_OBJECT_ID" >/dev/null
   : > "$BODY_FILE"
   ok "Exposed $APP_ID_URI/$APP_SCOPE"
+fi
+
+# ─── 3c. The claims those tokens carry ───────────────────────────────────────
+# Collecting an attribute and putting it in a token are two different settings, and only the
+# second is what a caller ever sees. The sign-up flow below makes sure the values exist in the
+# directory; this makes sure both token types carry them.
+#
+# Added to whatever each list already holds, never substituted for it — same reason as the
+# scope above: this property replaces the whole collection on write.
+
+CLAIMS_CURRENT="$(printf '%s' "$APP_CURRENT" | jq '.optionalClaims // {}')"
+CLAIMS_DESIRED="$(jq -n --argjson want "$APP_CLAIMS" --argjson cur "$CLAIMS_CURRENT" '
+  def merge($existing):
+    ($existing // [])
+    + [ $want[]
+        | select(. as $n | (($existing // []) | map(.name) | index($n)) | not)
+        | { name: ., source: null, essential: false, additionalProperties: [] } ];
+  {
+    idToken: merge($cur.idToken),
+    accessToken: merge($cur.accessToken),
+    saml2Token: ($cur.saml2Token // [])
+  }')"
+
+claims_names() { jq -S '{idToken: [.idToken[].name] | sort, accessToken: [.accessToken[].name] | sort}'; }
+
+if [[ "$(printf '%s' "$CLAIMS_DESIRED" | claims_names)" == "$(printf '%s' "$CLAIMS_CURRENT" | claims_names 2>/dev/null || echo '{}')" ]]; then
+  dim "Optional claims already carried by both token types"
+else
+  MISSING_CLAIMS="$(jq -rn --argjson d "$CLAIMS_DESIRED" --argjson c "$CLAIMS_CURRENT" '
+    [ ("idToken", "accessToken") as $k
+      | ([$d[$k][].name] - [(($c[$k]) // [])[].name])[]
+      | "\($k):\(.)" ] | join(", ")')"
+  info "Adding optional claims — $MISSING_CLAIMS"
+  jq -n --argjson claims "$CLAIMS_DESIRED" '{optionalClaims: $claims}' > "$BODY_FILE"
+  graph PATCH "$GRAPH/applications/$APP_OBJECT_ID" >/dev/null
+  : > "$BODY_FILE"
+  ok "Both token types now carry $(printf '%s' "$APP_CLAIMS" | jq -r 'join(", ")')"
 fi
 
 # ─── 4. The sign-up flow ─────────────────────────────────────────────────────

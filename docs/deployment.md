@@ -378,6 +378,15 @@ exists on any machine yet. It owns the `https` ones only when `--origin` says wh
 the flag and the ones already declared are kept. Forgetting it must never silently unpublish an
 environment. Every URI the run removes is printed before the write.
 
+**Claims are a separate setting from attributes**, and only the first is ever seen by a caller.
+The sign-up flow makes sure a given name and a surname exist in the directory; the optional
+claims on the registration make sure both token types carry them. The script asks for `email`,
+`given_name` and `family_name` on the ID token **and** on the access token, because asking on one
+alone is precisely the legacy defect: the values rode in the access token, were missing from the
+ID token, and the code compensated with a local derivation from the email address — which put
+users' email addresses in the site navigation. The dev registration was found with the mirror
+image of that, all three claims on the ID token and none on the access token the API validates.
+
 **What it never touches.** The identity providers of the flow are read, never declared. A
 federated provider configured in the portal carries a client secret, which this repository must
 never hold, and declaring the list would delete it. The script checks that the local account
