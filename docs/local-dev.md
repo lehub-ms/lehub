@@ -176,8 +176,8 @@ password the shared volume was never initialised with.
 | File | Rendered how | Holds |
 |---|---|---|
 | `.env` | rewritten every run | this workspace's slot, slug and database, plus the shared SA password |
-| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD` and `Host.CORS` are managed |
-| `frontend/*/.env.local` | rewritten every run | `VITE_API_BASE_URL`, `VITE_DEV_PORT`, `VITE_DEV_HOST` |
+| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD`, `MEDIA_BASE_URL`, `ENTRA_*` and `Host.CORS` are managed |
+| `frontend/*/.env.local` | rewritten every run | `VITE_API_BASE_URL`, `VITE_DEV_PORT`, `VITE_DEV_HOST`, `VITE_ENTRA_*` |
 | `frontend/*/.env.test` | committed fixture, never rendered | the API origin the tests assert; depends on no server |
 
 The SA password is a property of the **instance**, not of a workspace: SQL Server applies
@@ -192,6 +192,31 @@ never put a secret in one.
 SQL authentication is used **only** by the local container. Every Azure SQL server in this
 project has Entra-only authentication enabled, and the API connects with a managed identity —
 there is no application password anywhere in the cloud.
+
+### Authentication
+
+There is no local identity provider. The local stack **borrows the dev Entra External ID
+tenant**, `lehubextiddev.onmicrosoft.com`, and signs users in against it exactly as the deployed
+dev environment does. Nothing here is a credential: LeHub's application registration is a public
+client and holds no secret at all, so the tenant ID, the client ID and the authority are
+identifiers that travel in the clear — they appear in every sign-in URL anyway.
+
+They are read out of `infra/main.dev.bicepparam`, the same file the deployment takes them from,
+and rendered into `frontend/*/.env.local` and `api/local.settings.json` on every run. One place
+per environment: after a registration is recreated, that file is the only thing to update.
+Starting the stack with those values missing fails immediately, naming the cause, rather than
+serving two applications that die on the first sign-in.
+
+**Redirect URIs are exact, and Entra will not guess.** Every slot's ports are already declared on
+the registration — eight URIs, `http://localhost:<web|admin port>/auth/callback` for slots 0 to
+3 — so authentication works from any workspace without touching the tenant. That is what caps
+`LEHUB_MAX_SLOTS` at four in `scripts/lib/workspace.sh`: raising it means re-running
+`scripts/entra-bootstrap.sh dev`, which recomputes the whole localhost list from that number.
+
+`dev-start.sh --network` is the exception. The phone reaches the applications on
+`http://<machine ip>:<port>`, which is not a declared redirect URI and will be refused. Testing a
+signed-in page from a phone needs that origin added to the registration deliberately; browsing
+the public pages does not.
 
 ### Media
 

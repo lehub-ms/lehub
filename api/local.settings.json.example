@@ -10,7 +10,12 @@
     "SQL_USER": "sa",
     "SQL_PASSWORD": "<replace-with-MSSQL_SA_PASSWORD-from-.env>",
 
-    "MEDIA_BASE_URL": "http://127.0.0.1:10000/devstoreaccount1/media"
+    "MEDIA_BASE_URL": "http://127.0.0.1:10000/devstoreaccount1/media",
+
+    "ENTRA_TENANT_ID": "<rendered from infra/main.dev.bicepparam>",
+    "ENTRA_CLIENT_ID": "<rendered from infra/main.dev.bicepparam>",
+    "ENTRA_AUTHORITY": "<rendered from infra/main.dev.bicepparam>",
+    "ENTRA_ISSUER": "<rendered from infra/main.dev.bicepparam>"
   },
   "Host": {
     "CORS": "http://localhost:5173,http://localhost:5174",

@@ -13,10 +13,12 @@
 targetScope = 'resourceGroup'
 
 // ─── Parameters ──────────────────────────────────────────────────────────────
-// Four, and only four. Everything else is either derived from the environment name
+// Six, and only six. Everything else is either derived from the environment name
 // or fixed by a module — a value that cannot differ between environments has no
-// business being a parameter. The two object IDs are here because an identity that
-// exists outside this template cannot be derived from anything inside it.
+// business being a parameter. The four GUIDs are here for one reason, the same
+// each time: an identity that exists outside this template cannot be derived from
+// anything inside it. Two are directory principals; two identify the external
+// tenant and the application it holds, neither of which ARM creates.
 
 @description('Environment this deployment targets. Drives every name and every SKU.')
 @allowed([
@@ -46,6 +48,20 @@ param sqlAadAdminGroupObjectId string
 @minLength(36)
 @maxLength(36)
 param deploymentPrincipalObjectId string
+
+@description('Tenant ID of this environment\'s Entra External ID tenant. Created by hand, outside this template — see docs/deployment.md.')
+// Not a credential: a tenant ID is public, it appears in every token this project issues and
+// in the anonymous OpenID configuration anyone can fetch. Same length constraint as the object
+// IDs above, and for the same reason — an empty value must fail validation rather than deploy
+// an API that authenticates nobody.
+@minLength(36)
+@maxLength(36)
+param entraTenantId string
+
+@description('Client ID of the LeHub application registration in that tenant, produced by scripts/entra-bootstrap.sh.')
+@minLength(36)
+@maxLength(36)
+param entraClientId string
 
 // ─── Naming and tags ─────────────────────────────────────────────────────────
 // Computed once here and passed down; no module rebuilds them.
@@ -93,6 +109,19 @@ var maximumInstances = environmentName == 'prod' ? 20 : 10
 // Prod is set high enough that an alert is unambiguous, and its 50% threshold lands
 // exactly on the ~25 EUR the project budgets for itself as a whole.
 var monthlyBudgetAmount = environmentName == 'prod' ? 50 : 15
+
+// The identity tenant of this environment. Its subdomain follows the naming convention like
+// every other name in this file, so only the two GUIDs above have to be carried in by hand.
+// The tenant itself is created outside this template — and outside this resource group, so
+// that resetting an environment cannot take the accounts with it.
+var entraTenantSubdomain = 'lehubextid${environmentName}'
+
+// Two strings that look alike and are not interchangeable. The applications point at the
+// subdomain; the tokens they receive are issued by the tenant ID. Feeding one where the other
+// is expected fails at the first sign-in and nowhere earlier, so both travel from here rather
+// than being rebuilt from parts downstream.
+var entraAuthority = 'https://${entraTenantSubdomain}.ciamlogin.com/${entraTenantId}/v2.0'
+var entraIssuer = 'https://${entraTenantId}.ciamlogin.com/${entraTenantId}/v2.0'
 
 // The local Vite origins exist only so the development loop exercises the same
 // cross-origin path as the cloud. They have no reason to be allowed in prod.
@@ -244,6 +273,10 @@ module functionApp 'modules/functionApp.bicep' = {
     appInsightsConnectionString: monitoring.outputs.connectionString
     appInsightsId: monitoring.outputs.componentId
     allowedOrigins: allowedOrigins
+    entraTenantId: entraTenantId
+    entraClientId: entraClientId
+    entraAuthority: entraAuthority
+    entraIssuer: entraIssuer
     alwaysReadyInstances: alwaysReadyInstances
     maximumInstances: maximumInstances
   }
@@ -275,6 +308,15 @@ output webAppName string = webStaticSite.outputs.name
 output webAppHostname string = webStaticSite.outputs.defaultHostname
 output adminAppName string = adminStaticSite.outputs.name
 output adminAppHostname string = adminStaticSite.outputs.defaultHostname
+
+// Echoed back rather than left as parameters the workflow would have to read for itself:
+// the two front-ends are built with them, on the same path apiBaseUrl already takes, and a
+// value the deployment did not confirm is a value nobody has checked.
+@description('Becomes VITE_ENTRA_* when the front-ends are built.')
+output entraTenantId string = entraTenantId
+output entraClientId string = entraClientId
+output entraAuthority string = entraAuthority
+output entraIssuer string = entraIssuer
 
 output sqlServerName string = sqlServer.outputs.name
 output sqlServerFqdn string = sqlServer.outputs.fullyQualifiedDomainName

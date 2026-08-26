@@ -379,6 +379,9 @@ workspace_network_host() {
 workspace_render_env() {
   workspace_resolve
   need_cmd node "Install Node — see docs/local-dev.md"
+  # Fails here with a named cause rather than letting both applications start and die on the
+  # first sign-in against an undefined authority.
+  entra_configure
 
   local public_host="${1:-localhost}"
   local password rendered
@@ -431,6 +434,8 @@ EOF
 
   rendered="$(LEHUB_DB_NAME="$LEHUB_DB_NAME" MSSQL_SA_PASSWORD="$password" \
     LEHUB_CORS_ORIGINS="$cors" LEHUB_MEDIA_BASE_URL="$media_base_url" \
+    LEHUB_ENTRA_TENANT_ID="$ENTRA_TENANT_ID" LEHUB_ENTRA_CLIENT_ID="$ENTRA_CLIENT_ID" \
+    LEHUB_ENTRA_AUTHORITY="$ENTRA_AUTHORITY" LEHUB_ENTRA_ISSUER="$ENTRA_ISSUER" \
     node "$LIB_DIR/local-settings.mjs" \
       "$ROOT_DIR/api/local.settings.json" "$ROOT_DIR/api/local.settings.json.example")"
 
@@ -458,5 +463,12 @@ _workspace_render_frontend_env() {
 VITE_API_BASE_URL=$api_origin
 VITE_DEV_PORT=$port
 VITE_DEV_HOST=$dev_host
+
+# The dev Entra External ID tenant, borrowed by the local loop. Public by construction: a
+# client ID identifies a public client, it never authenticates one. This slot's redirect
+# URIs are already declared on the registration — see scripts/entra-bootstrap.sh.
+VITE_ENTRA_TENANT_ID=$ENTRA_TENANT_ID
+VITE_ENTRA_CLIENT_ID=$ENTRA_CLIENT_ID
+VITE_ENTRA_AUTHORITY=$ENTRA_AUTHORITY
 EOF
 }

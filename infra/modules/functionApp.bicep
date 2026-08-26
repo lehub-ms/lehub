@@ -28,6 +28,16 @@ param appInsightsId string
 @description('Exactly the origins allowed to call the API. Nothing else gets through.')
 param allowedOrigins array
 
+@description('Entra External ID tenant of this environment. Identifiers, not credentials.')
+param entraTenantId string
+param entraClientId string
+
+@description('What the applications point at when they sign a user in.')
+param entraAuthority string
+
+@description('What the tokens the API validates are issued by. Not the same string as the authority.')
+param entraIssuer string
+
 @description('Instances kept warm. 0 in dev, 1 in prod.')
 param alwaysReadyInstances int
 
@@ -140,7 +150,16 @@ resource appSettings 'Microsoft.Web/sites/config@2024-04-01' = {
     APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
     APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${managedIdentityClientId};Authorization=AAD'
 
-    // Nothing about authentication: every request in this scope is anonymous.
+    // What the API needs to validate a token for itself, with jose: the issuer to check,
+    // the client ID to check the audience against, and the authority its JWKS hangs off.
+    // None of them is a secret — all four appear in the tokens themselves, or in the
+    // anonymous OpenID configuration anyone can fetch. They are settings rather than
+    // constants because the two environments are two different tenants: that separation is
+    // the whole reason a test account cannot open a session on production.
+    ENTRA_TENANT_ID: entraTenantId
+    ENTRA_CLIENT_ID: entraClientId
+    ENTRA_AUTHORITY: entraAuthority
+    ENTRA_ISSUER: entraIssuer
   }
 }
 

@@ -188,6 +188,12 @@ those scripts about prod is a deliberate, reviewable change — the same stance
 `db-seed.sh` already takes about where demo data is allowed to land — and it belongs with
 the work that actually puts LeHub into production.
 
+**`infra-deploy.sh prod` stops before that**, on `BCP258: entraClientId, entraTenantId are
+declared in the Bicep file but missing an assignment`. The prod identity tenant does not exist
+yet, and `main.prod.bicepparam` deliberately holds no placeholder for it: a zero GUID would pass
+validation and deploy an API that authenticates nobody. The error names exactly what is missing,
+before anything is created. Create the tenant and run `entra-bootstrap.sh prod` to clear it.
+
 Two things are slow rather than broken, and both resolve on their own:
 
 - **Azure RBAC takes a few minutes to propagate.** A Function App started immediately

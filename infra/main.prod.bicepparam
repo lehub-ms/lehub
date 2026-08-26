@@ -27,3 +27,15 @@ param sqlAadAdminGroupObjectId = '55cd4180-4ca7-414e-a3ca-d12948084404'
 // service principal, one federated credential per GitHub environment. Like the group
 // above, a directory object ID is an identifier and not a credential.
 param deploymentPrincipalObjectId = '6e283300-b1a3-4d93-a41d-37fcca46a7d0'
+
+// entraTenantId and entraClientId are deliberately absent: the prod Entra External ID tenant
+// does not exist yet, and no placeholder can stand in for them. A zero GUID would satisfy
+// main.bicep's length constraint and deploy an API that authenticates nobody, which is the
+// one outcome worth preventing — so the deployment fails on a missing parameter instead,
+// before it creates anything.
+//
+// Create the tenant (docs/deployment.md, "The identity tenants"), run
+// `./scripts/entra-bootstrap.sh prod`, and add the two lines it prints:
+//
+//   param entraTenantId = '...'
+//   param entraClientId = '...'
