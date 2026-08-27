@@ -40,6 +40,9 @@ jobs:
       sqlServerFqdn: ${{ steps.deploy.outputs.sqlServerFqdn }}
       sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
       mediaHostname: ${{ steps.deploy.outputs.mediaHostname }}
+      entraTenantId: ${{ steps.deploy.outputs.entraTenantId }}
+      entraClientId: ${{ steps.deploy.outputs.entraClientId }}
+      entraAuthority: ${{ steps.deploy.outputs.entraAuthority }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
@@ -65,7 +68,8 @@ jobs:
           # a failed assignment does.
           for key in functionAppName functionAppHostname apiBaseUrl \
                      webAppName webAppHostname adminAppName adminAppHostname \
-                     sqlServerName sqlServerFqdn sqlDatabaseName mediaHostname; do
+                     sqlServerName sqlServerFqdn sqlDatabaseName mediaHostname \
+                     entraTenantId entraClientId entraAuthority; do
             value="$(echo "$outputs" | jq -er ".$key.value")"
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
@@ -242,6 +246,12 @@ jobs:
       # after it. A single declaration is what keeps the policy that gets published
       # and the policy that gets verified from drifting apart.
       MEDIA_HOSTNAME: ${{ needs.infra.outputs.mediaHostname }}
+      # The identity tenant of the target environment, baked in like the API URL and for
+      # the same reason: dev and prod are two different tenants, and a build carrying the
+      # wrong one would let a test account reach production.
+      VITE_ENTRA_TENANT_ID: ${{ needs.infra.outputs.entraTenantId }}
+      VITE_ENTRA_CLIENT_ID: ${{ needs.infra.outputs.entraClientId }}
+      VITE_ENTRA_AUTHORITY: ${{ needs.infra.outputs.entraAuthority }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -251,14 +261,21 @@ jobs:
           cache-dependency-path: |
             frontend/lehub.ms/package-lock.json
             frontend/admin.lehub.ms/package-lock.json
-      - name: Refuse an empty API URL
-        # An absent VITE_API_BASE_URL builds fine and produces a site that
-        # calls undefined/... — fail here, loudly, instead.
+      - name: Refuse an empty build identifier
+        # Every one of these is inlined at build time and unrecoverable afterwards. An
+        # absent VITE_API_BASE_URL builds fine and produces a site that calls
+        # undefined/...; an absent VITE_ENTRA_* one that opens a sign-in against
+        # undefined and reports it as a network error. Fail here, loudly, instead.
         run: |
-          if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "VITE_API_BASE_URL is empty — refusing to build a broken site" >&2
-            exit 1
-          fi
+          status=0
+          for name in VITE_API_BASE_URL VITE_ENTRA_TENANT_ID \
+                      VITE_ENTRA_CLIENT_ID VITE_ENTRA_AUTHORITY; do
+            if [ -z "${!name}" ]; then
+              echo "$name is empty — refusing to build a broken site" >&2
+              status=1
+            fi
+          done
+          exit $status
       # A failed build publishes nothing for either application: the publish
       # steps only run once both builds have succeeded.
       - name: Build the public app

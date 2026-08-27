@@ -231,6 +231,44 @@ media_content_type() {
   esac
 }
 
+# ─── Entra External ID ───────────────────────────────────────────────────────
+# The local loop borrows the dev tenant. There is no local one — an identity provider is not
+# something a container emulates — and no secret is involved either way: a public client is
+# identified by these values, never authenticated by them.
+#
+# They are read out of infra/main.dev.bicepparam rather than kept in a file of their own.
+# That file is already where the deployment takes them from, and a second copy here would be
+# a second place to remember after a registration is recreated. One environment, one place.
+#
+#   entra_configure
+# then use: $ENTRA_TENANT_ID $ENTRA_CLIENT_ID $ENTRA_AUTHORITY $ENTRA_ISSUER
+
+entra_configure() {
+  local env_name='dev'
+  local params="$ROOT_DIR/infra/main.$env_name.bicepparam"
+
+  [[ -f "$params" ]] || die "Cannot configure authentication: $params is missing.
+  The local stack borrows the dev Entra External ID tenant, and that file is where its
+  identifiers live. See docs/local-dev.md."
+
+  ENTRA_TENANT_ID="$(sed -n "s/^param entraTenantId = '\\(.*\\)'.*/\\1/p" "$params" | head -1)"
+  ENTRA_CLIENT_ID="$(sed -n "s/^param entraClientId = '\\(.*\\)'.*/\\1/p" "$params" | head -1)"
+
+  [[ -n "$ENTRA_TENANT_ID" && -n "$ENTRA_CLIENT_ID" ]] || die \
+    "Cannot configure authentication: infra/main.$env_name.bicepparam declares no
+  entraTenantId/entraClientId. Without them the applications would start and fail at the
+  first sign-in with an empty screen instead of a cause.
+  Run ./scripts/entra-bootstrap.sh $env_name and add the two lines it prints."
+
+  ENTRA_TENANT_SUBDOMAIN="lehubextid$env_name"
+  # Same two strings as main.bicep derives, and they are not interchangeable: the client
+  # points at the subdomain, the token is issued by the tenant ID.
+  ENTRA_AUTHORITY="https://$ENTRA_TENANT_SUBDOMAIN.ciamlogin.com/$ENTRA_TENANT_ID/v2.0"
+  ENTRA_ISSUER="https://$ENTRA_TENANT_ID.ciamlogin.com/$ENTRA_TENANT_ID/v2.0"
+
+  export ENTRA_TENANT_ID ENTRA_CLIENT_ID ENTRA_TENANT_SUBDOMAIN ENTRA_AUTHORITY ENTRA_ISSUER
+}
+
 # ─── SQL connection ──────────────────────────────────────────────────────────
 # One sqlcmd code path for every environment. Local uses SQL authentication — the
 # only place it is allowed; Azure SQL is Entra-only and reuses the current `az`

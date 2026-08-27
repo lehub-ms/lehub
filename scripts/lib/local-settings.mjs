@@ -8,6 +8,7 @@
 //   Values.SQL_DATABASE   the workspace's own database on the shared SQL instance
 //   Values.SQL_PASSWORD   the shared instance password, from the Git common directory
 //   Values.MEDIA_BASE_URL absolute base of the media container, on the host in use
+//   Values.ENTRA_*        the dev identity tenant the local loop borrows
 //   Host.CORS             the front-end origins of this workspace's slot
 //
 // Rewriting rather than "leaving untouched" is the point: a workspace bootstrapped before
@@ -52,6 +53,13 @@ const managedValues = {
   // Follows the host the applications are served on: an image served from the loopback is
   // unreachable from a phone, so the page would render with every visual missing.
   MEDIA_BASE_URL: required('LEHUB_MEDIA_BASE_URL'),
+  // The dev tenant, borrowed locally. Managed like the rest so a workspace can never keep a
+  // client ID the registration no longer serves. None of them is a credential — the API
+  // validates tokens against them, it never presents them.
+  ENTRA_TENANT_ID: required('LEHUB_ENTRA_TENANT_ID'),
+  ENTRA_CLIENT_ID: required('LEHUB_ENTRA_CLIENT_ID'),
+  ENTRA_AUTHORITY: required('LEHUB_ENTRA_AUTHORITY'),
+  ENTRA_ISSUER: required('LEHUB_ENTRA_ISSUER'),
 }
 
 const changed = []
