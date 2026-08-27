@@ -61,6 +61,10 @@ const UNAVAILABLE = {
  */
 function unavailableFor(flow: AuthFlow): Record<string, string> {
   return {
+    // Fabriqué par le client quand l'API elle-même n'a pas répondu. Sans lui, une coupure
+    // emprunterait le repli du parcours — « Email ou mot de passe incorrect » en connexion —
+    // et accuserait l'utilisateur d'une faute de frappe pendant une panne.
+    service_unavailable: UNAVAILABLE[flow],
     invalid_client: UNAVAILABLE[flow],
     unauthorized_client: UNAVAILABLE[flow],
     unsupported_challenge_type: UNAVAILABLE[flow],
