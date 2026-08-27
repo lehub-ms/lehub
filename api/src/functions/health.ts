@@ -1,4 +1,5 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import { isEntraConfigured } from '../lib/entraConfig'
 import { isMediaConfigured } from '../lib/mediaUrls'
 import { isSqlConfigured } from '../lib/sqlClient'
 
@@ -14,6 +15,10 @@ import { isSqlConfigured } from '../lib/sqlClient'
  * on the data endpoints, so a missing setting would otherwise only surface as a 500 on
  * /api/events — this makes it readable from the probe that is already checked after every
  * deployment.
+ *
+ * `entraConfigured` is the same answer for the four ENTRA_* settings. A tenant that is not
+ * configured takes down every authentication flow at once, and reading that from the probe
+ * beats reading it from a failed sign-up.
  */
 export async function health(
   _request: HttpRequest,
@@ -25,6 +30,7 @@ export async function health(
       status: 'ok',
       sqlConfigured: isSqlConfigured(),
       mediaConfigured: isMediaConfigured(),
+      entraConfigured: isEntraConfigured(),
       timestamp: new Date().toISOString(),
     },
   }
