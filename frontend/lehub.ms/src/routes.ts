@@ -5,6 +5,7 @@ import { HomePage } from '@/pages/HomePage'
 import { EventsPage } from '@/pages/EventsPage'
 import { LeHubPage } from '@/pages/LeHubPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { SignInPage } from '@/pages/SignInPage'
 import { SignUpPage } from '@/pages/SignUpPage'
 
 /**
@@ -24,6 +25,7 @@ export const routes: RouteObject[] = [
       { path: PATHS.events, caseSensitive: true, Component: EventsPage },
       { path: PATHS.hub, caseSensitive: true, Component: LeHubPage },
       { path: PATHS.signUp, caseSensitive: true, Component: SignUpPage },
+      { path: PATHS.signIn, caseSensitive: true, Component: SignInPage },
       { path: '*', Component: NotFoundPage },
     ],
   },

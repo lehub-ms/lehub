@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/cn'
-import { NAV_ITEMS } from '@/lib/navigation'
+import { NAV_ITEMS, PATHS } from '@/lib/navigation'
 import { Wordmark } from './Wordmark'
 
 /** Tailwind's `md` breakpoint. Below it the links collapse into the drawer. */
@@ -21,6 +21,12 @@ const DRAWER_LINK =
   'flex min-h-11 items-center rounded-xl px-4 text-base font-medium text-ink-body transition-colors hover:bg-primary/5 hover:text-primary'
 
 const ACTIVE_LINK = 'bg-primary-xs font-semibold text-primary'
+
+/* The account entry point. `min-h-11` here too: it is a touch target like any other, and
+   the mock-up's pill is shorter than the floor on its own. #97 turns this into the signed-in
+   identity menu; until then it is a plain link to the sign-in page. */
+const ACCOUNT_CTA =
+  'inline-flex min-h-11 items-center rounded-full bg-cta px-5 text-sm font-semibold text-white transition-colors hover:bg-cta-dark'
 
 interface SectionLinkProps {
   to: string
@@ -99,6 +105,12 @@ export function NavBar() {
           ))}
         </ul>
 
+        <div className="hidden md:flex">
+          <Link to={PATHS.signIn} className={ACCOUNT_CTA}>
+            Me connecter
+          </Link>
+        </div>
+
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Trigger
             aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
@@ -149,6 +161,16 @@ export function NavBar() {
                   </li>
                 ))}
               </ul>
+
+              <Link
+                to={PATHS.signIn}
+                onClick={() => {
+                  setOpen(false)
+                }}
+                className={cn(ACCOUNT_CTA, 'mt-5 w-full justify-center rounded-xl')}
+              >
+                Me connecter
+              </Link>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
