@@ -39,6 +39,31 @@ describe('buildEntraConfig', () => {
     expect(result.config.nativeAuthBaseUrl).not.toContain(TENANT)
   })
 
+  it('dérive le JWKS de l’hôte de l’autorité, pas de celui de l’émetteur', () => {
+    const result = buildEntraConfig(DEV)
+    if (!result.ok) return
+    // Vérifié contre la découverte publiée par le tenant dev : les clés sont servies sur
+    // l'hôte du sous-domaine, tandis que l'émetteur porte le GUID en hôte.
+    expect(result.config.jwksUri).toBe(
+      `https://lehubextiddev.ciamlogin.com/${TENANT}/discovery/v2.0/keys`,
+    )
+    expect(new URL(result.config.jwksUri).hostname).toBe(new URL(result.config.authority).hostname)
+    expect(new URL(result.config.jwksUri).hostname).not.toBe(new URL(result.config.issuer).hostname)
+  })
+
+  it("refuse une autorité qui ne se termine pas par la version", () => {
+    for (const value of [
+      `https://lehubextiddev.ciamlogin.com/${TENANT}`,
+      `https://lehubextiddev.ciamlogin.com/${TENANT}/v1.0`,
+      'https://lehubextiddev.ciamlogin.com/',
+    ]) {
+      const result = buildEntraConfig({ ...DEV, ENTRA_AUTHORITY: value })
+      expect(result.ok, value).toBe(false)
+      if (result.ok) return
+      expect(result.error.kind).toBe('authority-without-version')
+    }
+  })
+
   it('refuse chaque réglage manquant en le nommant, sans repli', () => {
     const cases: [keyof typeof DEV, string][] = [
       ['ENTRA_TENANT_ID', 'missing-tenant-id'],

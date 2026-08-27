@@ -28,6 +28,8 @@ export interface EntraConfig {
   tenantSubdomain: string
   /** Base of the Native Authentication endpoints, no trailing slash. */
   nativeAuthBaseUrl: string
+  /** Where the tenant publishes the public keys a token's signature is checked against. */
+  jwksUri: string
 }
 
 export type EntraConfigError =
@@ -37,6 +39,7 @@ export type EntraConfigError =
   | { kind: 'missing-issuer' }
   | { kind: 'invalid-authority' }
   | { kind: 'authority-is-the-issuer' }
+  | { kind: 'authority-without-version' }
 
 export type EntraConfigResult =
   | { ok: true; config: EntraConfig }
@@ -49,6 +52,7 @@ const CONFIG_ERROR_MESSAGES: Record<EntraConfigError['kind'], string> = {
   'missing-issuer': 'ENTRA_ISSUER must be set, as in https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0.',
   'invalid-authority': 'ENTRA_AUTHORITY must be an absolute https URL on a <subdomain>.ciamlogin.com host.',
   'authority-is-the-issuer': 'ENTRA_AUTHORITY carries the tenant subdomain as its host, not the tenant GUID. The GUID host is ENTRA_ISSUER, and the two are not interchangeable.',
+  'authority-without-version': 'ENTRA_AUTHORITY must end in /v2.0, as in https://lehubextiddev.ciamlogin.com/<tenant-id>/v2.0.',
 }
 
 export function describeEntraConfigError(error: EntraConfigError): string {
@@ -87,17 +91,29 @@ export function buildEntraConfig(env: NodeJS.ProcessEnv = process.env): EntraCon
   // both values are well-formed URLs on the same domain, and only the host tells them apart.
   if (GUID.test(tenantSubdomain)) return { ok: false, error: { kind: 'authority-is-the-issuer' } }
 
+  const authorityRoot = authority.replace(/\/+$/, '')
+  if (!authorityRoot.endsWith('/v2.0')) {
+    return { ok: false, error: { kind: 'authority-without-version' } }
+  }
+
   return {
     ok: true,
     config: {
       tenantId,
       clientId,
-      authority: authority.replace(/\/+$/, ''),
+      authority: authorityRoot,
       issuer: issuer.replace(/\/+$/, ''),
       tenantSubdomain,
       // The path segment is the tenant's primary domain, not its GUID — that is the shape the
       // Native Authentication reference documents, and the GUID form is not accepted there.
       nativeAuthBaseUrl: `https://${parsed.hostname}/${tenantSubdomain}.onmicrosoft.com`,
+      // The tenant publishes this under the authority's own host — the subdomain one, not the
+      // issuer's GUID host — with `/v2.0` swapped for `/discovery/v2.0/keys`. Derived rather
+      // than discovered: pinning the issuer from configuration is what makes a token
+      // trustworthy, and a discovery round trip would add a failure mode without adding a
+      // check. If Microsoft ever moves the path, every request fails loudly on a 500 rather
+      // than quietly accepting anything.
+      jwksUri: `${authorityRoot.slice(0, -'/v2.0'.length)}/discovery/v2.0/keys`,
     },
   }
 }
