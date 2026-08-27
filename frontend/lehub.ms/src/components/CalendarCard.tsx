@@ -1,6 +1,6 @@
 import { Calendar, CalendarCheck, Mail, UserPlus } from 'lucide-react'
-import { BUTTON_BASE, BUTTON_VARIANTS } from '@/lib/button-styles'
-import { cn } from '@/lib/cn'
+import { LinkButton } from '@/components/LinkButton'
+import { PATHS } from '@/lib/navigation'
 
 const APPS = [
   { icon: Calendar, label: 'Apple Calendar' },
@@ -9,11 +9,8 @@ const APPS = [
 ]
 
 /**
- * Sells account creation from the home page, ahead of the auth flow (Epic #2) that
- * would make it work. The CTA stays `aria-disabled` rather than `disabled`: a real
- * `<button>` with no `onClick` is still reachable by keyboard and screen readers, and
- * Enter/Space do nothing — visible but inert, never a broken link to a route that
- * does not exist yet.
+ * Sells account creation from the home page. The CTA was inert until the sign-up flow
+ * existed; it now goes where it always claimed to.
  */
 export function CalendarCard() {
   return (
@@ -51,19 +48,10 @@ export function CalendarCard() {
         ))}
       </div>
 
-      <button
-        type="button"
-        aria-disabled="true"
-        // Full opacity, not a dimmed style: opacity-60 over this glass card blended
-        // white-on-blue down to ~2.8:1, well under the AA floor CLAUDE.md sets for any
-        // text a focusable, still-labelled control exposes. "Disabled" is communicated
-        // by cursor-not-allowed and the sr-only suffix below, not by contrast loss.
-        className={cn(BUTTON_BASE, BUTTON_VARIANTS.primary, 'w-full cursor-not-allowed shadow-none hover:bg-primary')}
-      >
+      <LinkButton to={PATHS.signUp} className="w-full">
         <UserPlus aria-hidden="true" className="size-4" />
-        Créer un compte / Se connecter
-        <span className="sr-only">— bientôt disponible</span>
-      </button>
+        Créer un compte
+      </LinkButton>
     </div>
   )
 }

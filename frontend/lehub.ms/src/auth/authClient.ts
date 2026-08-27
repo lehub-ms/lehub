@@ -27,9 +27,15 @@ export interface AuthStepData {
   expires_in?: number
 }
 
+/**
+ * `data` accompagne aussi les refus, et ce n'est pas de la générosité : les codes de contrôle
+ * de flux — `credential_required`, `attributes_required`, `verification_required` — arrivent
+ * en 400 tout en portant le jeton de continuation de l'étape suivante. Le jeter ferait
+ * échouer un parcours qui se déroule normalement.
+ */
 export type AuthStepResult =
   | { ok: true; data: AuthStepData }
-  | { ok: false; error: AuthErrorResponse }
+  | { ok: false; error: AuthErrorResponse; data: AuthStepData }
 
 /**
  * Le code que la table de messages associe à « momentanément indisponible ».
@@ -41,7 +47,7 @@ export type AuthStepResult =
  */
 export const SERVICE_UNAVAILABLE = 'service_unavailable'
 
-const unavailable: AuthStepResult = { ok: false, error: { error: SERVICE_UNAVAILABLE } }
+const unavailable: AuthStepResult = { ok: false, error: { error: SERVICE_UNAVAILABLE }, data: {} }
 
 export async function postAuthStep(
   route: AuthRoute,
@@ -79,6 +85,7 @@ export async function postAuthStep(
         error: record['error'],
         suberror: typeof record['suberror'] === 'string' ? record['suberror'] : null,
       },
+      data: record,
     }
   }
   return unavailable
