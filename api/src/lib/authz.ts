@@ -14,9 +14,25 @@ import { type SessionPermissions } from './permissionsRepo'
  * is not allowed, but the server refuses identically whether a button was hidden or not.
  */
 
+/**
+ * A GUID is not a string, and comparing two of them as strings is a bug waiting for its
+ * first caller.
+ *
+ * Today both sides happen to agree: SQL Server hands uppercase to the driver, whether the id
+ * comes from a UNIQUEIDENTIFIER column (permissionsRepo) or through FOR JSON PATH
+ * (eventsRepo). Nothing keeps them agreeing. The community ids these predicates are asked
+ * about will soon arrive from a request body — a submitted form (#143), a curl, the MCP
+ * server (#135) — and no client is under any obligation to echo back the casing it was
+ * given. A case-sensitive miss here fails closed: a legitimate organiser gets a 403 on their
+ * own community, and it reads as a permissions bug rather than a casing one.
+ */
+function sameId(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
+}
+
 /** Whether the caller has been designated an organiser of that exact community. */
 export function organizes(permissions: SessionPermissions, communityId: string): boolean {
-  return permissions.organizedCommunityIds.includes(communityId)
+  return permissions.organizedCommunityIds.some((id) => sameId(id, communityId))
 }
 
 /**
@@ -73,9 +89,9 @@ export function canDetachCommunity(
   communityId: string,
 ): boolean {
   if (permissions.isGlobalAdmin) return true
-  if (!eventCommunityIds.includes(communityId)) return false
+  if (!eventCommunityIds.some((id) => sameId(id, communityId))) return false
   if (!organizes(permissions, communityId)) return false
-  return eventCommunityIds.some((id) => id !== communityId)
+  return eventCommunityIds.some((id) => !sameId(id, communityId))
 }
 
 /**

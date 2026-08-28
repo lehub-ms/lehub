@@ -74,8 +74,13 @@ if [[ -n "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" ]]; then
 
   # One `(N'address')` row per address, commas and semicolons treated as separators so a
   # shell variable, a GitHub variable and a .env line can all spell the list naturally.
+  #
+  # Deduplicated, because MERGE evaluates its source rows against a snapshot of the target:
+  # two identical rows both take the NOT MATCHED branch, and the second violates the primary
+  # key. One address pasted twice into the variable would fail the deployment — a harsh
+  # penalty for a copy-paste.
   BOOTSTRAP_ADMIN_VALUES=''
-  for email in ${LEHUB_BOOTSTRAP_ADMIN_EMAILS//[,;]/ }; do
+  for email in $(printf '%s\n' ${LEHUB_BOOTSTRAP_ADMIN_EMAILS//[,;]/ } | sort -u); do
     # Loud rather than silent: a typo here ends up as a row nobody will ever match, and the
     # account it was meant for never becomes an administrator.
     [[ "$email" == *@*.* ]] || die "LEHUB_BOOTSTRAP_ADMIN_EMAILS: '$email' is not an email address."

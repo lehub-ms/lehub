@@ -252,6 +252,32 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('identity').textContent).toBe('—')
   })
 
+  it("garde les jetons quand c'est le serveur qui flanche, pas les identifiants", async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : jsonResponse({ code: 'PERMISSIONS_UNAVAILABLE' }, 500),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+    // La base de dev s'endort au bout d'une heure : la première visite qui la réveille peut
+    // dépasser le délai. Effacer le jeton là-dessus ferait ressaisir un mot de passe pour une
+    // indisponibilité de quelques secondes, alors que le prochain chargement suffit.
+    expect(getRefreshToken()).not.toBeNull()
+  })
+
   it('revient proprement à déconnecté quand le jeton stocké est mort', async () => {
     window.localStorage.setItem('lehub.auth.refreshToken', 'perime')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'invalid_grant' }, 400)))

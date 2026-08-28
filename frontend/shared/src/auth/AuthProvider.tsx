@@ -85,7 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
           // d'un utilisateur ordinaire jusqu'à ce que le miroir puisse être écrit.
           setState({ status: 'authenticated', user: null, permissions: NO_PERMISSIONS })
         } else {
-          clearTokens()
+          // Une panne du serveur n'est pas un défaut d'identifiants. `/api/me/session` lit
+          // désormais aussi les habilitations (#110), donc une base indisponible — celle de
+          // dev s'endort au bout d'une heure — répond 500 sur une session parfaitement
+          // valide. Effacer les jetons obligerait à ressaisir un mot de passe pour une
+          // indisponibilité passagère ; l'état retombe à anonyme, mais le prochain
+          // chargement rétablit la session.
+          const serverFault = error instanceof ApiError && (error.status === 0 || error.status >= 500)
+          if (!serverFault) clearTokens()
           setState({ status: 'anonymous' })
           throw error
         }

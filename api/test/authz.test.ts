@@ -35,6 +35,35 @@ describe('organizes', () => {
   })
 })
 
+describe('comparaison des identifiants', () => {
+  const UPPER: SessionPermissions = {
+    isGlobalAdmin: false,
+    organizedCommunityIds: ['C1C1C1C1-0000-0000-0000-000000000001'],
+  }
+  const lower = 'c1c1c1c1-0000-0000-0000-000000000001'
+
+  it('reconnaît la même communauté quelle que soit la casse', () => {
+    // Les identifiants sur lesquels ces prédicats seront interrogés viendront d'un corps de
+    // requête — un formulaire soumis (#143), un curl, le serveur MCP (#135) — et rien
+    // n'oblige un client à renvoyer la casse qu'on lui a donnée. Un échec de comparaison
+    // ferme la porte en silence : l'organisateur reçoit un 403 sur sa propre communauté.
+    expect(organizes(UPPER, lower)).toBe(true)
+    expect(canWriteEvent(UPPER, [lower])).toBe(true)
+    expect(canCreateEvent(UPPER, [lower])).toBe(true)
+    expect(canDesignateOrganizer(UPPER, lower)).toBe(true)
+  })
+
+  it('reste insensible à la casse jusque dans le retrait', () => {
+    expect(canDetachCommunity(UPPER, [lower, 'C9'], lower)).toBe(true)
+    // La dernière communauté reste la dernière, même écrite autrement.
+    expect(canDetachCommunity(UPPER, ['C1C1C1C1-0000-0000-0000-000000000001'], lower)).toBe(false)
+  })
+
+  it('ne confond pas deux identifiants différents', () => {
+    expect(organizes(UPPER, 'c2c2c2c2-0000-0000-0000-000000000002')).toBe(false)
+  })
+})
+
 describe('canWriteReferenceData', () => {
   it('réserve les technologies et les communautés aux administrateurs', () => {
     // Ces référentiels sont partagés : une correction faite par l'organisateur d'une
