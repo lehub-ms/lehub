@@ -69,18 +69,27 @@ sql_run_file "$SEED_DIR/reference.sql" || die "reference.sql failed."
 #
 # Registers the addresses; it promotes nobody here. The promotion happens on the named
 # account's next sign-in — see db/seed/admins.sql and db/migrations/0004.
-if [[ -n "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" ]]; then
-  [[ -f "$SEED_DIR/admins.sql" ]] || die "Seed file not found: $SEED_DIR/admins.sql"
+# One address per line: commas and semicolons are separators, so a shell variable, a GitHub
+# variable and a .env line can all spell the list naturally. Deduplicated, because MERGE
+# evaluates its source rows against a snapshot of the target — two identical rows both take
+# the NOT MATCHED branch and the second violates the primary key, failing a whole deployment
+# over a copy-paste.
+#
+# Every substitution is quoted: an unquoted expansion would be glob-expanded as well as
+# word-split, and a stray `*` in the variable would be resolved against the working directory
+# before the address check below ever saw it.
+BOOTSTRAP_ADMIN_ADDRESSES="$(printf '%s' "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" \
+  | tr ',;' '\n\n' | tr -s '[:space:]' '\n' | sed '/^$/d' | sort -u)"
 
-  # One `(N'address')` row per address, commas and semicolons treated as separators so a
-  # shell variable, a GitHub variable and a .env line can all spell the list naturally.
-  #
-  # Deduplicated, because MERGE evaluates its source rows against a snapshot of the target:
-  # two identical rows both take the NOT MATCHED branch, and the second violates the primary
-  # key. One address pasted twice into the variable would fail the deployment — a harsh
-  # penalty for a copy-paste.
+# The rendered list decides, not the raw variable: a value of " " or "," is non-empty and
+# yields no address at all, which would render `USING (VALUES\n)` and fail on an opaque
+# syntax error in the middle of the deployment.
+if [[ -n "$BOOTSTRAP_ADMIN_ADDRESSES" ]]; then
+  [[ -f "$SEED_DIR/admins.sql" ]] || die "Seed file not found: $SEED_DIR/admins.sql"
+  need_cmd perl "Install Perl — needed to render the bootstrap script below."
+
   BOOTSTRAP_ADMIN_VALUES=''
-  for email in $(printf '%s\n' ${LEHUB_BOOTSTRAP_ADMIN_EMAILS//[,;]/ } | sort -u); do
+  while IFS= read -r email; do
     # Loud rather than silent: a typo here ends up as a row nobody will ever match, and the
     # account it was meant for never becomes an administrator.
     [[ "$email" == *@*.* ]] || die "LEHUB_BOOTSTRAP_ADMIN_EMAILS: '$email' is not an email address."
@@ -91,7 +100,7 @@ if [[ -n "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" ]]; then
     # happen. An assignment does not word-split, so the missing quotes cost nothing.
     escaped=${email//\'/\'\'}
     BOOTSTRAP_ADMIN_VALUES+="  (N'$escaped'),"$'\n'
-  done
+  done <<< "$BOOTSTRAP_ADMIN_ADDRESSES"
   BOOTSTRAP_ADMIN_VALUES="${BOOTSTRAP_ADMIN_VALUES%,$'\n'}"
 
   # An explicit template rather than `mktemp -t`: BSD appends its own suffix, GNU demands
@@ -109,7 +118,7 @@ if [[ -n "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" ]]; then
   info "Registering the bootstrap administrators"
   sql_run_file "$RENDERED_ADMINS" || die "admins.sql failed."
 else
-  dim "LEHUB_BOOTSTRAP_ADMIN_EMAILS is unset — no bootstrap administrator registered."
+  dim "LEHUB_BOOTSTRAP_ADMIN_EMAILS names no address — no bootstrap administrator registered."
 fi
 
 if [[ "$WITH_DEMO" == true ]]; then

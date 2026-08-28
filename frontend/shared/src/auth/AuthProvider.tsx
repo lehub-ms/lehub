@@ -88,9 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
           // Une panne du serveur n'est pas un défaut d'identifiants. `/api/me/session` lit
           // désormais aussi les habilitations (#110), donc une base indisponible — celle de
           // dev s'endort au bout d'une heure — répond 500 sur une session parfaitement
-          // valide. Effacer les jetons obligerait à ressaisir un mot de passe pour une
-          // indisponibilité passagère ; l'état retombe à anonyme, mais le prochain
-          // chargement rétablit la session.
+          // valide. Effacer les jetons rendrait cette panne définitive : il faudrait
+          // ressaisir un mot de passe pour quelques secondes d'indisponibilité.
+          //
+          // Ce que ce repli fait, et rien de plus : la session survit à la panne. L'état
+          // retombe à anonyme et rien ne réessaie dans cette page — c'est le rechargement
+          // suivant qui rétablit la session. Un réessai en séance relève de #96, qui porte le
+          // maintien de la session.
           const serverFault = error instanceof ApiError && (error.status === 0 || error.status >= 500)
           if (!serverFault) clearTokens()
           setState({ status: 'anonymous' })
