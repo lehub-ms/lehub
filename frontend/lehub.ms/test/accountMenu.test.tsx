@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountLabel, NEUTRAL_ACCOUNT_LABEL } from '@/lib/accountLabel'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
+import { openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -12,17 +13,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const MIRROR = {
-  objectId: '3f1b0c8e-1111-2222-3333-444455556666',
-  email: 'ada.lovelace@example.test',
-  givenName: 'Ada',
-  surname: 'Lovelace',
-  primaryAuthMethod: 'email',
-  lastAuthMethod: 'email',
-}
-
 /** Rend l'application avec une session déjà ouverte, restaurée depuis le stockage. */
-function stubSignedIn(mirror: unknown = MIRROR, status = 200) {
+function stubSignedIn(session: unknown = openedSession(), status = 200) {
   window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
   vi.stubGlobal(
     'fetch',
@@ -30,7 +22,7 @@ function stubSignedIn(mirror: unknown = MIRROR, status = 200) {
       Promise.resolve(
         url.includes('/api/auth/token')
           ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-          : jsonResponse(mirror, status),
+          : jsonResponse(session, status),
       ),
     ),
   )
@@ -134,7 +126,7 @@ describe('menu compte de la navigation', () => {
   })
 
   it('respecte le plancher tactile et ne déborde pas sur un nom très long', async () => {
-    stubSignedIn({ ...MIRROR, surname: 'Lovelace-Byron-de-Montmorency-Saint-Exupéry' })
+    stubSignedIn(openedSession({ user: { surname: 'Lovelace-Byron-de-Montmorency-Saint-Exupéry' } }))
     renderAt(PATHS.home)
 
     const trigger = await screen.findByRole('button', { name: /ada lovelace-byron/i })

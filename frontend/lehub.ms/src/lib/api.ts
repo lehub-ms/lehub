@@ -1,5 +1,5 @@
 import { ensureFreshToken } from '../auth/authClient'
-import type { AuthenticatedUser } from '../auth/AuthContext'
+import type { AuthenticatedUser, SessionPermissions } from '../auth/AuthContext'
 
 /**
  * Every call is absolute and cross-origin — there is no dev proxy and no
@@ -61,13 +61,24 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return (await response.json()) as T
 }
 
+/** Ce que `POST /api/me/session` renvoie : qui est connecté, et ce que la session peut faire. */
+export interface OpenedSession {
+  user: AuthenticatedUser
+  permissions: SessionPermissions
+}
+
 /**
  * Ouvre la session côté LeHub : crée la ligne miroir à la première connexion, la rafraîchit
  * ensuite. Le prénom et le nom ne sont transmis que comme repli, pour la fenêtre où le tenant
  * n'a pas encore propagé les siens ; les claims l'emportent toujours côté API.
+ *
+ * Les habilitations viennent avec, dans la même réponse : la SPA appelle cette route à chaque
+ * restauration de session, donc une seconde route pour les relire n'aurait rien à faire de
+ * plus. Elles sont par construction celles du dernier chargement, et le serveur arbitre
+ * entre-temps.
  */
-export function openSession(fallback?: { givenName?: string; surname?: string }): Promise<AuthenticatedUser> {
-  return apiFetch<AuthenticatedUser>('/api/me/session', {
+export function openSession(fallback?: { givenName?: string; surname?: string }): Promise<OpenedSession> {
+  return apiFetch<OpenedSession>('/api/me/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fallback ?? {}),

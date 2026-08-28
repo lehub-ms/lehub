@@ -13,15 +13,7 @@ import {
   resetTokenStoreForTests,
   storeTokens,
 } from '../src/auth/tokenStore'
-
-const MIRROR = {
-  objectId: '3f1b0c8e-1111-2222-3333-444455556666',
-  email: 'ada@example.test',
-  givenName: 'Ada',
-  surname: 'Lovelace',
-  primaryAuthMethod: 'email',
-  lastAuthMethod: 'email',
-}
+import { openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -221,7 +213,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )
@@ -282,7 +274,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )
@@ -310,7 +302,7 @@ describe('AuthProvider', () => {
           ? // 90 s de durée de vie : la marge de renouvellement est de 60 s, donc le minuteur
             // doit partir à T+30 s puis se taire jusqu'au suivant.
             jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 90 })
-          : jsonResponse(MIRROR),
+          : jsonResponse(openedSession()),
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -341,7 +333,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )

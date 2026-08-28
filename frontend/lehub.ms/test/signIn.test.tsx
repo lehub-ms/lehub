@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { safeRedirect } from '@/lib/safeRedirect'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
+import { openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -12,19 +13,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const MIRROR = {
-  objectId: '3f1b0c8e-1111-2222-3333-444455556666',
-  email: 'ada@example.test',
-  givenName: 'Ada',
-  surname: 'Lovelace',
-  primaryAuthMethod: 'email',
-  lastAuthMethod: 'email',
-}
-
 /** Les trois étapes d'une connexion réussie, puis l'ouverture de session. */
 function stubSuccessfulSignIn() {
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-    if (url.includes('/api/me/session')) return Promise.resolve(jsonResponse(MIRROR))
+    if (url.includes('/api/me/session')) return Promise.resolve(jsonResponse(openedSession()))
     const body = typeof init?.body === 'string' ? init.body : '{}'
     const step = (JSON.parse(body) as { step?: string }).step
     if (step === 'token') {

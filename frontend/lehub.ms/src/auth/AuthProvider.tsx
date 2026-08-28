@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, openSession } from '../lib/api'
-import { AuthContext, type AuthContextValue, type AuthState } from './AuthContext'
+import { AuthContext, NO_PERMISSIONS, type AuthContextValue, type AuthState } from './AuthContext'
 import { ensureFreshToken } from './authClient'
 import {
   clearTokens,
@@ -73,15 +73,17 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   const completeSignIn = useCallback<AuthContextValue['completeSignIn']>(
     async (fallback) => {
       try {
-        const user = await openSession(fallback)
-        setState({ status: 'authenticated', user })
+        const { user, permissions } = await openSession(fallback)
+        setState({ status: 'authenticated', user, permissions })
       } catch (error) {
         // 409 : la session existe bel et bien côté tenant, c'est la ligne miroir qui n'a pas
         // pu être écrite faute de nom exploitable. On reste connecté, sans identité affichable,
         // et #97 rend « Mon compte ». Refuser la session serait pire : l'utilisateur a bien
         // ses jetons et ne comprendrait pas d'être renvoyé au formulaire.
         if (error instanceof ApiError && error.status === 409) {
-          setState({ status: 'authenticated', user: null })
+          // Sans ligne miroir, il n'y a pas d'habilitation à lire : la session est celle
+          // d'un utilisateur ordinaire jusqu'à ce que le miroir puisse être écrit.
+          setState({ status: 'authenticated', user: null, permissions: NO_PERMISSIONS })
         } else {
           clearTokens()
           setState({ status: 'anonymous' })
