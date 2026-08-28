@@ -303,6 +303,25 @@ address that has never signed in is normal and is not an error. Replaying the se
 promotes anyone twice, which is what lets you remove an administrator from the backoffice
 without the next seed silently putting them back.
 
+### Playing the organiser rather than the administrator
+
+`--demo` seeds six fictitious accounts and their designations, so the organiser screens are
+never empty. They cannot sign in — there is no tenant account behind them. To see the
+backoffice as an organiser sees it, designate your own account on a community and drop the
+administrator marker:
+
+```bash
+source .env
+sqlcmd -S localhost,1433 -U sa -P "$MSSQL_SA_PASSWORD" -C -d "$LEHUB_DB" -Q "
+  DECLARE @me UNIQUEIDENTIFIER = (SELECT ExternalIdObjectId FROM dbo.[User] WHERE Email = N'you@example.com');
+  INSERT dbo.CommunityOrganizer (CommunityId, UserObjectId)
+  VALUES ('C1C1C1C1-0000-0000-0000-000000000001', @me);
+  UPDATE dbo.[User] SET IsGlobalAdmin = 0 WHERE ExternalIdObjectId = @me;"
+```
+
+Both take effect on your next request, without signing in again — the API reads them per
+request rather than freezing them into a token.
+
 Inspect the database directly:
 
 ```bash

@@ -249,3 +249,57 @@ USING (VALUES
 ) AS source (EventId, TechnologyId)
 ON target.EventId = source.EventId AND target.TechnologyId = source.TechnologyId
 WHEN NOT MATCHED THEN INSERT (EventId, TechnologyId) VALUES (source.EventId, source.TechnologyId);
+
+-- ─── Fictitious accounts ─────────────────────────────────────────────────────
+--
+-- dbo.[User] is normally written only by a real sign-in, which is exactly why the
+-- organiser lists of the local backoffice would otherwise always be empty: there is
+-- nobody to designate. These six accounts exist so those screens have something to
+-- show, and so the "organiser" persona can be exercised without six real tenant
+-- accounts.
+--
+-- The addresses are under .invalid (RFC 2606), a top-level domain that can never be
+-- registered: none of them can ever reach a real person, and none can collide with a
+-- contributor's own mirrored row. No sign-in can ever match them either — there is no
+-- tenant account behind these object identifiers, which is the point.
+
+MERGE dbo.[User] AS target
+USING (VALUES
+  ('A1A1A1A1-0000-0000-0000-000000000001', N'amelie.rousseau@lehub.invalid',  N'Amélie',  N'Rousseau'),
+  ('A2A2A2A2-0000-0000-0000-000000000002', N'karim.benali@lehub.invalid',     N'Karim',   N'Benali'),
+  ('A3A3A3A3-0000-0000-0000-000000000003', N'sophie.lemoine@lehub.invalid',   N'Sophie',  N'Lemoine'),
+  ('A4A4A4A4-0000-0000-0000-000000000004', N'julien.marchand@lehub.invalid',  N'Julien',  N'Marchand'),
+  ('A5A5A5A5-0000-0000-0000-000000000005', N'lea.fontaine@lehub.invalid',     N'Léa',     N'Fontaine'),
+  ('A6A6A6A6-0000-0000-0000-000000000006', N'claire.vasseur@lehub.invalid',   N'Claire',  N'Vasseur')
+) AS source (ExternalIdObjectId, Email, GivenName, Surname)
+ON target.ExternalIdObjectId = source.ExternalIdObjectId
+-- No WHEN MATCHED: a name edited locally survives a replay, as everywhere else in this file.
+WHEN NOT MATCHED THEN
+  INSERT (ExternalIdObjectId, Email, GivenName, Surname, PrimaryAuthMethod, LastAuthMethod)
+  VALUES (source.ExternalIdObjectId, source.Email, source.GivenName, source.Surname, 'email', 'email');
+
+-- ─── Organisers ──────────────────────────────────────────────────────────────
+--
+-- Deliberately uneven, because the three shapes have to be exercised locally: Amélie
+-- and Julien each organise two communities, so the community picker has something to
+-- pick from; C1 has two organisers, so a designation can be removed without emptying
+-- the community; and five communities have none at all, which is a normal state — they
+-- stay manageable by the global administrators.
+--
+-- DesignatedBy stays NULL: nobody designated these, the seed did. That is the case the
+-- column is nullable for.
+
+MERGE dbo.CommunityOrganizer AS target
+USING (VALUES
+  ('C1C1C1C1-0000-0000-0000-000000000001', 'A1A1A1A1-0000-0000-0000-000000000001'),
+  ('C1C1C1C1-0000-0000-0000-000000000001', 'A2A2A2A2-0000-0000-0000-000000000002'),
+  ('C6C6C6C6-0000-0000-0000-000000000006', 'A1A1A1A1-0000-0000-0000-000000000001'),
+  ('C3C3C3C3-0000-0000-0000-000000000003', 'A3A3A3A3-0000-0000-0000-000000000003'),
+  ('C5C5C5C5-0000-0000-0000-000000000005', 'A4A4A4A4-0000-0000-0000-000000000004'),
+  ('C7C7C7C7-0000-0000-0000-000000000007', 'A4A4A4A4-0000-0000-0000-000000000004'),
+  ('C2C2C2C2-0000-0000-0000-000000000002', 'A5A5A5A5-0000-0000-0000-000000000005'),
+  ('CBCBCBCB-0000-0000-0000-00000000000B', 'A6A6A6A6-0000-0000-0000-000000000006')
+) AS source (CommunityId, UserObjectId)
+ON target.CommunityId = source.CommunityId AND target.UserObjectId = source.UserObjectId
+WHEN NOT MATCHED THEN
+  INSERT (CommunityId, UserObjectId) VALUES (source.CommunityId, source.UserObjectId);

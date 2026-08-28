@@ -60,7 +60,7 @@ Applied by `scripts/db-seed.sh <local|dev> [--demo]`, idempotent, replayable.
 |---|---|---|
 | `seed/reference.sql` | Event formats, participation modes and the technology reference — real, stable business data | local, dev, prod |
 | `seed/admins.sql` | The environment's first global administrators, from `LEHUB_BOOTSTRAP_ADMIN_EMAILS` — templated, skipped when the variable is unset | local, dev, prod |
-| `seed/demo.sql` | Fictitious communities and events | local, dev only |
+| `seed/demo.sql` | Fictitious communities, events, accounts and organiser designations | local, dev only |
 | `seed/media/technologies/` | Official Microsoft product icons, the bytes `reference.sql` points at | local, dev, prod |
 | `seed/media/{communities,events}/` | Community and event placeholders, the bytes `demo.sql` points at | local only |
 
