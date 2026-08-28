@@ -158,6 +158,13 @@ jobs:
       - name: Apply reference data
         # Never --demo: demonstration data does not enter an Azure
         # environment.
+        #
+        # BOOTSTRAP_ADMIN_EMAILS is a repository variable, not a secret: an
+        # address is personal data, not a credential, and the seed only
+        # registers it as pending. Unset, the step still succeeds and no
+        # administrator is registered — see db/seed/admins.sql.
+        env:
+          LEHUB_BOOTSTRAP_ADMIN_EMAILS: ${{ vars.BOOTSTRAP_ADMIN_EMAILS }}
         run: ./scripts/db-seed.sh ${{ inputs.environment }}
       - name: Close the SQL firewall
         # Runs on failure too, but only if the rule could have been created —

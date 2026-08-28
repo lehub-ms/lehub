@@ -282,6 +282,27 @@ the conventions and for how to write a migration.
 ./scripts/db-seed.sh local --demo         # reference data + demonstration data
 ```
 
+### Making yourself an administrator
+
+The backoffice reserves its global-administration section to accounts carrying the
+administrator marker, and that marker cannot be granted from the backoffice — there would be
+nobody to grant the first one. `LEHUB_BOOTSTRAP_ADMIN_EMAILS` is how an environment names its
+first administrators, local included:
+
+```bash
+export LEHUB_BOOTSTRAP_ADMIN_EMAILS=you@example.com   # commas or spaces for several
+./scripts/db-seed.sh local --demo
+```
+
+It is read from the environment rather than from `.env`, which every `dev-up.sh` and
+`dev-start.sh` rewrites — put the export in your shell profile if you want it to stick.
+
+The seed only *registers* the address: the promotion happens the next time that account signs
+in on `lehub.ms`, so sign in once before expecting the backoffice to open. Registering an
+address that has never signed in is normal and is not an error. Replaying the seed never
+promotes anyone twice, which is what lets you remove an administrator from the backoffice
+without the next seed silently putting them back.
+
 Inspect the database directly:
 
 ```bash
