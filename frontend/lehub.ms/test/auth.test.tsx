@@ -151,6 +151,32 @@ describe('ensureFreshToken', () => {
     expect(getRefreshToken()).toBeNull()
   })
 
+  it('renouvelle sur demande même quand le jeton courant est encore valable', async () => {
+    // Le cas du minuteur : à T-60 s le jeton est encore bon, donc sans ce forçage la fonction
+    // le rendrait tel quel et le renouvellement anticipé n'aurait jamais lieu — il se
+    // produirait à l'expiration, c'est-à-dire trop tard.
+    storeTokens({ accessToken: 'encore-bon', refreshToken: 'rt', expiresIn: 3600 })
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ access_token: 'neuf', refresh_token: 'rt2', expires_in: 3600 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await ensureFreshToken()).toBe('encore-bon')
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    expect(await ensureFreshToken(true)).toBe('neuf')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("ne déconnecte pas pour un renouvellement raté tant que le jeton courant vit", async () => {
+    storeTokens({ accessToken: 'encore-bon', refreshToken: 'rt', expiresIn: 3600 })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network')))
+
+    // Une coupure passagère à T-60 s ne doit pas être plus brutale que la panne elle-même.
+    expect(await ensureFreshToken(true)).toBe('encore-bon')
+    expect(getRefreshToken()).toBe('rt')
+  })
+
   it("n'appelle rien quand personne n'est connecté", async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -273,6 +299,38 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('status').textContent).toBe('anonymous')
     expect(getAccessToken()).toBeNull()
     expect(getRefreshToken()).toBeNull()
+  })
+
+  it('renouvelle une seule fois avant expiration, sans tourner en boucle', async () => {
+    vi.useFakeTimers()
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    const fetchMock = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes('/api/auth/token')
+          ? // 90 s de durée de vie : la marge de renouvellement est de 60 s, donc le minuteur
+            // doit partir à T+30 s puis se taire jusqu'au suivant.
+            jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 90 })
+          : jsonResponse(MIRROR),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+    await vi.advanceTimersByTimeAsync(0)
+    const afterRestore = fetchMock.mock.calls.filter((call) => String(call[0]).includes('/auth/token')).length
+
+    await vi.advanceTimersByTimeAsync(40_000)
+    const renewals = fetchMock.mock.calls.filter((call) => String(call[0]).includes('/auth/token')).length
+
+    // Le défaut à ne pas rejouer : un `setTimeout(…, 0)` qui se reprogramme lui-même pendant
+    // toute la dernière minute du jeton, soit des centaines d'appels par seconde.
+    expect(renewals - afterRestore).toBeLessThanOrEqual(2)
+    expect(renewals).toBeGreaterThan(afterRestore)
+    vi.useRealTimers()
   })
 
   it("ne reste pas connecté pour la forme quand un autre onglet se déconnecte", async () => {

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { authMessage, RESET_SENT_MESSAGE } from '../lib/authErrors'
-import { postAuthStep, tokensFrom, type AuthStepResult } from './authClient'
+import { postAuthStep, SERVICE_UNAVAILABLE, tokensFrom, type AuthStepResult } from './authClient'
 import { storeTokens } from './tokenStore'
 import { useAuth } from './useAuth'
 
@@ -19,10 +19,15 @@ import { useAuth } from './useAuth'
  * lui-même l'intervalle entre deux vérifications. Sans cette boucle, un écran conclurait à
  * l'échec d'une réinitialisation qui n'avait simplement pas fini.
  */
-export type ResetStage = 'email' | 'code' | 'password' | 'submitting' | 'done'
+export type ResetStage = 'email' | 'code' | 'password' | 'done'
 
 export interface ResetFlow {
+  /** Quel écran. Ne se confond pas avec `busy` : soumettre un mot de passe vide ferait
+      autrement repasser l'écran sur la saisie du code, le temps de l'aller-retour. */
   stage: ResetStage
+  busy: boolean
+  /** Voir `SignupFlow.attempt` : remet le champ de code à zéro après un refus. */
+  attempt: number
   error: string | null
   notice: string | null
   codeLength: number
@@ -45,6 +50,8 @@ function wait(seconds: number): Promise<void> {
 export function useResetFlow(): ResetFlow {
   const { completeSignIn } = useAuth()
   const [stage, setStage] = useState<ResetStage>('email')
+  const [busy, setBusy] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [codeLength, setCodeLength] = useState(DEFAULT_CODE_LENGTH)
@@ -56,13 +63,15 @@ export function useResetFlow(): ResetFlow {
 
   const fail = useCallback((result: Extract<AuthStepResult, { ok: false }>, back: ResetStage) => {
     setError(authMessage('reset', result.error))
+    setBusy(false)
+    setAttempt((count) => count + 1)
     setStage(back)
   }, [])
 
   const requestCode = useCallback(
     async (email: string) => {
       setError(null)
-      setStage('submitting')
+      setBusy(true)
 
       const started = await postAuthStep('reset', { step: 'start', username: email })
 
@@ -72,6 +81,7 @@ export function useResetFlow(): ResetFlow {
         token.current = null
         setTargetLabel(email)
         setNotice(RESET_SENT_MESSAGE)
+        setBusy(false)
         setStage('code')
         return
       }
@@ -90,6 +100,7 @@ export function useResetFlow(): ResetFlow {
       if (typeof challenged.data.code_length === 'number') setCodeLength(challenged.data.code_length)
       setTargetLabel(challenged.data.challenge_target_label ?? email)
       setNotice(RESET_SENT_MESSAGE)
+      setBusy(false)
       setStage('code')
     },
     [fail],
@@ -107,7 +118,7 @@ export function useResetFlow(): ResetFlow {
         return
       }
 
-      setStage('submitting')
+      setBusy(true)
       const verified = await postAuthStep('reset', {
         step: 'continue',
         continuation_token: token.current,
@@ -119,6 +130,7 @@ export function useResetFlow(): ResetFlow {
       if (!next) return fail({ ok: false, error: {}, data: {} }, 'code')
 
       token.current = next
+      setBusy(false)
       setStage('password')
     },
     [fail],
@@ -128,7 +140,7 @@ export function useResetFlow(): ResetFlow {
     async (password: string) => {
       if (!token.current) return
       setError(null)
-      setStage('submitting')
+      setBusy(true)
 
       const submitted = await postAuthStep('reset', {
         step: 'submit',
@@ -157,7 +169,14 @@ export function useResetFlow(): ResetFlow {
           if (!tokens) return fail({ ok: false, error: {}, data: {} }, 'password')
 
           storeTokens(tokens)
-          await completeSignIn()
+          try {
+            await completeSignIn()
+          } catch {
+            // Le mot de passe est déjà changé côté tenant. Figer l'écran sur « Application en
+            // cours… » ferait croire l'inverse ; on redonne la main avec un message.
+            return fail({ ok: false, error: { error: SERVICE_UNAVAILABLE }, data: {} }, 'password')
+          }
+          setBusy(false)
           setStage('done')
           return
         }
@@ -171,6 +190,8 @@ export function useResetFlow(): ResetFlow {
 
   return {
     stage,
+    busy,
+    attempt,
     error,
     notice,
     codeLength,

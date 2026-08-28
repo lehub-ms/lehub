@@ -10,6 +10,9 @@ import {
   onTokensCleared,
 } from './tokenStore'
 
+/** Plancher entre deux tentatives, pour qu'un renouvellement qui échoue ne tourne pas en rond. */
+const RENEWAL_RETRY_MS = 15_000
+
 /**
  * Porte la session : la restaure au chargement, la renouvelle avant qu'elle n'expire, et la
  * ferme proprement — dans cet onglet comme dans les autres.
@@ -46,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
    * Programme le prochain renouvellement, avant l'expiration et non après l'échec d'une
    * requête. Se reprogramme lui-même tant que la session tient ; `clearTokens` interrompt la
    * chaîne par l'abonnement plus bas.
+   *
+   * Le plancher sur le délai n'est pas cosmétique. `millisecondsBeforeRenewal` rend une valeur
+   * nulle ou négative dès qu'on est entré dans la marge, et sans lui un renouvellement qui
+   * échoue sans clore la session reprogrammerait un `setTimeout(…, 0)` — donc une boucle
+   * serrée pendant toute la dernière minute du jeton.
    */
   const scheduleRenewal = useCallback(() => {
     cancelRenewal()
@@ -54,11 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
 
     renewalTimer.current = setTimeout(
       () => {
-        void ensureFreshToken().then((token) => {
+        void ensureFreshToken(true).then((token) => {
           if (token) rescheduleRef.current()
         })
       },
-      Math.max(delay, 0),
+      Math.max(delay, RENEWAL_RETRY_MS),
     )
   }, [cancelRenewal])
 

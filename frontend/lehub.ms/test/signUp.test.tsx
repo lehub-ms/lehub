@@ -85,6 +85,24 @@ describe('OtpInput', () => {
     expect(onComplete).not.toHaveBeenCalled()
   })
 
+  it("ne re-soumet pas tout seul quand on corrige un caractère d'un code déjà complet", async () => {
+    const user = userEvent.setup()
+    const onComplete = vi.fn()
+    render(<OtpInput length={4} label="Code" onComplete={onComplete} />)
+
+    const cells = screen.getAllByRole('textbox')
+    for (const [index, digit] of [...'1234'].entries()) {
+      await user.type(cells[index]!, digit)
+    }
+    expect(onComplete).toHaveBeenCalledTimes(1)
+
+    // Le code a été refusé, les cases restent pleines, l'utilisateur corrige la première.
+    // Re-soumettre ici enverrait le code d'avant, toujours faux, et brûlerait une tentative
+    // de plus vers le verrouillage du compte — à chaque frappe.
+    await user.type(cells[0]!, '9')
+    expect(onComplete).toHaveBeenCalledTimes(1)
+  })
+
   it('prévient à chaque frappe pour que le message précédent disparaisse', async () => {
     const user = userEvent.setup()
     const onType = vi.fn()
@@ -178,6 +196,39 @@ describe("page d'inscription", () => {
 
     // La SPA laisse passer : c'est le tenant qui arbitre, pas elle.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+  })
+
+  it("ne montre pas l'écran du code tant que le tenant n'a pas accepté l'adresse", async () => {
+    const user = userEvent.setup()
+    // Porté par un objet plutôt que par une variable : TypeScript réduit une variable affectée
+    // uniquement dans une closure à `never` au point d'appel, une propriété non.
+    const pending: { release?: () => void } = {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(
+        () =>
+          new Promise<Response>((resolve) => {
+            pending.release = () => {
+              resolve(jsonResponse({ error: 'user_already_exists' }, 400))
+            }
+          }),
+      ),
+    )
+
+    renderAt('/inscription')
+    await user.type(screen.getByLabelText('Prénom'), 'Ada')
+    await user.type(screen.getByLabelText('Nom'), 'Lovelace')
+    await user.type(screen.getByLabelText('Adresse email'), 'ada@example.test')
+    await user.type(screen.getByLabelText('Mot de passe'), 'Correct-Horse-8')
+    await user.click(screen.getByRole('button', { name: /créer mon compte/i }))
+
+    // Appel en vol : l'écran doit rester le formulaire, pas basculer sur la saisie du code.
+    expect(screen.queryByRole('heading', { name: /vérifiez votre email/i })).toBeNull()
+    expect(screen.getByRole('heading', { name: /créer votre compte/i })).not.toBeNull()
+
+    pending.release?.()
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBeNull())
+    expect(screen.getByRole('heading', { name: /créer votre compte/i })).not.toBeNull()
   })
 
   it('associe chaque intitulé à son champ et respecte le plancher tactile', () => {

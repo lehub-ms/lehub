@@ -1,6 +1,12 @@
 import { useCallback, useState } from 'react'
 import { authMessage, FLOW_CONTROL_ERRORS } from '../lib/authErrors'
-import { postAuthStep, tokensFrom, type AuthStepData, type AuthStepResult } from './authClient'
+import {
+  postAuthStep,
+  SERVICE_UNAVAILABLE,
+  tokensFrom,
+  type AuthStepData,
+  type AuthStepResult,
+} from './authClient'
 import { storeTokens } from './tokenStore'
 import { useAuth } from './useAuth'
 
@@ -16,8 +22,12 @@ import { useAuth } from './useAuth'
  *
  * `credential_required` arrive en 400 et n'est pas un échec : c'est le tenant qui réclame le
  * mot de passe, jeton de continuation à l'appui. D'où `FLOW_CONTROL_ERRORS`.
+ *
+ * `stage` dit quel écran, `busy` dit si un appel est en vol. Les mêler ferait qu'une
+ * soumission depuis le formulaire afficherait aussitôt l'écran du code, avant même de savoir
+ * si le tenant a accepté l'adresse.
  */
-export type SignupStage = 'form' | 'code' | 'submitting'
+export type SignupStage = 'form' | 'code'
 
 export interface SignupCredentials {
   givenName: string
@@ -32,7 +42,14 @@ interface Pending extends SignupCredentials {
 
 export interface SignupFlow {
   stage: SignupStage
+  busy: boolean
   error: string | null
+  /**
+   * Incrémenté à chaque code refusé. L'écran s'en sert comme `key` sur le champ de saisie,
+   * qui repart donc vide : sans cela les cases restent pleines, et corriger un seul caractère
+   * suffit à re-soumettre le code entier — celui d'avant, encore faux.
+   */
+  attempt: number
   /** Longueur du code annoncée par le tenant. 8 sur ce tenant, jamais codé en dur ici. */
   codeLength: number
   /** L'adresse masquée telle que le tenant l'affiche, pour la reprendre à l'écran. */
@@ -55,6 +72,8 @@ function continuationOf(data: AuthStepData): string | null {
 export function useSignupFlow(): SignupFlow {
   const { completeSignIn } = useAuth()
   const [stage, setStage] = useState<SignupStage>('form')
+  const [busy, setBusy] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<Pending | null>(null)
   const [codeLength, setCodeLength] = useState(DEFAULT_CODE_LENGTH)
@@ -62,13 +81,14 @@ export function useSignupFlow(): SignupFlow {
 
   const fail = useCallback((result: Extract<AuthStepResult, { ok: false }>): void => {
     setError(authMessage('signup', result.error))
-    setStage((current) => (current === 'submitting' ? 'code' : 'form'))
+    setBusy(false)
+    setAttempt((count) => count + 1)
   }, [])
 
   const start = useCallback(
     async (credentials: SignupCredentials) => {
       setError(null)
-      setStage('submitting')
+      setBusy(true)
 
       const started = await postAuthStep('signup', {
         step: 'start',
@@ -77,39 +97,24 @@ export function useSignupFlow(): SignupFlow {
         // et c'est `entra-userflow.json` qui fait foi sur leur nom.
         attributes: { givenName: credentials.givenName, surname: credentials.surname },
       })
-      if (!started.ok) {
-        fail(started)
-        setStage('form')
-        return
-      }
+      if (!started.ok) return fail(started)
 
       const startToken = continuationOf(started.data)
-      if (!startToken) {
-        fail({ ok: false, error: {}, data: {} })
-        setStage('form')
-        return
-      }
+      if (!startToken) return fail({ ok: false, error: {}, data: {} })
 
       const challenged = await postAuthStep('signup', {
         step: 'challenge',
         continuation_token: startToken,
       })
-      if (!challenged.ok) {
-        fail(challenged)
-        setStage('form')
-        return
-      }
+      if (!challenged.ok) return fail(challenged)
 
       const challengeToken = continuationOf(challenged.data)
-      if (!challengeToken) {
-        fail({ ok: false, error: {}, data: {} })
-        setStage('form')
-        return
-      }
+      if (!challengeToken) return fail({ ok: false, error: {}, data: {} })
 
       if (typeof challenged.data.code_length === 'number') setCodeLength(challenged.data.code_length)
       setTargetLabel(challenged.data.challenge_target_label ?? credentials.email)
       setPending({ ...credentials, continuationToken: challengeToken })
+      setBusy(false)
       setStage('code')
     },
     [fail],
@@ -119,7 +124,7 @@ export function useSignupFlow(): SignupFlow {
     async (code: string) => {
       if (!pending) return
       setError(null)
-      setStage('submitting')
+      setBusy(true)
 
       // 1. Le code. Le tenant répond alors `credential_required` : ce n'est pas un échec,
       //    c'est la demande du mot de passe, et le jeton de continuation est dans la réponse.
@@ -176,9 +181,16 @@ export function useSignupFlow(): SignupFlow {
       }
 
       storeTokens(tokens)
-      // Le prénom et le nom saisis servent de repli si le tenant ne les a pas encore propagés
-      // dans ses claims — sans écran intermédiaire, l'utilisateur ne voit rien de tout ça.
-      await completeSignIn({ givenName: pending.givenName, surname: pending.surname })
+      try {
+        // Le prénom et le nom saisis servent de repli si le tenant ne les a pas encore propagés
+        // dans ses claims — sans écran intermédiaire, l'utilisateur ne voit rien de tout ça.
+        await completeSignIn({ givenName: pending.givenName, surname: pending.surname })
+      } catch {
+        // Le compte existe et les jetons sont émis ; c'est l'ouverture de session côté LeHub
+        // qui a échoué. Sans ce filet l'écran resterait figé sur « Vérification en cours… »,
+        // tous les contrôles désactivés, avec un compte parfaitement utilisable derrière.
+        fail({ ok: false, error: { error: SERVICE_UNAVAILABLE }, data: {} })
+      }
     },
     [pending, fail, completeSignIn],
   )
@@ -186,6 +198,7 @@ export function useSignupFlow(): SignupFlow {
   const resendCode = useCallback(async () => {
     if (!pending) return
     setError(null)
+    setAttempt((count) => count + 1)
     const challenged = await postAuthStep('signup', {
       step: 'challenge',
       continuation_token: pending.continuationToken,
@@ -200,6 +213,8 @@ export function useSignupFlow(): SignupFlow {
 
   return {
     stage,
+    busy,
+    attempt,
     error,
     codeLength,
     targetLabel,
@@ -212,6 +227,7 @@ export function useSignupFlow(): SignupFlow {
     }, []),
     backToForm: useCallback(() => {
       setError(null)
+      setBusy(false)
       setStage('form')
     }, []),
   }

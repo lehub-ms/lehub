@@ -8,7 +8,6 @@ import { OtpInput } from '@/components/form/OtpInput'
 import { PasswordInput } from '@/components/form/PasswordInput'
 import { useAuth } from '@/auth/useAuth'
 import { useSignupFlow } from '@/auth/useSignupFlow'
-import { errorId } from '@/lib/fieldIds'
 import { BUTTON_BLOCK, BUTTON_BLOCK_PRIMARY, INPUT_BASE } from '@/lib/form-styles'
 import { PATHS } from '@/lib/navigation'
 import { cn } from '@/lib/cn'
@@ -32,7 +31,7 @@ export function SignUpPage(): ReactNode {
   // Déjà connecté : un formulaire d'inscription n'a rien à lui proposer.
   if (state.status === 'authenticated') return <Navigate to={PATHS.home} replace />
 
-  const busy = flow.stage === 'submitting'
+  const busy = flow.busy
 
   const onSubmit = (event: FormEvent): void => {
     event.preventDefault()
@@ -153,11 +152,13 @@ export function SignUpPage(): ReactNode {
     >
       {flow.error ? <Alert tone="error">{flow.error}</Alert> : null}
 
-      <div aria-describedby={flow.error ? errorId('signup-code') : undefined}>
+      {/* `Alert` porte déjà `role="alert"` et s'annonce seul ; un `aria-describedby` pointant
+          sur un identifiant que personne ne rend serait une référence brisée, pas une aide. */}
+      <div>
         <OtpInput
-          // Remonté à neuf si le tenant annonce une autre longueur, plutôt que remis à zéro
-          // par un effet.
-          key={flow.codeLength}
+          // Remonté à neuf quand la longueur change, et après chaque refus : les cases repartent
+          // vides plutôt que de garder un code faux que l'utilisateur devrait effacer lui-même.
+          key={`${String(flow.codeLength)}-${String(flow.attempt)}`}
           length={flow.codeLength}
           label="Code reçu par email"
           disabled={busy}

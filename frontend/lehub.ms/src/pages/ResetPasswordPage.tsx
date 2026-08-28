@@ -26,7 +26,7 @@ export function ResetPasswordPage(): ReactNode {
 
   if (flow.stage === 'done') return <Navigate to={PATHS.home} replace />
 
-  const busy = flow.stage === 'submitting'
+  const busy = flow.busy
   const backToSignIn = (
     <p className="mt-6 text-center text-[0.9375rem]">
       <Link
@@ -39,7 +39,7 @@ export function ResetPasswordPage(): ReactNode {
     </p>
   )
 
-  if (flow.stage === 'email' || (busy && !flow.targetLabel)) {
+  if (flow.stage === 'email') {
     return (
       <AuthCard
         titleId="reset-title"
@@ -89,7 +89,7 @@ export function ResetPasswordPage(): ReactNode {
     )
   }
 
-  if (flow.stage === 'code' || (busy && flow.targetLabel && !password)) {
+  if (flow.stage === 'code') {
     return (
       <AuthCard
         titleId="reset-otp-title"
@@ -107,7 +107,7 @@ export function ResetPasswordPage(): ReactNode {
         {flow.error ? <Alert tone="error">{flow.error}</Alert> : null}
 
         <OtpInput
-          key={flow.codeLength}
+          key={`${String(flow.codeLength)}-${String(flow.attempt)}`}
           length={flow.codeLength}
           label="Code de vérification"
           disabled={busy}

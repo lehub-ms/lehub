@@ -30,9 +30,15 @@ export function OtpInput({ length, label, disabled, onComplete, onType }: OtpInp
   const cells = useRef<(HTMLInputElement | null)[]>([])
 
   const apply = (next: string[], focusIndex: number): void => {
+    // Lu avant l'écriture : ce qui déclenche la soumission, c'est le passage d'incomplet à
+    // complet, pas le fait d'être complet. Sans cette nuance, corriger un seul caractère d'un
+    // code refusé re-soumettrait aussitôt le code entier — celui d'avant, toujours faux — et
+    // brûlerait une tentative de plus vers le verrouillage du compte à chaque frappe.
+    const wasIncomplete = digits.some((digit) => digit === '')
+
     setDigits(next)
     cells.current[Math.min(focusIndex, length - 1)]?.focus()
-    if (next.every((digit) => digit !== '')) onComplete(next.join(''))
+    if (wasIncomplete && next.every((digit) => digit !== '')) onComplete(next.join(''))
   }
 
   const handleChange = (index: number, raw: string): void => {

@@ -135,6 +135,35 @@ describe('page de connexion', () => {
     expect(alert.textContent).toContain('momentanément indisponible')
   })
 
+  it("ne fige pas le formulaire quand l'ouverture de session côté LeHub échoue", async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        // Le cas réel : l'Azure SQL serverless de dev sort de sa mise en veille de 60 minutes.
+        if (url.includes('/api/me/session')) {
+          return Promise.resolve(jsonResponse({ code: 'SESSION_MIRROR_ERROR' }, 500))
+        }
+        const body = typeof init?.body === 'string' ? init.body : '{}'
+        const step = (JSON.parse(body) as { step?: string }).step
+        return Promise.resolve(
+          step === 'token'
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt', expires_in: 3600 })
+            : jsonResponse({ continuation_token: 'ct' }),
+        )
+      }),
+    )
+
+    renderAt(PATHS.signIn)
+    await fillAndSubmit(user)
+
+    // Sans filet, le bouton resterait désactivé sur « Connexion en cours… », sans message,
+    // devant un utilisateur que `completeSignIn` vient de déconnecter silencieusement.
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('momentanément indisponible')
+    expect(screen.getByRole('button', { name: /^me connecter$/i }).hasAttribute('disabled')).toBe(false)
+  })
+
   it('efface le message au premier caractère saisi ensuite', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'user_not_found' }, 400)))

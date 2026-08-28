@@ -122,6 +122,35 @@ describe('réinitialisation du mot de passe', () => {
     expect(alert.textContent).toBe('Ce code est incorrect. Vérifiez-le et saisissez-le à nouveau.')
   })
 
+  it("ne repasse pas sur l'écran du code quand le mot de passe soumis est vide", async () => {
+    const user = userEvent.setup()
+    stubSteps({
+      start: () => jsonResponse({ continuation_token: 'ct1' }),
+      challenge: () => jsonResponse({ continuation_token: 'ct2', code_length: 4 }),
+      continue: () => jsonResponse({ continuation_token: 'ct3' }),
+      submit: () => jsonResponse({ error: 'invalid_request' }, 400),
+    })
+
+    renderAt(PATHS.resetPassword)
+    await askForCode(user, 'ada@example.test')
+    await waitFor(() => expect(screen.getAllByRole('textbox').length).toBe(4))
+    const cells = screen.getAllByRole('textbox')
+    for (const [index, digit] of [...'1234'].entries()) {
+      await user.type(cells[index]!, digit)
+    }
+    await waitFor(() =>
+      expect(screen.getByLabelText('Nouveau mot de passe', { selector: 'input' })).not.toBeNull(),
+    )
+
+    // Le formulaire porte `noValidate`, donc `required` ne bloque rien : la soumission part.
+    await user.click(screen.getByRole('button', { name: /définir mon nouveau mot de passe/i }))
+
+    // L'écran ne doit pas dépendre du contenu du champ, sinon il repart sur « Entrez le code ».
+    expect(screen.queryByRole('heading', { name: /entrez le code/i })).toBeNull()
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBeNull())
+    expect(screen.getByRole('heading', { name: /nouveau mot de passe/i })).not.toBeNull()
+  })
+
   it('nomme la cause exacte du refus du nouveau mot de passe', async () => {
     const user = userEvent.setup()
     stubSteps({

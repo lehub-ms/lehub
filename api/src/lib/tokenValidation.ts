@@ -64,7 +64,15 @@ const TOKEN_ERROR_CODES = new Set([
   'ERR_JWKS_MULTIPLE_MATCHING_KEYS',
 ])
 
-/** And the codes that mean the key set itself could not be read — those are 500s. */
+/**
+ * And the codes that mean the key set itself could not be read — those are 500s.
+ *
+ * The list is not enough on its own. jose turns only a fetch *timeout* into `JWKSTimeout`;
+ * a DNS failure, a TLS error or a reset connection is rethrown exactly as `fetch` raised it,
+ * as a bare `TypeError` with no `code` at all. Since every error jose raises itself carries a
+ * code, an error without one did not come from jose — it came from the network, and it is our
+ * fault rather than the caller's.
+ */
 const JWKS_ERROR_CODES = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JOSE_GENERIC'])
 
 function codeOf(error: unknown): string | null {
@@ -102,13 +110,18 @@ export async function verifyAccessToken(
     const detail = error instanceof Error ? error.message : 'token verification failed'
 
     if (code === 'ERR_JWT_EXPIRED') return { ok: false, refusal: { reason: 'expired', detail } }
-    if (JWKS_ERROR_CODES.has(code ?? '')) {
+
+    // No code, or a known key-set code: the tenant could not be reached. Answering 401 here
+    // would tell every signed-in user to sign in again during an outage they cannot fix, and
+    // the client treats a 401 as fatal — one blip at ciamlogin.com would empty every session.
+    if (code === null || JWKS_ERROR_CODES.has(code)) {
       return { ok: false, refusal: { reason: 'jwks-unavailable', detail } }
     }
-    // Anything unrecognised is still a refusal, never an acceptance: the default direction of
-    // this branch is the whole security property.
-    if (!TOKEN_ERROR_CODES.has(code ?? '')) {
-      return { ok: false, refusal: { reason: 'invalid', detail: `${detail} (${code ?? 'no code'})` } }
+
+    // Everything else is a refusal, never an acceptance: the default direction of this branch
+    // is the whole security property.
+    if (!TOKEN_ERROR_CODES.has(code)) {
+      return { ok: false, refusal: { reason: 'invalid', detail: `${detail} (${code})` } }
     }
     return { ok: false, refusal: { reason: 'invalid', detail } }
   }

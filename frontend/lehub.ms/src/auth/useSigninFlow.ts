@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { authMessage } from '../lib/authErrors'
-import { postAuthStep, tokensFrom, type AuthStepResult } from './authClient'
+import { postAuthStep, SERVICE_UNAVAILABLE, tokensFrom, type AuthStepResult } from './authClient'
 import { storeTokens } from './tokenStore'
 import { useAuth } from './useAuth'
 
@@ -61,8 +61,15 @@ export function useSigninFlow(onSuccess: () => void): SigninFlow {
       if (!tokens) return fail({ ok: false, error: {}, data: {} })
 
       storeTokens(tokens)
-      // Aucun repli de nom ici : à la connexion, le compte existe déjà et ses claims aussi.
-      await completeSignIn()
+      try {
+        // Aucun repli de nom ici : à la connexion, le compte existe déjà et ses claims aussi.
+        await completeSignIn()
+      } catch {
+        // `completeSignIn` a déjà effacé les jetons. Sans ce filet, le bouton resterait
+        // désactivé sur « Connexion en cours… », sans message, devant un utilisateur
+        // silencieusement déconnecté.
+        return fail({ ok: false, error: { error: SERVICE_UNAVAILABLE }, data: {} })
+      }
       setSubmitting(false)
       onSuccess()
     },

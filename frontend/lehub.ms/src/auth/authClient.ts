@@ -153,8 +153,11 @@ export async function renewTokens(refreshToken: string): Promise<IssuedTokens | 
  */
 let renewalInFlight: Promise<IssuedTokens | null> | null = null
 
-export async function ensureFreshToken(): Promise<string | null> {
-  const current = getAccessToken()
+export async function ensureFreshToken(force = false): Promise<string | null> {
+  // `force` est ce dont le minuteur a besoin : à T-60 s le jeton courant est encore valable,
+  // donc sans lui la fonction le rendrait tel quel et le renouvellement anticipé n'aurait
+  // jamais lieu — il se produirait à l'expiration, c'est-à-dire trop tard.
+  const current = force ? null : getAccessToken()
   if (current) return current
 
   const refreshToken = getRefreshToken()
@@ -166,10 +169,12 @@ export async function ensureFreshToken(): Promise<string | null> {
 
   const tokens = await renewalInFlight
   if (!tokens) {
-    // Plus renouvelable : la session est finie, et le dire ici évite de la traîner comme
-    // un état connecté fictif jusqu'au prochain échec.
-    clearTokens()
-    return null
+    // Un renouvellement raté ne clôt la session que si le jeton courant est mort lui aussi.
+    // Sinon c'est une coupure passagère à T-60 s, et déconnecter quelqu'un dont le jeton est
+    // encore valable pendant une minute serait plus brutal que la panne elle-même.
+    const stillUsable = getAccessToken()
+    if (!stillUsable) clearTokens()
+    return stillUsable
   }
   return tokens.accessToken
 }

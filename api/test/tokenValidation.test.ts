@@ -176,9 +176,25 @@ describe('verifyAccessToken', () => {
     expect(result.refusal.reason).toBe('jwks-unavailable')
   })
 
+  it("traite une panne réseau du JWKS en faute serveur, alors qu'elle n'a aucun code", async () => {
+    // jose ne convertit que le *timeout* en JWKSTimeout ; une panne DNS, une erreur TLS ou une
+    // connexion coupée remontent telles que `fetch` les a levées — un TypeError nu, sans code.
+    // Classées en jeton invalide, elles feraient répondre 401, et le client traite un 401 comme
+    // définitif : une coupure passagère chez le tenant viderait toutes les sessions ouvertes.
+    const networkFailure: JWTVerifyGetKey = async () => {
+      throw new TypeError('fetch failed')
+    }
+    const result = await verifyAccessToken(await forge(), CONFIG, networkFailure)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.refusal.reason).toBe('jwks-unavailable')
+  })
+
   it("refuse plutôt qu'accepter face à une erreur qu'il ne sait pas classer", async () => {
     const exploding: JWTVerifyGetKey = async () => {
-      throw new Error('something nobody anticipated')
+      const error = new Error('something nobody anticipated') as Error & { code: string }
+      error.code = 'ERR_SOMETHING_NEW'
+      throw error
     }
     const result = await verifyAccessToken(await forge(), CONFIG, exploding)
     expect(result.ok).toBe(false)
