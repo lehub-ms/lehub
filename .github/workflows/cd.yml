@@ -251,6 +251,9 @@ jobs:
       # Le backoffice y renvoie : création de compte, et retour d'un compte sans
       # habilitation. C'est l'origine de la Static Web App publique.
       VITE_PUBLIC_SITE_URL: https://${{ needs.infra.outputs.webAppHostname }}
+      # Et réciproquement : le menu compte du site public propose le portail de gestion
+      # aux seuls comptes habilités (#137).
+      VITE_ADMIN_BASE_URL: https://${{ needs.infra.outputs.adminAppHostname }}
       # Declared for the whole job because two steps need it: the one that writes it
       # into img-src before the upload, and the one that asserts it on the response
       # after it. A single declaration is what keeps the policy that gets published
@@ -278,8 +281,8 @@ jobs:
         # undefined and reports it as a network error. Fail here, loudly, instead.
         run: |
           status=0
-          for name in VITE_API_BASE_URL VITE_PUBLIC_SITE_URL VITE_ENTRA_TENANT_ID \
-                      VITE_ENTRA_CLIENT_ID VITE_ENTRA_AUTHORITY; do
+          for name in VITE_API_BASE_URL VITE_PUBLIC_SITE_URL VITE_ADMIN_BASE_URL \
+                      VITE_ENTRA_TENANT_ID VITE_ENTRA_CLIENT_ID VITE_ENTRA_AUTHORITY; do
             if [ -z "${!name}" ]; then
               echo "$name is empty — refusing to build a broken site" >&2
               status=1

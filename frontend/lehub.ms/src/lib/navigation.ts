@@ -14,6 +14,20 @@ export const PATHS = {
   resetPassword: '/mot-de-passe-oublie',
 } as const
 
+/**
+ * L'adresse du backoffice, proposée depuis le menu compte aux seuls comptes habilités (#137).
+ * Jamais écrite en dur : elle diffère à chaque environnement.
+ */
+export const ADMIN_BASE_URL = import.meta.env.VITE_ADMIN_BASE_URL
+
+if (!ADMIN_BASE_URL) {
+  // Bruyamment au démarrage, comme pour l'origine de l'API : une entrée de menu vers
+  // « undefined » n'apparaîtrait qu'aux comptes habilités, donc à peu près jamais en revue.
+  throw new Error(
+    'VITE_ADMIN_BASE_URL is not set. Copy .env.example to .env.local, or check the workflow that builds this app.',
+  )
+}
+
 export interface NavItem {
   readonly to: string
   readonly label: string
