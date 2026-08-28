@@ -40,6 +40,16 @@ describe('socle partagé', () => {
     }
   })
 
+  it('déclare ses sources à Tailwind', () => {
+    // Le piège le plus coûteux de ce répertoire, et le plus silencieux : Tailwind v4 ne scanne
+    // que la racine du projet qui compile, et celui-ci est en dehors. Sans `@source`, toute
+    // classe utilisée par un composant du socle et par lui seul disparaît de la feuille des
+    // deux applications — sans erreur, sans avertissement, sans build cassé. C'est ce qui a
+    // vidé les deux écrans d'authentification de leurs styles de champ.
+    const theme = readFileSync(join(SHARED, 'theme.css'), 'utf8')
+    expect(theme).toMatch(/^@source\s/m)
+  })
+
   it('ne supprime aucune erreur du compilateur', () => {
     for (const file of FILES) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/@ts-(ignore|expect-error|nocheck)/)

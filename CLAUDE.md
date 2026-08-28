@@ -144,10 +144,12 @@ Tokens live in exactly one place: `frontend/shared/src/theme.css`, imported by b
 applications' `index.css`. They left `frontend/lehub.ms` when the auth foundation did — the
 shared components render `text-ink-muted` and `font-heading`, and those utilities only exist
 where the tokens are declared. Colours are `--color-*`, families are `--font-*`, and Tailwind
-derives `bg-primary`, `text-ink-muted`, `font-heading` from them. Repeated composites (`glass`,
-`glass-strong`, `text-gradient`) are Tailwind `@utility` rules in each application's own
-`index.css`; hand-written CSS is reserved for what a utility genuinely cannot express (the
-background mesh, `:focus-visible`).
+derives `bg-primary`, `text-ink-muted`, `font-heading` from them. Repeated composites are Tailwind `@utility` rules:
+`glass` and `glass-strong` sit in `theme.css` alongside the tokens, because a shared component
+renders them and a class left behind in one application produces nothing in the other;
+application-specific ones (`text-gradient`, `accordion-panel`) stay in that application's own
+`index.css`. Hand-written CSS is reserved for what a utility genuinely cannot express — the
+background mesh, also shared, and `:focus-visible`.
 
 Two tokens deliberately diverge from the mock-ups, because WCAG AA outranks visual fidelity:
 

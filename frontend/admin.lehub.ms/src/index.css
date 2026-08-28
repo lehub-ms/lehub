@@ -14,15 +14,22 @@
 
   h1,
   h2,
-  h3 {
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-heading);
     color: var(--color-ink);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
   }
 
-  /* Un focus toujours visible, y compris là où un composant redéfinit son contour. */
+  /* Mot pour mot celui du site public : les champs du socle partagé s'appuient dessus, et
+     `form-styles.ts` dit explicitement qu'ils ne portent pas leur propre anneau. */
   :focus-visible {
     outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
+    outline-offset: 3px;
+    border-radius: 6px;
   }
 }
 
