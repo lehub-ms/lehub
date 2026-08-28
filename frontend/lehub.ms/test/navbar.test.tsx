@@ -104,7 +104,12 @@ describe('tiroir mobile', () => {
     const dialog = await openDrawer()
 
     expect(dialog.getAttribute('aria-modal')).toBe('true')
-    expect(within(dialog).getAllByRole('link')).toHaveLength(NAV_ITEMS.length)
+    // Les trois rubriques, plus le point d'entrée « Me connecter » ajouté par #92.
+    expect(within(dialog).getAllByRole('link')).toHaveLength(NAV_ITEMS.length + 1)
+    for (const item of NAV_ITEMS) {
+      expect(within(dialog).getByRole('link', { name: item.label })).not.toBeNull()
+    }
+    expect(within(dialog).getByRole('link', { name: 'Me connecter' })).not.toBeNull()
   })
 
   it('place le focus sur le premier lien à l’ouverture', async () => {

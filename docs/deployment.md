@@ -313,6 +313,16 @@ Not scriptable, and not worth pretending otherwise:
 4. Creation takes up to about thirty minutes. A wait is not a failure.
 5. In the new tenant, enable the local account sign-in method with **email and password**. The
    sign-up flow rests on it.
+6. Enable **self-service password reset** for the tenant's users. The forgotten-password
+   journey is rendered by the SPA against the `/resetpassword/v1.0/*` endpoints, and they answer
+   `invalid_request` until this is on. It is a tenant-wide toggle with no Graph equivalent the
+   script can converge, which is why it is a step here rather than a line in
+   `entra-bootstrap.sh`.
+
+Both toggles are switches the bootstrap script cannot set and cannot check for you. What it
+*does* own is the application side of native authentication: it declares the registration a
+public client and turns the native authentication APIs on, so nothing about the registration
+needs doing by hand.
 
 Then record three values. None is a secret — they are identifiers, and they end up committed to
 `infra/main.<env>.bicepparam` like every other directory object ID in this repository:
@@ -377,6 +387,18 @@ two per workspace slot, recomputed on every run from `LEHUB_MAX_SLOTS` in
 exists on any machine yet. It owns the `https` ones only when `--origin` says which: run without
 the flag and the ones already declared are kept. Forgetting it must never silently unpublish an
 environment. Every URI the run removes is printed before the write.
+
+**Native authentication is two settings, not one.** The registration is declared a public
+client (`isFallbackPublicClient`) *and* has the native authentication APIs turned on
+(`nativeAuthenticationApisEnabled`). The first alone is not enough: without the second, the
+tenant's `/signup/v1.0/*`, `/oauth2/v2.0/*` and `/resetpassword/v1.0/*` endpoints refuse every
+call with an `invalid_request` that names nothing. Both are written in the same PATCH as the
+redirect URIs, and both are checked before it, so a run that changes nothing says so.
+
+These endpoints emit no CORS headers, which is why no browser ever reaches them: the API relays
+every step, and the two applications only ever call their own API. Nothing in either
+`staticwebapp.config.json` needs to allow `ciamlogin.com`, and `connect-src` stays exactly as
+the deployment chain rewrites it.
 
 **Claims are a separate setting from attributes**, and only the first is ever seen by a caller.
 The sign-up flow makes sure a given name and a surname exist in the directory; the optional

@@ -1,11 +1,17 @@
 /**
- * The three public URLs. Referenced by the route table, the header and the drawer, so
- * a path is spelled exactly once in the codebase.
+ * Every URL of the public app. Referenced by the route table, the header, the drawer and
+ * the tests, so a path is spelled exactly once in the codebase.
+ *
+ * The three authentication paths are not in NAV_ITEMS: they are reached from the account
+ * entry point and from each other, never from the section list.
  */
 export const PATHS = {
   home: '/',
   events: '/evenements',
   hub: '/lehub',
+  signUp: '/inscription',
+  signIn: '/connexion',
+  resetPassword: '/mot-de-passe-oublie',
 } as const
 
 export interface NavItem {

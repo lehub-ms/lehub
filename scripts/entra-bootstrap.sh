@@ -239,14 +239,22 @@ CURRENT_JSON="$(printf '%s' "$APP_CURRENT" | jq '(.spa.redirectUris // []) | uni
 
 PUBLIC_CLIENT="$(printf '%s' "$APP_CURRENT" | jq -r '.isFallbackPublicClient // false')"
 
-if [[ "$DESIRED_JSON" == "$CURRENT_JSON" && "$PUBLIC_CLIENT" == 'true' ]]; then
-  dim "Redirect URIs and client type already as declared"
+# The two settings behind the portal's "Enable the following mobile and desktop flows" and
+# "Enable native authentication". The second is what opens the /signup, /oauth2 and
+# /resetpassword endpoints the API relays: without it every flow stops at its first call with
+# an opaque invalid_request. The dev tenant carries it because it was switched on by hand;
+# declaring it here is what makes prod come up the same way, and what repairs it if it is ever
+# turned off — everything else in this file converges, and these had no reason not to.
+NATIVE_AUTH="$(printf '%s' "$APP_CURRENT" | jq -r '.nativeAuthenticationApisEnabled // "none"')"
+
+if [[ "$DESIRED_JSON" == "$CURRENT_JSON" && "$PUBLIC_CLIENT" == 'true' && "$NATIVE_AUTH" == 'all' ]]; then
+  dim "Redirect URIs, client type and native authentication already as declared"
 else
   jq -n --argjson uris "$DESIRED_JSON" \
-    '{spa: {redirectUris: $uris}, isFallbackPublicClient: true}' > "$BODY_FILE"
+    '{spa: {redirectUris: $uris}, isFallbackPublicClient: true, nativeAuthenticationApisEnabled: "all"}' > "$BODY_FILE"
   graph PATCH "$GRAPH/applications/$APP_OBJECT_ID" >/dev/null
   : > "$BODY_FILE"
-  ok "Declared $(printf '%s' "$DESIRED_JSON" | jq 'length') redirect URI(s), public client flows allowed"
+  ok "Declared $(printf '%s' "$DESIRED_JSON" | jq 'length') redirect URI(s), public client flows and native authentication allowed"
 fi
 
 # ─── 3b. The API the two front-ends call ─────────────────────────────────────

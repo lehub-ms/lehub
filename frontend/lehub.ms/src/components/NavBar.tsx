@@ -5,6 +5,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { NAV_ITEMS } from '@/lib/navigation'
+import { AccountMenu } from './AccountMenu'
 import { Wordmark } from './Wordmark'
 
 /** Tailwind's `md` breakpoint. Below it the links collapse into the drawer. */
@@ -99,6 +100,10 @@ export function NavBar() {
           ))}
         </ul>
 
+        <div className="hidden md:flex">
+          <AccountMenu />
+        </div>
+
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Trigger
             aria-label={open ? 'Fermer le menu' : 'Ouvrir le menu'}
@@ -149,6 +154,15 @@ export function NavBar() {
                   </li>
                 ))}
               </ul>
+
+              <div className="mt-5 flex">
+                <AccountMenu
+                  className="w-full justify-center rounded-xl"
+                  onNavigate={() => {
+                    setOpen(false)
+                  }}
+                />
+              </div>
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>

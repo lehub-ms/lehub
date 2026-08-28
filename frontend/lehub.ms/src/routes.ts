@@ -5,6 +5,9 @@ import { HomePage } from '@/pages/HomePage'
 import { EventsPage } from '@/pages/EventsPage'
 import { LeHubPage } from '@/pages/LeHubPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
+import { SignInPage } from '@/pages/SignInPage'
+import { SignUpPage } from '@/pages/SignUpPage'
 
 /**
  * The route table, as data rather than JSX, so the tests can mount this exact object
@@ -22,6 +25,9 @@ export const routes: RouteObject[] = [
       { index: true, Component: HomePage },
       { path: PATHS.events, caseSensitive: true, Component: EventsPage },
       { path: PATHS.hub, caseSensitive: true, Component: LeHubPage },
+      { path: PATHS.signUp, caseSensitive: true, Component: SignUpPage },
+      { path: PATHS.signIn, caseSensitive: true, Component: SignInPage },
+      { path: PATHS.resetPassword, caseSensitive: true, Component: ResetPasswordPage },
       { path: '*', Component: NotFoundPage },
     ],
   },
