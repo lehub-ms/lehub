@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { accountLabel, NEUTRAL_ACCOUNT_LABEL } from '@/lib/accountLabel'
+import { accountLabel, NEUTRAL_ACCOUNT_LABEL } from '@shared/lib/accountLabel'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
 import { openedSession } from './support/session-fixtures'

@@ -5,8 +5,8 @@ import { ResetPasswordPage as SharedResetPasswordPage } from '@shared/pages/Rese
 import { PATHS } from '@/lib/navigation'
 
 /**
- * Le parcours vient du socle partagé ; la navigation reste ici, parce que les routes sont
- * propres à cette application — et parce que le socle n'a pas `react-router` à sa portée.
+ * Le même parcours que sur le site public, au mot près : c'est le socle partagé qui le rend.
+ * Seule la navigation est d'ici — le backoffice ramène chez lui, où la garde décidera.
  */
 export function ResetPasswordPage(): ReactNode {
   const navigate = useNavigate()

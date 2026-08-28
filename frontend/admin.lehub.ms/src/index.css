@@ -1,9 +1,29 @@
 @import 'tailwindcss';
+@import '@shared/theme.css';
 
-/* Tailwind v4 is configured here, not in a JS config file. */
-@theme {
-  --font-sans:
-    Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-body);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    color: var(--color-ink);
+  }
+
+  /* Un focus toujours visible, y compris là où un composant redéfinit son contour. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
 }
 
 /* Respect the reader's motion preference — WCAG 2.1 AA. */

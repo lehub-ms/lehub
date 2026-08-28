@@ -34,9 +34,16 @@ dépendances. Trois réglages, identiques des deux côtés, font tenir cela :
 | `vite.config.ts` | `resolve.dedupe` | ces sources sont hors de la racine du projet : sans cela le bundler cherche `react` à côté d'elles et ne trouve rien. Garantit aussi un seul React dans le bundle |
 | `tsconfig.app.json` | `paths` + `include` | la même résolution pour `tsc`, qui sinon remonte depuis ce répertoire et n'atteint aucun `node_modules` |
 
-La liste de `dedupe` et celle de `paths` sont les dépendances directes du socle. En ajouter une
-ici demande de l'ajouter aux deux applications — c'est le prix de l'absence de paquet, et il
-est visible.
+La liste de `dedupe` et celle de `paths` sont les dépendances directes du socle : `react`,
+`clsx`, `tailwind-merge`, `lucide-react`. En ajouter une ici demande de l'ajouter aux deux
+applications — c'est le prix de l'absence de paquet, et il est visible.
+
+**`react-router` n'en fait délibérément pas partie.** Le paquet ne publie que des `exports`, que
+`paths` ne sait pas suivre, et l'y forcer supposerait de pointer un chemin interne à sa
+distribution. C'est pourquoi rien ici ne navigue : `ResetPasswordPage` reçoit son lien de retour
+rendu et un rappel de fin de parcours, et chaque application y met ses propres routes. La
+contrainte s'est trouvée être la meilleure frontière — un composant du socle n'a pas à connaître
+les URL de qui l'utilise.
 
 ESLint, lui, n'atteint pas ce répertoire : il refuse un chemin hors du répertoire de sa
 configuration, et lui en donner une supposerait de rendre au socle le `tsconfig.json` et le
