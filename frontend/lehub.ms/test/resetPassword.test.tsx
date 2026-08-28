@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RESET_SENT_MESSAGE } from '@/lib/authErrors'
+import { RESET_SENT_MESSAGE } from '@shared/lib/authErrors'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
 import { openedSession } from './support/session-fixtures'

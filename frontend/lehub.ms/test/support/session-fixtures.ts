@@ -1,4 +1,4 @@
-import type { SessionPermissions } from '@/auth/AuthContext'
+import type { SessionPermissions } from '@shared/auth/AuthContext'
 
 /**
  * La réponse de `POST /api/me/session`, en un seul endroit.

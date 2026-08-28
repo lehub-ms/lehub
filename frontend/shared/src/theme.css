@@ -1,0 +1,36 @@
+/* Les tokens du design system LeHub, en un seul endroit pour les deux applications.
+   Importé par frontend/lehub.ms/src/index.css et par frontend/admin.lehub.ms/src/index.css :
+   les composants du socle partagé rendent `text-ink-muted` ou `font-heading`, et ces
+   utilitaires n'existent que si les tokens sont déclarés dans l'application qui compile.
+
+   Les valeurs viennent du projet Claude Design, avec deux écarts délibérés notés dans
+   CLAUDE.md, tous deux imposés par le plancher de contraste WCAG AA. */
+
+/* Self-hosted so the CSP can stay at `font-src 'self'` and no visitor is sent to a
+   third-party font CDN. Each family ships one variable woff2 per unicode subset;
+   `unicode-range` means a French page only ever downloads the latin one. */
+@import '@fontsource-variable/space-grotesk';
+@import '@fontsource-variable/dm-sans';
+
+/* Tailwind v4 is configured here, not in a JS config file.
+   Values mirror the LeHub design system held in Claude Design, with two deliberate
+   departures recorded in CLAUDE.md, both forced by the WCAG AA contrast floor. */
+@theme {
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-heading: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #005fb8;
+  --color-primary-dark: #004a91;
+  /* Decorative only — 2.69:1 on the canvas. Never use it for text. */
+  --color-primary-light: #4d9fde;
+  --color-primary-xs: #e6f0fa;
+  --color-cta: #0078d4;
+  --color-cta-dark: #005fb8;
+
+  --color-canvas: #f5f8fc;
+  --color-ink: #0a2540;
+  --color-ink-body: #374151;
+  /* Raised from the mock-up's #64748b, which lands at 4.47:1 on the canvas and so
+     misses AA by a hair. #63738a reads identically and clears it at 4.53:1. */
+  --color-ink-muted: #63738a;
+}

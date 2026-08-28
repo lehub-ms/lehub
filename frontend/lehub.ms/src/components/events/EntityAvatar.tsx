@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { NamedRef } from '@/lib/api'
 import { communityColor } from '@/lib/communityPalette'
-import { cn } from '@/lib/cn'
+import { cn } from '@shared/lib/cn'
 
 export type EntityKind = 'community' | 'technology'
 

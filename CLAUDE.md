@@ -17,6 +17,8 @@ Azure budgets in `/infra` are tripwires set above that cap, not the cap itself: 
 /api                         Azure Functions v4 (TypeScript, Node 22) — shared by both frontends
 /frontend/lehub.ms           Public SPA (React 19 + Vite)
 /frontend/admin.lehub.ms     Admin backoffice SPA (React 19 + Vite)
+/frontend/shared             Auth foundation + design tokens shared by both SPA, under
+                             the `@shared` alias. Not a package — see its README
 /docs                        Technical docs: local dev, deployment, ADRs
 /scripts                     Bash tooling: db init, MI bootstrap, local dev orchestration
                              (one Node helper, for the Azure SDK the CLI cannot replace)
@@ -101,7 +103,9 @@ instructions live in `docs/local-dev.md`.
 Two deliberate absences, both settled — do not reintroduce either:
 
 - **No root `package.json`.** `/scripts` orchestrates; `concurrently` is consumed from
-  `api/node_modules` rather than installed globally.
+  `api/node_modules` rather than installed globally. `/frontend/shared` follows from this
+  rather than breaking it: with no npm workspace to link three packages, the shared sources
+  carry no `package.json` and are compiled by each application's own build.
 - **No `swa start` proxy and no Vite dev proxy.** A Function App can only be linked to one
   Static Web App, so both front-ends call the API cross-origin in every environment, and the
   local loop must exercise that same path rather than hide it.
@@ -136,11 +140,14 @@ they belong to. They are imported into `db/seed/media/technologies/` for the loc
 they are trademarks, not MIT-licensed assets — see `db/seed/media/README.md`. A new technology
 icon is added to the design project first.
 
-Tokens live in exactly one place: the `@theme` block of `frontend/lehub.ms/src/index.css`.
-Colours are `--color-*`, families are `--font-*`, and Tailwind derives `bg-primary`,
-`text-ink-muted`, `font-heading` from them. Repeated composites (`glass`, `glass-strong`,
-`text-gradient`) are Tailwind `@utility` rules in the same file; hand-written CSS is reserved
-for what a utility genuinely cannot express (the background mesh, `:focus-visible`).
+Tokens live in exactly one place: `frontend/shared/src/theme.css`, imported by both
+applications' `index.css`. They left `frontend/lehub.ms` when the auth foundation did — the
+shared components render `text-ink-muted` and `font-heading`, and those utilities only exist
+where the tokens are declared. Colours are `--color-*`, families are `--font-*`, and Tailwind
+derives `bg-primary`, `text-ink-muted`, `font-heading` from them. Repeated composites (`glass`,
+`glass-strong`, `text-gradient`) are Tailwind `@utility` rules in each application's own
+`index.css`; hand-written CSS is reserved for what a utility genuinely cannot express (the
+background mesh, `:focus-visible`).
 
 Two tokens deliberately diverge from the mock-ups, because WCAG AA outranks visual fidelity:
 

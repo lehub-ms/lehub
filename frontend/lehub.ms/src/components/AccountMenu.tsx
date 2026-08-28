@@ -2,9 +2,9 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, LogOut, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { useAuth } from '@/auth/useAuth'
+import { useAuth } from '@shared/auth/useAuth'
 import { accountLabel } from '@/lib/accountLabel'
-import { cn } from '@/lib/cn'
+import { cn } from '@shared/lib/cn'
 import { PATHS } from '@/lib/navigation'
 
 /**
