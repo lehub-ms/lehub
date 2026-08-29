@@ -1,33 +1,6 @@
 @import 'tailwindcss';
+@import '@shared/theme.css';
 
-/* Self-hosted so the CSP can stay at `font-src 'self'` and no visitor is sent to a
-   third-party font CDN. Each family ships one variable woff2 per unicode subset;
-   `unicode-range` means a French page only ever downloads the latin one. */
-@import '@fontsource-variable/space-grotesk';
-@import '@fontsource-variable/dm-sans';
-
-/* Tailwind v4 is configured here, not in a JS config file.
-   Values mirror the LeHub design system held in Claude Design, with two deliberate
-   departures recorded in CLAUDE.md, both forced by the WCAG AA contrast floor. */
-@theme {
-  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Space Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
-
-  --color-primary: #005fb8;
-  --color-primary-dark: #004a91;
-  /* Decorative only — 2.69:1 on the canvas. Never use it for text. */
-  --color-primary-light: #4d9fde;
-  --color-primary-xs: #e6f0fa;
-  --color-cta: #0078d4;
-  --color-cta-dark: #005fb8;
-
-  --color-canvas: #f5f8fc;
-  --color-ink: #0a2540;
-  --color-ink-body: #374151;
-  /* Raised from the mock-up's #64748b, which lands at 4.47:1 on the canvas and so
-     misses AA by a hair. #63738a reads identically and clears it at 4.53:1. */
-  --color-ink-muted: #63738a;
-}
 
 @layer base {
   html {
@@ -72,24 +45,6 @@
     outline-offset: 3px;
     border-radius: 6px;
   }
-}
-
-/* Frosted surfaces, repeated across nav, cards and the mobile drawer. `@utility` is
-   Tailwind's own extension point, so these compose and override like any utility. */
-@utility glass {
-  background-color: rgb(255 255 255 / 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgb(255 255 255 / 0.8);
-  box-shadow: 0 4px 24px rgb(0 95 184 / 0.07);
-}
-
-@utility glass-strong {
-  background-color: rgb(255 255 255 / 0.75);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgb(255 255 255 / 0.9);
-  box-shadow: 0 4px 24px rgb(0 95 184 / 0.09);
 }
 
 @utility text-gradient {
@@ -155,65 +110,6 @@
 
   &[data-state='closed'] {
     animation: panel-close 200ms ease-out;
-  }
-}
-
-@layer components {
-  /* Four blurred colour fields behind everything. Written by hand because expressing
-     radial gradients, a 90px blur and negative offsets as utilities would be an
-     unreadable pile of arbitrary values for zero benefit.
-     `overflow:hidden` here — and NOT on <body> — is what clips the blobs: a global
-     overflow-x:hidden would also silently swallow real layout overflow, which is the
-     very thing story #10 asks us to prove we do not have. */
-  .bg-mesh {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  .bg-mesh > span {
-    position: absolute;
-    display: block;
-    border-radius: 50%;
-    filter: blur(90px);
-  }
-
-  .blob-1 {
-    width: 700px;
-    height: 700px;
-    top: -200px;
-    right: -150px;
-    opacity: 0.55;
-    background: radial-gradient(ellipse, #93c5fd, transparent);
-  }
-
-  .blob-2 {
-    width: 600px;
-    height: 600px;
-    bottom: -150px;
-    left: -100px;
-    opacity: 0.5;
-    background: radial-gradient(ellipse, #bfdbfe, transparent);
-  }
-
-  .blob-3 {
-    width: 450px;
-    height: 450px;
-    top: 45%;
-    left: 25%;
-    opacity: 0.3;
-    background: radial-gradient(ellipse, #7dd3fc, transparent);
-  }
-
-  .blob-4 {
-    width: 350px;
-    height: 350px;
-    bottom: 20%;
-    right: 10%;
-    opacity: 0.2;
-    background: radial-gradient(ellipse, #bae6fd, transparent);
   }
 }
 

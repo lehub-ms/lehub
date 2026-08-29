@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, openSession } from '../lib/api'
-import { AuthContext, type AuthContextValue, type AuthState } from './AuthContext'
+import { AuthContext, NO_PERMISSIONS, type AuthContextValue, type AuthState } from './AuthContext'
 import { ensureFreshToken } from './authClient'
 import {
   clearTokens,
@@ -73,17 +73,36 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   const completeSignIn = useCallback<AuthContextValue['completeSignIn']>(
     async (fallback) => {
       try {
-        const user = await openSession(fallback)
-        setState({ status: 'authenticated', user })
+        const { user, permissions } = await openSession(fallback)
+        setState({ status: 'authenticated', user, permissions })
       } catch (error) {
-        // 409 : la session existe bel et bien côté tenant, c'est la ligne miroir qui n'a pas
-        // pu être écrite faute de nom exploitable. On reste connecté, sans identité affichable,
-        // et #97 rend « Mon compte ». Refuser la session serait pire : l'utilisateur a bien
-        // ses jetons et ne comprendrait pas d'être renvoyé au formulaire.
-        if (error instanceof ApiError && error.status === 409) {
-          setState({ status: 'authenticated', user: null })
+        // `INCOMPLETE_IDENTITY` : la session existe bel et bien côté tenant, c'est la ligne
+        // miroir qui n'a pas pu être écrite faute de nom exploitable. On reste connecté, sans
+        // identité affichable, et #97 rend « Mon compte ». Refuser la session serait pire :
+        // l'utilisateur a bien ses jetons et ne comprendrait pas d'être renvoyé au formulaire.
+        //
+        // Le code et non le statut : la route répond 409 à deux situations opposées, et
+        // l'autre — `EMAIL_ALREADY_MIRRORED`, une adresse déjà miroitée sous un autre compte —
+        // est une anomalie que le serveur journalise. L'absorber dans cette session dégradée
+        // la rendrait invisible des deux côtés à la fois. Elle part donc dans la branche
+        // d'erreur, où elle s'affiche.
+        if (error instanceof ApiError && error.code === 'INCOMPLETE_IDENTITY') {
+          // Sans ligne miroir, il n'y a pas d'habilitation à lire : la session est celle
+          // d'un utilisateur ordinaire jusqu'à ce que le miroir puisse être écrit.
+          setState({ status: 'authenticated', user: null, permissions: NO_PERMISSIONS })
         } else {
-          clearTokens()
+          // Une panne du serveur n'est pas un défaut d'identifiants. `/api/me/session` lit
+          // désormais aussi les habilitations (#110), donc une base indisponible — celle de
+          // dev s'endort au bout d'une heure — répond 500 sur une session parfaitement
+          // valide. Effacer les jetons rendrait cette panne définitive : il faudrait
+          // ressaisir un mot de passe pour quelques secondes d'indisponibilité.
+          //
+          // Ce que ce repli fait, et rien de plus : la session survit à la panne. L'état
+          // retombe à anonyme et rien ne réessaie dans cette page — c'est le rechargement
+          // suivant qui rétablit la session. Un réessai en séance relève de #96, qui porte le
+          // maintien de la session.
+          const serverFault = error instanceof ApiError && (error.status === 0 || error.status >= 500)
+          if (!serverFault) clearTokens()
           setState({ status: 'anonymous' })
           throw error
         }

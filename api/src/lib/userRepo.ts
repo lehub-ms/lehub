@@ -94,6 +94,37 @@ OUTPUT
   inserted.LastAuthMethod;
 `
 
+/**
+ * The second half of the administrator bootstrap (#106), run in the same batch as the mirror.
+ *
+ * `db/seed/admins.sql` only registers an address as pending; nothing promotes anyone until
+ * that account signs in — which is the only moment its mirror row is guaranteed to exist.
+ * These two statements are that moment.
+ *
+ * The order matters and is the opposite of the intuitive one. Stamping `AppliedAt` first
+ * would mean a crash between the two statements leaves an address marked as applied on an
+ * account that never got the marker: the promotion is then lost for good, since replaying
+ * the seed deliberately re-arms nothing. Promoting first makes the same crash self-healing —
+ * the next sign-in promotes again (already 1, so a no-op) and stamps.
+ *
+ * `AppliedAt IS NULL` in both predicates is what keeps this from being a standing rule: once
+ * stamped, an administrator removed from the backoffice stays removed, however many times
+ * they sign in afterwards.
+ *
+ * No row for `@objectId` — a first sign-in the mirror refused — makes both statements no-ops.
+ */
+export const APPLY_ADMIN_BOOTSTRAP_QUERY = `
+UPDATE u SET u.IsGlobalAdmin = 1
+FROM dbo.[User] AS u
+INNER JOIN dbo.AdminBootstrap AS b ON b.Email = u.Email
+WHERE u.ExternalIdObjectId = @objectId AND b.AppliedAt IS NULL;
+
+UPDATE b SET b.AppliedAt = SYSUTCDATETIME()
+FROM dbo.AdminBootstrap AS b
+INNER JOIN dbo.[User] AS u ON u.Email = b.Email
+WHERE u.ExternalIdObjectId = @objectId AND b.AppliedAt IS NULL;
+`
+
 /** SQL Server's two codes for a unique constraint and a unique index violation. */
 const UNIQUE_VIOLATION = new Set([2601, 2627])
 
@@ -114,7 +145,9 @@ export async function mirrorUser(input: MirrorInput): Promise<MirrorResult> {
       .input('givenName', sql.NVarChar(100), input.givenName)
       .input('surname', sql.NVarChar(100), input.surname)
       .input('authMethod', sql.NVarChar(20), input.authMethod)
-      .query<UserRow>(MIRROR_USER_QUERY)
+      // One batch, one round-trip. The bootstrap statements produce no recordset of their
+      // own — `recordset` is the MERGE's OUTPUT either way.
+      .query<UserRow>(MIRROR_USER_QUERY + APPLY_ADMIN_BOOTSTRAP_QUERY)
     recordset = result.recordset
   } catch (error) {
     // UX_User_Email is unique: the address is already mirrored under a different object

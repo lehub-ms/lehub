@@ -1,9 +1,10 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RESET_SENT_MESSAGE } from '@/lib/authErrors'
+import { RESET_SENT_MESSAGE } from '@shared/lib/authErrors'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
+import { openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,14 +18,7 @@ function stubSteps(byStep: Record<string, () => Response>) {
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('/api/me/session')) {
       return Promise.resolve(
-        jsonResponse({
-          objectId: 'o',
-          email: 'ada@example.test',
-          givenName: 'Ada',
-          surname: 'Lovelace',
-          primaryAuthMethod: 'email',
-          lastAuthMethod: 'email',
-        }),
+        jsonResponse(openedSession()),
       )
     }
     const body = typeof init?.body === 'string' ? init.body : '{}'

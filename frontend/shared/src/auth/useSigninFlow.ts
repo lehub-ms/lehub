@@ -65,9 +65,13 @@ export function useSigninFlow(onSuccess: () => void): SigninFlow {
         // Aucun repli de nom ici : à la connexion, le compte existe déjà et ses claims aussi.
         await completeSignIn()
       } catch {
-        // `completeSignIn` a déjà effacé les jetons. Sans ce filet, le bouton resterait
-        // désactivé sur « Connexion en cours… », sans message, devant un utilisateur
-        // silencieusement déconnecté.
+        // Sans ce filet, le bouton resterait désactivé sur « Connexion en cours… », sans
+        // message, devant un utilisateur qui ne saurait pas quoi faire.
+        //
+        // L'état des jetons dépend de la panne, et c'est `completeSignIn` qui tranche : il les
+        // efface pour un refus d'identifiants, il les garde pour un 5xx ou une coupure réseau
+        // — une indisponibilité du serveur ne périme pas une session valide. Rien ici n'en
+        // dépend, et rien ici ne doit en dépendre.
         return fail({ ok: false, error: { error: SERVICE_UNAVAILABLE }, data: {} })
       }
       setSubmitting(false)

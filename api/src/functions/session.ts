@@ -1,16 +1,28 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
-import { errorResponse, listFetchError } from '../lib/httpErrors'
+import { errorResponse, listFetchError, permissionsUnavailable } from '../lib/httpErrors'
 import { resolveName, usableClaim } from '../lib/identityClaims'
+import { resolveSessionPermissions } from '../lib/permissionsRepo'
 import { type AuthenticatedIdentity } from '../lib/tokenValidation'
 import { mirrorUser, type AuthMethod } from '../lib/userRepo'
 import { withAuth } from '../lib/withAuth'
 
 /**
  * Opens a session on the LeHub side: creates the mirror row on a first sign-in, refreshes it
- * on every one after. Called by the SPA once the tenant has issued its tokens.
+ * on every one after, and answers with the identity and what it is allowed to do.
  *
  * The identity comes from the validated token and from nowhere else. The one exception is
  * `resolveName` in lib/identityClaims, and it is deliberately the only one.
+ *
+ * The permissions are a convenience for the client, never the decision: the backoffice uses
+ * them to choose what it renders, and the server refuses identically whether a button was
+ * hidden or not. They carry nothing about any other account — no user list, no one else's
+ * permissions.
+ *
+ * This is the one route that resolves them by hand rather than through `withAuthorization`,
+ * and the ordering is the reason. The wrapper resolves before the handler runs, which on a
+ * first sign-in would read a mirror row that does not exist yet — and would miss the
+ * administrator promotion that `mirrorUser` itself applies (#106). Resolved after the
+ * mirror, and once.
  */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -77,7 +89,17 @@ export async function session(
     return errorResponse(409, 'INCOMPLETE_IDENTITY', 'The token carries no usable name, and none was supplied.')
   }
 
-  return { status: result.created ? 201 : 200, jsonBody: result.user }
+  let permissions
+  try {
+    permissions = await resolveSessionPermissions(identity.objectId)
+  } catch (error) {
+    // The mirror was written; only the permissions could not be read. The same helper as every
+    // wrapped route, so the code, the message and the trace stay one thing rather than two
+    // spellings that drift.
+    return permissionsUnavailable(context, request, identity.objectId, error)
+  }
+
+  return { status: result.created ? 201 : 200, jsonBody: { user: result.user, permissions } }
 }
 
 // `authLevel: 'anonymous'` is about the Functions host's own function keys, which this API

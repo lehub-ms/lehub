@@ -20,7 +20,19 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
-      alias: { '@': path.resolve(import.meta.dirname, './src') },
+      alias: {
+        '@': path.resolve(import.meta.dirname, './src'),
+        // Le socle d'authentification, partagé avec l'autre SPA. Pas un paquet npm :
+        // il n'y a pas de package.json racine, et ces sources sont compilées par le
+        // build de chaque application, qui résout react & co depuis son propre
+        // node_modules. Voir frontend/shared/README.md.
+        '@shared': path.resolve(import.meta.dirname, '../shared/src'),
+      },
+      // Les sources de ../shared sont hors de la racine de ce projet et n'ont pas de
+      // node_modules à elles : sans ceci, le bundler cherche `react` à côté d'elles et ne
+      // trouve rien. `dedupe` résout ces spécificateurs depuis la racine du projet, ce qui
+      // est aussi la garantie qu'il n'existe qu'un seul React dans le bundle.
+      dedupe: ['react', 'react-dom', 'clsx', 'tailwind-merge', 'lucide-react'],
     },
     server: {
       port: Number(env.VITE_DEV_PORT) || 5173,

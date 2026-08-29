@@ -1,9 +1,10 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { accountLabel, NEUTRAL_ACCOUNT_LABEL } from '@/lib/accountLabel'
+import { accountLabel, NEUTRAL_ACCOUNT_LABEL } from '@shared/lib/accountLabel'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
+import { NO_PERMISSIONS, openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -12,17 +13,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const MIRROR = {
-  objectId: '3f1b0c8e-1111-2222-3333-444455556666',
-  email: 'ada.lovelace@example.test',
-  givenName: 'Ada',
-  surname: 'Lovelace',
-  primaryAuthMethod: 'email',
-  lastAuthMethod: 'email',
-}
-
 /** Rend l'application avec une session déjà ouverte, restaurée depuis le stockage. */
-function stubSignedIn(mirror: unknown = MIRROR, status = 200) {
+function stubSignedIn(session: unknown = openedSession(), status = 200) {
   window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
   vi.stubGlobal(
     'fetch',
@@ -30,7 +22,7 @@ function stubSignedIn(mirror: unknown = MIRROR, status = 200) {
       Promise.resolve(
         url.includes('/api/auth/token')
           ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-          : jsonResponse(mirror, status),
+          : jsonResponse(session, status),
       ),
     ),
   )
@@ -134,7 +126,7 @@ describe('menu compte de la navigation', () => {
   })
 
   it('respecte le plancher tactile et ne déborde pas sur un nom très long', async () => {
-    stubSignedIn({ ...MIRROR, surname: 'Lovelace-Byron-de-Montmorency-Saint-Exupéry' })
+    stubSignedIn(openedSession({ user: { surname: 'Lovelace-Byron-de-Montmorency-Saint-Exupéry' } }))
     renderAt(PATHS.home)
 
     const trigger = await screen.findByRole('button', { name: /ada lovelace-byron/i })
@@ -153,5 +145,59 @@ describe('menu compte de la navigation', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('button', { name: /ada lovelace/i })).not.toBeNull()
     expect(dialog.textContent).not.toContain('@')
+  })
+})
+
+describe('portail de gestion', () => {
+  /** Ouvre le menu compte d'une session dont les habilitations sont celles passées. */
+  async function openMenuFor(permissions: Partial<typeof NO_PERMISSIONS>) {
+    stubSignedIn(openedSession({ permissions }))
+    renderAt(PATHS.home)
+    await user.click(await screen.findByRole('button', { name: /Ada Lovelace/ }))
+    return screen.getByRole('menu')
+  }
+
+  it("n'est pas proposé à un utilisateur ordinaire", async () => {
+    const menu = await openMenuFor({})
+
+    // Proposer une porte qui se refermerait sur un écran d'absence d'accès serait pire que
+    // ne rien proposer.
+    expect(within(menu).queryByRole('menuitem', { name: /portail de gestion/i })).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: /se déconnecter/i })).toBeTruthy()
+  })
+
+  it("est proposé à l'organisateur d'au moins une communauté", async () => {
+    const menu = await openMenuFor({ organizedCommunityIds: ['c1'] })
+
+    expect(within(menu).getByRole('menuitem', { name: /portail de gestion/i })).toBeTruthy()
+  })
+
+  it('est proposé à un administrateur global, même sans communauté', async () => {
+    const menu = await openMenuFor({ isGlobalAdmin: true })
+
+    expect(within(menu).getByRole('menuitem', { name: /portail de gestion/i })).toBeTruthy()
+  })
+
+  it("ouvre le backoffice dans un nouvel onglet, et le dit", async () => {
+    const menu = await openMenuFor({ isGlobalAdmin: true })
+    const entry = within(menu).getByRole('menuitem', { name: /portail de gestion/i })
+
+    expect(entry.getAttribute('href')).toBe('http://localhost:5174')
+    expect(entry.getAttribute('target')).toBe('_blank')
+    // `noopener` sans quoi la page ouverte garde une référence sur celle-ci.
+    expect(entry.getAttribute('rel')).toContain('noopener')
+    expect(entry.textContent).toContain('nouvel onglet')
+  })
+
+  it("s'insère entre le profil et la déconnexion", async () => {
+    const menu = await openMenuFor({ isGlobalAdmin: true })
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent ?? '')
+
+    expect(labels).toHaveLength(3)
+    expect(labels[0]).toContain('Mon profil')
+    expect(labels[1]).toContain('Portail de gestion')
+    expect(labels[2]).toContain('Se déconnecter')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MIRROR_USER_QUERY, isUniqueViolation } from '../src/lib/userRepo'
+import { APPLY_ADMIN_BOOTSTRAP_QUERY, MIRROR_USER_QUERY, isUniqueViolation } from '../src/lib/userRepo'
 
 /**
  * Le miroir est une écriture, et une écriture ne se teste honnêtement que contre une base.
@@ -49,6 +49,44 @@ describe('MIRROR_USER_QUERY', () => {
     // utilisateur. Rien ici ne doit être construit par concaténation.
     expect(MIRROR_USER_QUERY).not.toContain('${')
     expect(MIRROR_USER_QUERY).not.toContain("' +")
+  })
+})
+
+describe('APPLY_ADMIN_BOOTSTRAP_QUERY', () => {
+  const [PROMOTE = '', STAMP = ''] = APPLY_ADMIN_BOOTSTRAP_QUERY.split(';').filter((s) => s.trim())
+
+  it('promeut avant de marquer, pour qu’une panne entre les deux se rattrape', () => {
+    // L'ordre inverse perdrait la promotion pour de bon : l'adresse serait marquée comme
+    // appliquée sur un compte qui n'a jamais reçu le marqueur, et rejouer le seed ne
+    // réarme rien. Dans cet ordre-là, la connexion suivante repromeut et marque.
+    expect(PROMOTE).toContain('IsGlobalAdmin = 1')
+    expect(STAMP).toContain('AppliedAt = SYSUTCDATETIME()')
+  })
+
+  it('ne promeut que ce qui est en attente, jamais ce qui a déjà été appliqué', () => {
+    // C'est tout ce qui empêche l'amorçage de redevenir une règle permanente : sans ce
+    // prédicat, un administrateur retiré depuis le backoffice serait repromu à sa
+    // prochaine connexion.
+    for (const statement of [PROMOTE, STAMP]) {
+      expect(statement).toContain('AppliedAt IS NULL')
+    }
+  })
+
+  it('ne rétrograde personne', () => {
+    // Le seul chemin d'écriture du marqueur ici est la mise à 1. Une remise à 0 ne peut
+    // pas venir de l'amorçage, quel que soit le nombre de rejeux.
+    expect(APPLY_ADMIN_BOOTSTRAP_QUERY).not.toContain('IsGlobalAdmin = 0')
+  })
+
+  it("ne touche qu'au compte qui se connecte", () => {
+    for (const statement of [PROMOTE, STAMP]) {
+      expect(statement).toContain('u.ExternalIdObjectId = @objectId')
+    }
+  })
+
+  it('ne contient aucune valeur interpolée', () => {
+    expect(APPLY_ADMIN_BOOTSTRAP_QUERY).not.toContain('${')
+    expect(APPLY_ADMIN_BOOTSTRAP_QUERY).not.toContain("' +")
   })
 })
 

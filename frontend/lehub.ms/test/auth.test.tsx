@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '../src/auth/AuthProvider'
-import { ensureFreshToken, postAuthStep, SERVICE_UNAVAILABLE } from '../src/auth/authClient'
-import { useAuth } from '../src/auth/useAuth'
+import { AuthProvider } from '@shared/auth/AuthProvider'
+import { ensureFreshToken, postAuthStep, SERVICE_UNAVAILABLE } from '@shared/auth/authClient'
+import { useAuth } from '@shared/auth/useAuth'
 import {
   clearTokens,
   getAccessToken,
@@ -12,16 +12,8 @@ import {
   onTokensCleared,
   resetTokenStoreForTests,
   storeTokens,
-} from '../src/auth/tokenStore'
-
-const MIRROR = {
-  objectId: '3f1b0c8e-1111-2222-3333-444455556666',
-  email: 'ada@example.test',
-  givenName: 'Ada',
-  surname: 'Lovelace',
-  primaryAuthMethod: 'email',
-  lastAuthMethod: 'email',
-}
+} from '@shared/auth/tokenStore'
+import { MIRROR, openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -221,7 +213,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )
@@ -260,6 +252,84 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('identity').textContent).toBe('—')
   })
 
+  it("n'absorbe pas dans cette session dégradée l'autre 409, qui est une anomalie", async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : jsonResponse({ code: 'EMAIL_ALREADY_MIRRORED' }, 409),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    // Une adresse déjà miroitée sous un autre compte est une anomalie que le serveur
+    // journalise. La faire passer pour « connecté sans nom » la rendrait invisible des deux
+    // côtés à la fois : le statut, et non le code, ne suffit pas à trancher entre les deux 409.
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+  })
+
+  it('refuse une réponse de session dont les habilitations ne sont pas exploitables', async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : // Le contrat a dérivé côté serveur : `isGlobalAdmin` n'est plus un booléen.
+              jsonResponse({ user: MIRROR, permissions: { isGlobalAdmin: 'yes', organizedCommunityIds: [] } }),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    // Bruyant plutôt que silencieux : sans ce contrôle, `hasBackofficeAccess` lirait
+    // `undefined` sur un renommage serveur et refuserait un administrateur sans une erreur.
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+    // La forme est notre faute, pas celle des identifiants : les jetons survivent.
+    expect(window.localStorage.getItem('lehub.auth.refreshToken')).not.toBeNull()
+  })
+
+  it("garde les jetons quand c'est le serveur qui flanche, pas les identifiants", async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : jsonResponse({ code: 'PERMISSIONS_UNAVAILABLE' }, 500),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+    // La base de dev s'endort au bout d'une heure : la première visite qui la réveille peut
+    // dépasser le délai. Effacer le jeton là-dessus ferait ressaisir un mot de passe pour une
+    // indisponibilité de quelques secondes, alors que le prochain chargement suffit.
+    expect(getRefreshToken()).not.toBeNull()
+  })
+
   it('revient proprement à déconnecté quand le jeton stocké est mort', async () => {
     window.localStorage.setItem('lehub.auth.refreshToken', 'perime')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'invalid_grant' }, 400)))
@@ -282,7 +352,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )
@@ -310,7 +380,7 @@ describe('AuthProvider', () => {
           ? // 90 s de durée de vie : la marge de renouvellement est de 60 s, donc le minuteur
             // doit partir à T+30 s puis se taire jusqu'au suivant.
             jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 90 })
-          : jsonResponse(MIRROR),
+          : jsonResponse(openedSession()),
       ),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -341,7 +411,7 @@ describe('AuthProvider', () => {
         Promise.resolve(
           url.includes('/api/auth/token')
             ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-            : jsonResponse(MIRROR),
+            : jsonResponse(openedSession()),
         ),
       ),
     )

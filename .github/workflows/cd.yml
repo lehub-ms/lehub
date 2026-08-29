@@ -158,6 +158,13 @@ jobs:
       - name: Apply reference data
         # Never --demo: demonstration data does not enter an Azure
         # environment.
+        #
+        # BOOTSTRAP_ADMIN_EMAILS is a repository variable, not a secret: an
+        # address is personal data, not a credential, and the seed only
+        # registers it as pending. Unset, the step still succeeds and no
+        # administrator is registered — see db/seed/admins.sql.
+        env:
+          LEHUB_BOOTSTRAP_ADMIN_EMAILS: ${{ vars.BOOTSTRAP_ADMIN_EMAILS }}
         run: ./scripts/db-seed.sh ${{ inputs.environment }}
       - name: Close the SQL firewall
         # Runs on failure too, but only if the rule could have been created —
@@ -241,6 +248,17 @@ jobs:
       contents: read
     env:
       VITE_API_BASE_URL: ${{ needs.infra.outputs.apiBaseUrl }}
+      # Each application links to the other: the backoffice for account creation and for
+      # an account with no permission, the public site to offer the management portal to
+      # the accounts that have one (#137).
+      #
+      # The two hostnames are declared apart from the URLs built from them, because the
+      # guard below has to be able to see them. "https://" prefixed to an empty hostname
+      # is a non-empty string, so checking the composed URL would prove nothing.
+      WEB_APP_HOSTNAME: ${{ needs.infra.outputs.webAppHostname }}
+      ADMIN_APP_HOSTNAME: ${{ needs.infra.outputs.adminAppHostname }}
+      VITE_PUBLIC_SITE_URL: https://${{ needs.infra.outputs.webAppHostname }}
+      VITE_ADMIN_BASE_URL: https://${{ needs.infra.outputs.adminAppHostname }}
       # Declared for the whole job because two steps need it: the one that writes it
       # into img-src before the upload, and the one that asserts it on the response
       # after it. A single declaration is what keeps the policy that gets published
@@ -266,10 +284,14 @@ jobs:
         # absent VITE_API_BASE_URL builds fine and produces a site that calls
         # undefined/...; an absent VITE_ENTRA_* one that opens a sign-in against
         # undefined and reports it as a network error. Fail here, loudly, instead.
+        #
+        # The two cross-links are checked on their hostname rather than on the URL built
+        # from it: `https://` alone would sail through an emptiness check and ship a link
+        # to nowhere. `jq -er` in the infra job rejects null, not the empty string.
         run: |
           status=0
-          for name in VITE_API_BASE_URL VITE_ENTRA_TENANT_ID \
-                      VITE_ENTRA_CLIENT_ID VITE_ENTRA_AUTHORITY; do
+          for name in VITE_API_BASE_URL WEB_APP_HOSTNAME ADMIN_APP_HOSTNAME \
+                      VITE_ENTRA_TENANT_ID VITE_ENTRA_CLIENT_ID VITE_ENTRA_AUTHORITY; do
             if [ -z "${!name}" ]; then
               echo "$name is empty — refusing to build a broken site" >&2
               status=1

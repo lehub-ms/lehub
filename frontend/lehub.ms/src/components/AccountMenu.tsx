@@ -1,11 +1,12 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, LogOut, UserRound } from 'lucide-react'
+import { ChevronDown, ExternalLink, LogOut, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { useAuth } from '@/auth/useAuth'
-import { accountLabel } from '@/lib/accountLabel'
-import { cn } from '@/lib/cn'
-import { PATHS } from '@/lib/navigation'
+import { useAuth } from '@shared/auth/useAuth'
+import { hasBackofficeAccess } from '@shared/lib/access'
+import { accountLabel } from '@shared/lib/accountLabel'
+import { cn } from '@shared/lib/cn'
+import { ADMIN_BASE_URL, PATHS } from '@/lib/navigation'
 
 /**
  * Le point d'entrée compte : « Me connecter » hors session, l'identité en session.
@@ -40,6 +41,10 @@ export function AccountMenu({ className, onNavigate }: { className?: string; onN
   }
 
   const label = accountLabel(state.user)
+  // Proposer une porte qui se refermerait sur un écran d'absence d'accès serait pire que ne
+  // rien proposer : l'entrée n'apparaît que pour qui le backoffice laissera entrer. Ce n'est
+  // pas la décision de sécurité pour autant — le backoffice arbitre lui-même à l'arrivée.
+  const managesSomething = hasBackofficeAccess(state.permissions)
 
   return (
     <DropdownMenu.Root>
@@ -69,6 +74,21 @@ export function AccountMenu({ className, onNavigate }: { className?: string; onN
             Mon profil
             <span className="sr-only">— bientôt disponible</span>
           </DropdownMenu.Item>
+
+          {managesSomething ? (
+            <DropdownMenu.Item asChild className={ITEM}>
+              <a
+                href={ADMIN_BASE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onNavigate}
+              >
+                <ExternalLink aria-hidden="true" className="size-4" />
+                Portail de gestion
+                <span className="sr-only">— s’ouvre dans un nouvel onglet</span>
+              </a>
+            </DropdownMenu.Item>
+          ) : null}
 
           <DropdownMenu.Item
             className={ITEM}
