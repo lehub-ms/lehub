@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { safeRedirect } from '@shared/lib/safeRedirect'
+import { safeRedirect } from '@lehub/shared/lib/safeRedirect'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
 import { openedSession } from './support/session-fixtures'

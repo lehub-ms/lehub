@@ -1,7 +1,7 @@
 import { ExternalLink, LogOut, ShieldOff } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useAuth } from '@shared/auth/useAuth'
-import { accountLabel } from '@shared/lib/accountLabel'
+import { useAuth } from '@lehub/shared/auth/useAuth'
+import { accountLabel } from '@lehub/shared/lib/accountLabel'
 import { PUBLIC_SITE_URL } from '@/lib/navigation'
 
 /**

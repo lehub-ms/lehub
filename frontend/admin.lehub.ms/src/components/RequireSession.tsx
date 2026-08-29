@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router'
-import { useAuth } from '@shared/auth/useAuth'
+import { useAuth } from '@lehub/shared/auth/useAuth'
 import { PATHS } from '@/lib/navigation'
 
 /**

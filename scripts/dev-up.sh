@@ -28,7 +28,12 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 cd "$ROOT_DIR"
 
-PACKAGES=(api frontend/lehub.ms frontend/admin.lehub.ms)
+# frontend/shared comes first, and the order is not cosmetic: installing an application does
+# not populate the node_modules of the package it links with `file:`. The shared package
+# resolves its own imports from its real path — theme.css's two @fontsource-variable among
+# them, declared nowhere else since it became a package. Without it first, the build fails
+# further down on a module that is simply not there.
+PACKAGES=(frontend/shared api frontend/lehub.ms frontend/admin.lehub.ms)
 
 # ─── 1. Toolchain ────────────────────────────────────────────────────────────
 

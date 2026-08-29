@@ -1,4 +1,4 @@
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 
 /**
  * The LeHub wordmark.

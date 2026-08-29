@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
 import { GLOBAL_ADMIN, ORDINARY_USER, ORGANIZER, openedSession } from './support/session-fixtures'
-import type { SessionPermissions } from '@shared/auth/AuthContext'
+import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })

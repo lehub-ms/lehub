@@ -9,7 +9,7 @@ import {
 } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import type { NamedRef } from '@/lib/api'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 import { EntityAvatar, type EntityKind } from './EntityAvatar'
 
 const AVATAR_PX = 20

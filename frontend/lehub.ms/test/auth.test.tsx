@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthProvider } from '@shared/auth/AuthProvider'
-import { ensureFreshToken, postAuthStep, SERVICE_UNAVAILABLE } from '@shared/auth/authClient'
-import { useAuth } from '@shared/auth/useAuth'
+import { AuthProvider } from '@lehub/shared/auth/AuthProvider'
+import { ensureFreshToken, postAuthStep, SERVICE_UNAVAILABLE } from '@lehub/shared/auth/authClient'
+import { useAuth } from '@lehub/shared/auth/useAuth'
 import {
   clearTokens,
   getAccessToken,
@@ -12,7 +12,7 @@ import {
   onTokensCleared,
   resetTokenStoreForTests,
   storeTokens,
-} from '@shared/auth/tokenStore'
+} from '@lehub/shared/auth/tokenStore'
 import { MIRROR, openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {

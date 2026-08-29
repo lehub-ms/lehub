@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OtpInput } from '@shared/components/form/OtpInput'
+import { OtpInput } from '@lehub/shared/components/form/OtpInput'
 import { renderAt } from './support/render-route'
 
 function jsonResponse(body: unknown, status = 200): Response {

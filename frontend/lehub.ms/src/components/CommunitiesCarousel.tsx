@@ -1,7 +1,7 @@
 import type { KeyboardEvent, RefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 import { listCommunities, type CommunitySummary } from '@/lib/api'
 import { orderForSession } from '@/lib/communitiesSessionOrder'
 

@@ -1,5 +1,5 @@
 import { Outlet, ScrollRestoration, useLocation } from 'react-router'
-import { BackgroundMesh } from '@shared/components/BackgroundMesh'
+import { BackgroundMesh } from '@lehub/shared/components/BackgroundMesh'
 import { NavBar } from './NavBar'
 import { Footer } from './Footer'
 import { PATHS } from '@/lib/navigation'

@@ -5,7 +5,7 @@ import {
   MESSAGE_TABLE,
   RESET_SENT_MESSAGE,
   type AuthFlow,
-} from '@shared/lib/authErrors'
+} from '@lehub/shared/lib/authErrors'
 
 const FLOWS: AuthFlow[] = ['signup', 'signin', 'reset']
 

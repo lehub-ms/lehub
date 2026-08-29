@@ -1,0 +1,60 @@
+{
+  "name": "@lehub/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./theme.css": "./src/theme.css",
+    "./auth/AuthProvider": "./src/auth/AuthProvider.tsx",
+    "./components/AuthCard": "./src/components/AuthCard.tsx",
+    "./components/BackgroundMesh": "./src/components/BackgroundMesh.tsx",
+    "./components/form/Alert": "./src/components/form/Alert.tsx",
+    "./components/form/Field": "./src/components/form/Field.tsx",
+    "./components/form/OtpInput": "./src/components/form/OtpInput.tsx",
+    "./components/form/PasswordInput": "./src/components/form/PasswordInput.tsx",
+    "./pages/ResetPasswordPage": "./src/pages/ResetPasswordPage.tsx",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.5",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "jsdom": "^26.1.0",
+    "lucide-react": "^1.8.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.4",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  }
+}
