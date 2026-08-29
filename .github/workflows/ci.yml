@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [api, frontend/lehub.ms, frontend/admin.lehub.ms]
+        package: [api, frontend/shared, frontend/lehub.ms, frontend/admin.lehub.ms]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,7 +37,17 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+          cache-dependency-path: |
+            ${{ matrix.package }}/package-lock.json
+            frontend/shared/package-lock.json
+      # Installing an application does not populate the node_modules of the package it
+      # links with `file:`, and the shared foundation resolves its own imports from its
+      # real path. Both front-ends therefore need it installed before their own npm ci,
+      # or their build fails on a module that is simply not there.
+      - name: Install the shared foundation both front-ends link to
+        if: startsWith(matrix.package, 'frontend/') && matrix.package != 'frontend/shared'
+        working-directory: frontend/shared
+        run: npm ci
       # npm ci, never npm install: a package-lock.json out of sync with its
       # package.json is an error, not something to resolve silently.
       - run: npm ci
