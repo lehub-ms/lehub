@@ -76,11 +76,17 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
         const { user, permissions } = await openSession(fallback)
         setState({ status: 'authenticated', user, permissions })
       } catch (error) {
-        // 409 : la session existe bel et bien côté tenant, c'est la ligne miroir qui n'a pas
-        // pu être écrite faute de nom exploitable. On reste connecté, sans identité affichable,
-        // et #97 rend « Mon compte ». Refuser la session serait pire : l'utilisateur a bien
-        // ses jetons et ne comprendrait pas d'être renvoyé au formulaire.
-        if (error instanceof ApiError && error.status === 409) {
+        // `INCOMPLETE_IDENTITY` : la session existe bel et bien côté tenant, c'est la ligne
+        // miroir qui n'a pas pu être écrite faute de nom exploitable. On reste connecté, sans
+        // identité affichable, et #97 rend « Mon compte ». Refuser la session serait pire :
+        // l'utilisateur a bien ses jetons et ne comprendrait pas d'être renvoyé au formulaire.
+        //
+        // Le code et non le statut : la route répond 409 à deux situations opposées, et
+        // l'autre — `EMAIL_ALREADY_MIRRORED`, une adresse déjà miroitée sous un autre compte —
+        // est une anomalie que le serveur journalise. L'absorber dans cette session dégradée
+        // la rendrait invisible des deux côtés à la fois. Elle part donc dans la branche
+        // d'erreur, où elle s'affiche.
+        if (error instanceof ApiError && error.code === 'INCOMPLETE_IDENTITY') {
           // Sans ligne miroir, il n'y a pas d'habilitation à lire : la session est celle
           // d'un utilisateur ordinaire jusqu'à ce que le miroir puisse être écrit.
           setState({ status: 'authenticated', user: null, permissions: NO_PERMISSIONS })

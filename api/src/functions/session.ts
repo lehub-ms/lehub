@@ -1,5 +1,5 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
-import { errorResponse, listFetchError } from '../lib/httpErrors'
+import { errorResponse, listFetchError, permissionsUnavailable } from '../lib/httpErrors'
 import { resolveName, usableClaim } from '../lib/identityClaims'
 import { resolveSessionPermissions } from '../lib/permissionsRepo'
 import { type AuthenticatedIdentity } from '../lib/tokenValidation'
@@ -93,10 +93,10 @@ export async function session(
   try {
     permissions = await resolveSessionPermissions(identity.objectId)
   } catch (error) {
-    // The mirror was written; only the permissions could not be read. A 500 rather than an
-    // empty set, for the same reason as everywhere else: "no permissions" and "we could not
-    // tell" must not look alike to the client.
-    return listFetchError(context, 'Failed to resolve the session permissions', error, 'PERMISSIONS_UNAVAILABLE', 'Unable to resolve the session permissions.')
+    // The mirror was written; only the permissions could not be read. The same helper as every
+    // wrapped route, so the code, the message and the trace stay one thing rather than two
+    // spellings that drift.
+    return permissionsUnavailable(context, request, identity.objectId, error)
   }
 
   return { status: result.created ? 201 : 200, jsonBody: { user: result.user, permissions } }

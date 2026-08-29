@@ -55,6 +55,17 @@ describe('accès au backoffice', () => {
     expect(router.state.location.state).toEqual({ from: '/une-section?filtre=azure' })
   })
 
+  it('retient le fragment avec le reste de la destination', async () => {
+    const { router } = renderAt('/une-section?filtre=azure#detail')
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(PATHS.signIn)
+    })
+    // Aucune route du backoffice ne porte de fragment aujourd'hui : la règle se pose pendant
+    // qu'elle est gratuite, pas le jour où un lien profond en perdra un en silence.
+    expect(router.state.location.state).toEqual({ from: '/une-section?filtre=azure#detail' })
+  })
+
   it("montre l'écran d'absence d'accès à un compte connecté sans habilitation", async () => {
     stubSignedIn(ORDINARY_USER)
     const { router } = renderAt('/')
@@ -76,6 +87,18 @@ describe('accès au backoffice', () => {
 
     expect(await screen.findByRole('heading', { name: /n’avez pas accès/i })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: /page introuvable/i })).toBeNull()
+  })
+
+  it("ne laisse pas un compte habilité sur l'écran d'absence d'accès", async () => {
+    stubSignedIn(ORGANIZER)
+    const { router } = renderAt(PATHS.noAccess)
+
+    // La garde est symétrique, sans quoi elle ment : `/acces-refuse` est retenu comme
+    // destination à la déconnexion, et la connexion suivante d'un compte habilité y atterrit.
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(PATHS.home)
+    })
+    expect(screen.queryByRole('heading', { name: /n’avez pas accès/i })).toBeNull()
   })
 
   it('laisse entrer un organisateur', async () => {

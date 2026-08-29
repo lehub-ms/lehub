@@ -1,4 +1,4 @@
-import { HttpResponseInit, InvocationContext } from '@azure/functions'
+import { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 
 /**
  * The one place the `{ code, message }` error body is shaped.
@@ -31,6 +31,33 @@ export function forbidden(
 ): HttpResponseInit {
   context.error('Authorization refused', refusal)
   return errorResponse(403, 'FORBIDDEN', 'This action is not allowed for this account.')
+}
+
+/**
+ * Refuses a request whose permissions could not be read, and leaves the same trace wherever it
+ * happens.
+ *
+ * A 500 and never an empty set of permissions: answering with none would turn a database
+ * outage into a blanket authorisation refusal that reads, to the client, as "you are not
+ * allowed" rather than "we could not tell".
+ *
+ * It lives here rather than in `withAuthorization` because two routes answer it — every wrapped
+ * one, and `me/session`, which resolves by hand after writing the mirror. Written twice, the
+ * two spellings had already drifted: only one of them logged the route and the caller, which
+ * the non-negotiable on logging authorisation events does not make optional.
+ */
+export function permissionsUnavailable(
+  context: InvocationContext,
+  request: HttpRequest,
+  objectId: string,
+  error: unknown,
+): HttpResponseInit {
+  context.error('Failed to resolve the session permissions', {
+    route: `${request.method} ${new URL(request.url).pathname}`,
+    objectId,
+    error,
+  })
+  return errorResponse(500, 'PERMISSIONS_UNAVAILABLE', 'Unable to resolve the session permissions.')
 }
 
 /**

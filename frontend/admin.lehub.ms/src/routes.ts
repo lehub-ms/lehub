@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router'
 import { AdminLayout } from '@/components/AdminLayout'
 import { AuthLayout } from '@/components/AuthLayout'
 import { RequireAccess } from '@/components/RequireAccess'
+import { RequireNoAccess } from '@/components/RequireNoAccess'
 import { RequireSession } from '@/components/RequireSession'
 import { PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
@@ -21,7 +22,9 @@ import { SignInPage } from '@/pages/SignInPage'
  *
  * L'écran d'absence d'accès est sous la session mais au-dessus de l'habilitation : il
  * s'adresse à quelqu'un de parfaitement authentifié, et le renvoyer à la connexion le ferait
- * tourner en boucle.
+ * tourner en boucle. Il porte pour autant sa propre garde, `RequireNoAccess` : « au-dessus de
+ * l'habilitation » ne veut pas dire « ouvert à tous », et une session habilitée qui atterrit
+ * là doit en repartir.
  *
  * `caseSensitive` n'est pas décoratif : React Router compile chaque motif avec
  * `new RegExp(source, caseSensitive ? undefined : 'i')`, donc sans lui « /CONNEXION »
@@ -39,8 +42,13 @@ export const routes: RouteObject[] = [
     Component: RequireSession,
     children: [
       {
-        Component: AuthLayout,
-        children: [{ path: PATHS.noAccess, caseSensitive: true, Component: NoAccessPage }],
+        Component: RequireNoAccess,
+        children: [
+          {
+            Component: AuthLayout,
+            children: [{ path: PATHS.noAccess, caseSensitive: true, Component: NoAccessPage }],
+          },
+        ],
       },
       {
         Component: RequireAccess,

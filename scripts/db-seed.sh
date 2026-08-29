@@ -78,8 +78,13 @@ sql_run_file "$SEED_DIR/reference.sql" || die "reference.sql failed."
 # Every substitution is quoted: an unquoted expansion would be glob-expanded as well as
 # word-split, and a stray `*` in the variable would be resolved against the working directory
 # before the address check below ever saw it.
+# `sort -uf`, and the `-f` carries the whole point: PK_AdminBootstrap compares under the
+# database's collation, which is case-insensitive by default and which migration 0004 does not
+# override. A case-sensitive dedup would let `Alice@…` and `alice@…` both through, and the
+# second INSERT would violate the primary key — the very failure this dedup exists to prevent,
+# returning by way of the casing.
 BOOTSTRAP_ADMIN_ADDRESSES="$(printf '%s' "${LEHUB_BOOTSTRAP_ADMIN_EMAILS:-}" \
-  | tr ',;' '\n\n' | tr -s '[:space:]' '\n' | sed '/^$/d' | sort -u)"
+  | tr ',;' '\n\n' | tr -s '[:space:]' '\n' | sed '/^$/d' | sort -uf)"
 
 # The rendered list decides, not the raw variable: a value of " " or "," is non-empty and
 # yields no address at all, which would render `USING (VALUES\n)` and fail on an opaque
@@ -92,7 +97,12 @@ if [[ -n "$BOOTSTRAP_ADMIN_ADDRESSES" ]]; then
   while IFS= read -r email; do
     # Loud rather than silent: a typo here ends up as a row nobody will ever match, and the
     # account it was meant for never becomes an administrator.
-    [[ "$email" == *@*.* ]] || die "LEHUB_BOOTSTRAP_ADMIN_EMAILS: '$email' is not an email address."
+    #
+    # A real address, and not merely something carrying an `@` and a dot. The looser test this
+    # replaces accepted `*@corp.com` — typed by an operator expecting a domain-wide grant — and
+    # registered it as exactly the row nobody matches that the check exists to refuse.
+    [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$ ]] \
+      || die "LEHUB_BOOTSTRAP_ADMIN_EMAILS: '$email' is not an email address."
     # Every quote doubled — an address is data, and must never be able to close the literal.
     # Its own statement, and the right-hand side unquoted, because that is the only form
     # where bash reads \' as an escaped quote: written inline inside the double-quoted

@@ -68,6 +68,29 @@ export interface OpenedSession {
 }
 
 /**
+ * Le seul contrôle de forme du transport, et il ne porte que sur les habilitations.
+ *
+ * `SessionPermissions` est déclaré deux fois — ici et dans `api/src/lib/permissionsRepo.ts` —
+ * sans paquet commun pour les tenir ensemble, et `apiFetch` ne pose qu'un `as T` qui ne
+ * vérifie rien. Un renommage côté serveur arriverait donc à `hasBackofficeAccess` en
+ * `undefined`, donc faux : un administrateur refusé, sans la moindre erreur ni à la
+ * compilation ni à l'exécution. Cette fonction est ce qui transforme cette dérive silencieuse
+ * en panne bruyante.
+ *
+ * L'identité n'est délibérément pas contrôlée ici : un nom absent dégrade l'affichage vers
+ * « Mon compte » (#97) et n'accorde ni ne refuse rien. Seul ce qui décide mérite d'être vérifié.
+ */
+function isSessionPermissions(value: unknown): value is SessionPermissions {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as { isGlobalAdmin?: unknown; organizedCommunityIds?: unknown }
+  return (
+    typeof candidate.isGlobalAdmin === 'boolean' &&
+    Array.isArray(candidate.organizedCommunityIds) &&
+    candidate.organizedCommunityIds.every((id) => typeof id === 'string')
+  )
+}
+
+/**
  * Ouvre la session côté LeHub : crée la ligne miroir à la première connexion, la rafraîchit
  * ensuite. Le prénom et le nom ne sont transmis que comme repli, pour la fenêtre où le tenant
  * n'a pas encore propagé les siens ; les claims l'emportent toujours côté API.
@@ -77,10 +100,26 @@ export interface OpenedSession {
  * plus. Elles sont par construction celles du dernier chargement, et le serveur arbitre
  * entre-temps.
  */
-export function openSession(fallback?: { givenName?: string; surname?: string }): Promise<OpenedSession> {
-  return apiFetch<OpenedSession>('/api/me/session', {
+export async function openSession(
+  fallback?: { givenName?: string; surname?: string },
+): Promise<OpenedSession> {
+  const body = await apiFetch<unknown>('/api/me/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fallback ?? {}),
   })
+
+  const permissions = (body as { permissions?: unknown } | null)?.permissions
+  if (!isSessionPermissions(permissions)) {
+    // Statut 500 : la réponse est malformée, donc la faute est chez nous et non dans les
+    // identifiants. `AuthProvider` traite les 5xx comme une panne serveur et conserve les
+    // jetons — une session valide ne doit pas être détruite par notre propre régression.
+    throw new ApiError(
+      "La réponse de /api/me/session ne porte pas d'habilitations exploitables.",
+      500,
+      'SESSION_MALFORMED',
+    )
+  }
+
+  return body as OpenedSession
 }

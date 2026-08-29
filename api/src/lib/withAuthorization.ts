@@ -1,5 +1,5 @@
 import { HttpHandler, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
-import { errorResponse } from './httpErrors'
+import { permissionsUnavailable } from './httpErrors'
 import { resolveSessionPermissions, type SessionPermissions } from './permissionsRepo'
 import { type AuthenticatedIdentity } from './tokenValidation'
 import { withAuth, type AuthenticatedHandler } from './withAuth'
@@ -40,15 +40,7 @@ export function authorized(
     try {
       permissions = await resolvePermissions(identity.objectId)
     } catch (error) {
-      // A 500, never a default set of permissions. Answering with empty ones would turn a
-      // database outage into a blanket authorisation refusal that reads, to the client, as
-      // "you are not allowed" rather than "we could not tell".
-      context.error('Failed to resolve the session permissions', {
-        route: `${request.method} ${new URL(request.url).pathname}`,
-        objectId: identity.objectId,
-        error,
-      })
-      return errorResponse(500, 'PERMISSIONS_UNAVAILABLE', 'Unable to resolve the session permissions.')
+      return permissionsUnavailable(context, request, identity.objectId, error)
     }
 
     return handler(request, context, { identity, permissions })

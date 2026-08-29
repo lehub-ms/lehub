@@ -26,10 +26,14 @@ export function RequireSession(): ReactNode {
   if (state.status === 'anonymous') {
     // La destination voyage dans l'état de navigation, pas dans l'URL : elle n'a pas à être
     // partageable, et elle repasse par `safeRedirect` avant d'être suivie.
+    //
+    // Le fragment en fait partie. Aucune route du backoffice n'en porte aujourd'hui, mais le
+    // laisser tomber ici serait une perte silencieuse le jour où l'une en portera — et il
+    // coûte trois caractères tant qu'il est vide.
     return (
       <Navigate
         to={PATHS.signIn}
-        state={{ from: `${location.pathname}${location.search}` }}
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
         replace
       />
     )

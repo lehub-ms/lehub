@@ -13,7 +13,7 @@ import {
   resetTokenStoreForTests,
   storeTokens,
 } from '@shared/auth/tokenStore'
-import { openedSession } from './support/session-fixtures'
+import { MIRROR, openedSession } from './support/session-fixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -250,6 +250,58 @@ describe('AuthProvider', () => {
     // L'utilisateur détient bel et bien ses jetons : le renvoyer au formulaire serait pire.
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'))
     expect(screen.getByTestId('identity').textContent).toBe('—')
+  })
+
+  it("n'absorbe pas dans cette session dégradée l'autre 409, qui est une anomalie", async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : jsonResponse({ code: 'EMAIL_ALREADY_MIRRORED' }, 409),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    // Une adresse déjà miroitée sous un autre compte est une anomalie que le serveur
+    // journalise. La faire passer pour « connecté sans nom » la rendrait invisible des deux
+    // côtés à la fois : le statut, et non le code, ne suffit pas à trancher entre les deux 409.
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+  })
+
+  it('refuse une réponse de session dont les habilitations ne sont pas exploitables', async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/api/auth/token')
+            ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
+            : // Le contrat a dérivé côté serveur : `isGlobalAdmin` n'est plus un booléen.
+              jsonResponse({ user: MIRROR, permissions: { isGlobalAdmin: 'yes', organizedCommunityIds: [] } }),
+        ),
+      ),
+    )
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    )
+
+    // Bruyant plutôt que silencieux : sans ce contrôle, `hasBackofficeAccess` lirait
+    // `undefined` sur un renommage serveur et refuserait un administrateur sans une erreur.
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('anonymous'))
+    // La forme est notre faute, pas celle des identifiants : les jetons survivent.
+    expect(window.localStorage.getItem('lehub.auth.refreshToken')).not.toBeNull()
   })
 
   it("garde les jetons quand c'est le serveur qui flanche, pas les identifiants", async () => {
