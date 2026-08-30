@@ -1,6 +1,7 @@
 import { PanelLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@lehub/shared/lib/cn'
+import { AccountBlock } from './AccountBlock'
 import { SidebarNav } from './SidebarNav'
 import { Wordmark } from './Wordmark'
 
@@ -46,6 +47,7 @@ export function SidebarBody({
       </div>
 
       <SidebarNav communityId={communityId} collapsed={collapsed} />
+      <AccountBlock collapsed={collapsed} />
     </>
   )
 }

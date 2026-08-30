@@ -143,7 +143,9 @@ describe('tiroir mobile', () => {
     // Le tiroir occupe déjà sa pleine largeur : ses libellés restent visibles, et il n'y
     // propose aucun bouton de réduction.
     expect(within(drawer).getByRole('link', { name: 'Évènements' }).textContent).toBe('Évènements')
-    expect(within(drawer).queryByRole('button', { name: /le menu/ })).toBeNull()
+    // Ciblé sur le bouton de réduction : le bloc du compte porte lui aussi « le menu » dans
+    // son nom accessible depuis #142, et un motif trop large capturerait le mauvais bouton.
+    expect(within(drawer).queryByRole('button', { name: /(réduire|déployer) le menu/i })).toBeNull()
   })
 
   it('se referme par la touche d’échappement et rend le focus au bouton', async () => {
