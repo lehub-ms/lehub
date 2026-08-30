@@ -1,7 +1,7 @@
 import type { EventFilterSelection, FilterOptionsData } from '@/lib/eventFilters'
-import { CommunityAvatar } from './CommunityAvatar'
+import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { FilterCheckboxRow } from './FilterCheckboxRow'
-import { TechnologyAvatar } from './TechnologyAvatar'
+import { TechnologyAvatar } from '@lehub/shared/components/entities/TechnologyAvatar'
 
 interface EventFilterPanelProps {
   options: FilterOptionsData

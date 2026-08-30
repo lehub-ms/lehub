@@ -7,6 +7,7 @@ import { RequireSession } from '@/components/RequireSession'
 import { PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
 import { NoAccessPage } from '@/pages/NoAccessPage'
+import { CommunityScope } from '@/community/CommunityScope'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import {
   AdministratorsPage,
@@ -76,6 +77,7 @@ export const routes: RouteObject[] = [
               {
                 path: PATHS.community,
                 caseSensitive: true,
+                Component: CommunityScope,
                 children: [
                   { path: 'evenements', caseSensitive: true, Component: EventsPage },
                   { path: 'organisateurs', caseSensitive: true, Component: OrganizersPage },

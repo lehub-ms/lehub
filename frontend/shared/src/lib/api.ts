@@ -123,3 +123,33 @@ export async function openSession(
 
   return body as OpenedSession
 }
+
+/**
+ * Une entité désignée par son nom et sa marque — une communauté, une technologie.
+ *
+ * Vit ici parce que `EntityAvatar` en dépend et que les deux applications le rendent : le
+ * site public dans ses cartes d'évènement, le backoffice dans son sélecteur et ses
+ * référentiels.
+ */
+export interface NamedRef {
+  id: string
+  name: string
+  /** Absolute, composed by the API from the blob path it stores. Null when there is no logo. */
+  logoUrl: string | null
+}
+
+export interface CommunitySummary {
+  id: string
+  name: string
+  logoUrl: string | null
+  description: string | null
+}
+
+/**
+ * Toutes les communautés référencées. Anonyme, donc lisible par les deux applications : le
+ * site public l'affiche en carrousel, le backoffice y puise son sélecteur et le filtre sur
+ * les habilitations de la session.
+ */
+export function listCommunities(): Promise<CommunitySummary[]> {
+  return apiFetch<CommunitySummary[]>('/api/communities')
+}

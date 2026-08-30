@@ -1,34 +1,29 @@
 import type { ReactNode } from 'react'
-import { useAuth } from '@lehub/shared/auth/useAuth'
-import { accountLabel } from '@lehub/shared/lib/accountLabel'
+import { Navigate } from 'react-router'
+import { CommunitiesNotice } from '@/components/CommunitiesNotice'
+import { useAllowedCommunities } from '@/community/useAllowedCommunities'
+import { findCommunity } from '@/community/useSelectedCommunity'
+import { communityPath } from '@/lib/navigation'
+import { readLastCommunityId } from '@/lib/preferences'
 
 /**
- * L'accueil provisoire d'un compte habilité.
+ * L'entrée du backoffice n'est pas un écran, c'est une redirection.
  *
- * La Feature #138 remplace cet écran par la coquille du backoffice — barre latérale, sélecteur
- * de communauté, compte connecté — et l'entrée mènera alors aux évènements de la première
- * communauté du sélecteur. En attendant, cet écran ne fait qu'une chose : confirmer que la
- * porte s'est ouverte, sans promettre des sections qui n'existent pas encore.
+ * La Feature #138 est explicite : « l'entrée du backoffice mène aux évènements de cette
+ * communauté — il n'y a pas d'écran d'accueil ». Laquelle ? La dernière utilisée, si la
+ * session l'autorise encore, sinon la première. Cette préférence n'est jamais crue sur
+ * parole : une désignation retirée depuis la dernière visite retombe sans bruit sur la
+ * première communauté autorisée.
  */
 export function HomePage(): ReactNode {
-  const { state } = useAuth()
-  if (state.status !== 'authenticated') return null
+  const communities = useAllowedCommunities()
 
-  const communities = state.permissions.organizedCommunityIds.length
+  if (communities.status === 'loading') return null
+  if (communities.status === 'error') return <CommunitiesNotice kind="error" />
 
-  return (
-    <div className="mx-auto w-full max-w-[34rem] rounded-2xl border border-slate-900/10 bg-white p-8 shadow-[0_10px_30px_rgb(0_0_0/0.06)]">
-      <h1 className="font-heading text-2xl font-bold tracking-tight text-ink">
-        Bonjour {accountLabel(state.user)}
-      </h1>
-      <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-body">
-        {state.permissions.isGlobalAdmin
-          ? 'Vous êtes administrateur de LeHub.'
-          : `Vous organisez ${String(communities)} communauté${communities > 1 ? 's' : ''}.`}
-      </p>
-      <p className="mt-3 text-[0.9375rem] leading-relaxed text-ink-muted">
-        Les écrans de gestion arrivent avec les prochaines livraisons.
-      </p>
-    </div>
-  )
+  const remembered = findCommunity(communities.communities, readLastCommunityId() ?? undefined)
+  const target = remembered ?? communities.communities[0]
+  if (!target) return <CommunitiesNotice kind="empty" />
+
+  return <Navigate to={communityPath(target.id, 'evenements')} replace />
 }

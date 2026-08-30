@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import type { EventSummary } from '@/lib/api'
-import { communityGradient } from '@/lib/communityPalette'
+import { communityGradient } from '@lehub/shared/lib/communityPalette'
 import { formatEventDateRange } from '@/lib/formatEventDate'
 import { EntityRow } from './EntityRow'
 

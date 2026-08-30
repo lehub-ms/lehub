@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
-import { openedSession } from './session-fixtures'
+import { COMMUNITIES, openedSession } from './session-fixtures'
 
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -16,12 +16,14 @@ export function stubSignedIn(permissions: SessionPermissions): void {
   window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation((url: string) =>
-      Promise.resolve(
-        url.includes('/api/auth/token')
-          ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-          : jsonResponse(openedSession(permissions)),
-      ),
-    ),
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/api/auth/token')) {
+        return Promise.resolve(jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 }))
+      }
+      // La coquille lit la liste des communautés dès qu'elle se monte : sans elle, chaque
+      // suite qui traverse une garde recevrait la session en guise de tableau.
+      if (url.includes('/api/communities')) return Promise.resolve(jsonResponse(COMMUNITIES))
+      return Promise.resolve(jsonResponse(openedSession(permissions)))
+    }),
   )
 }

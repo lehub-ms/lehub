@@ -2,6 +2,7 @@ import { Building2, Calendar, Layers, UserRound, Users, type LucideIcon } from '
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { cn } from '@lehub/shared/lib/cn'
+import { CommunityPicker } from './CommunityPicker'
 import {
   communityPath,
   isSectionActive,
@@ -93,6 +94,8 @@ export function SidebarNav({
 
   return (
     <nav aria-label="Navigation principale" className="flex flex-1 flex-col gap-[18px] overflow-x-hidden overflow-y-auto p-3">
+      <CommunityPicker collapsed={collapsed} />
+
       {communityEntries.length > 0 ? (
         <ul className="flex flex-col gap-0.5">
           {communityEntries.map((entry) => (

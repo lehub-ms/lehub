@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { EntityAvatar } from '@/components/events/EntityAvatar'
-import { communityColor } from '@/lib/communityPalette'
-import { buildNamedRef } from './support/event-fixtures'
+import { EntityAvatar } from '../src/components/entities/EntityAvatar'
+import { communityColor } from '../src/lib/communityPalette'
+import type { NamedRef } from '../src/lib/api'
+
+/* Recopié depuis les fixtures du site public plutôt qu'importé : trois lignes, et le socle
+   n'a pas de répertoire de support pour un seul appelant. */
+function buildNamedRef(prefix: string, index = 1, logoUrl: string | null = null): NamedRef {
+  return { id: `${prefix}-${index}`, name: `${prefix} ${index}`, logoUrl }
+}
 
 const LOGO = 'https://media.example/technologies/azure.svg'
 

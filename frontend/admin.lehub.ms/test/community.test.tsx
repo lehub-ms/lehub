@@ -1,0 +1,149 @@
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PATHS } from '@/lib/navigation'
+import { renderAt } from './support/render-route'
+import { COMMUNITIES, GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
+import { stubSignedIn } from './support/stub-session'
+import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
+
+const FIRST = COMMUNITIES[0]!
+const SECOND = COMMUNITIES[1]!
+
+async function enter(permissions: SessionPermissions, path = '/') {
+  stubSignedIn(permissions)
+  const rendered = renderAt(path)
+  await screen.findByRole('navigation', { name: 'Navigation principale' })
+  return rendered
+}
+
+/** Radix ouvre son menu au clavier comme à la souris ; l'entrée prouve les deux à la fois. */
+async function openPicker(): Promise<HTMLElement> {
+  // `find` et non `get` : le sélecteur n'apparaît qu'une fois la liste chargée, et l'attendre
+  // ici évite de faire dépendre chaque test d'une redirection qui lui laisse le temps.
+  const trigger = await screen.findByRole('button', { name: /changer de communauté/i })
+  fireEvent.keyDown(trigger, { key: 'Enter' })
+  return screen.findByRole('menu')
+}
+
+beforeEach(() => {
+  window.localStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+  window.localStorage.clear()
+})
+
+describe('sélecteur de communauté', () => {
+  it('propose toutes les communautés à un administrateur', async () => {
+    await enter(GLOBAL_ADMIN)
+    const menu = await openPicker()
+
+    for (const community of COMMUNITIES) {
+      expect(within(menu).getByRole('menuitemradio', { name: community.name })).toBeTruthy()
+    }
+  })
+
+  it("ne propose à un organisateur que les communautés qu'il organise", async () => {
+    await enter(ORGANIZER)
+
+    // Attendre que le sélecteur soit rendu avant d'affirmer ce qu'il ne contient pas :
+    // l'assertion négative serait autrement vraie pour la mauvaise raison.
+    expect(await screen.findByText(FIRST.name)).toBeTruthy()
+    // Une seule communauté organisée : pas de menu à ouvrir, l'edge case le demande.
+    expect(screen.queryByRole('button', { name: /changer de communauté/i })).toBeNull()
+    expect(screen.queryByText(SECOND.name)).toBeNull()
+  })
+
+  it("annonce l'élément sélectionné plutôt que de le peindre seulement", async () => {
+    await enter(GLOBAL_ADMIN)
+    const menu = await openPicker()
+
+    const selected = within(menu).getByRole('menuitemradio', { name: FIRST.name })
+    expect(selected.getAttribute('aria-checked')).toBe('true')
+    expect(
+      within(menu).getByRole('menuitemradio', { name: SECOND.name }).getAttribute('aria-checked'),
+    ).toBe('false')
+  })
+
+  it("fait suivre l'URL en changeant de communauté, sans changer d'écran", async () => {
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id}/organisateurs`)
+    const menu = await openPicker()
+
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: SECOND.name }))
+
+    // La section est conservée : on change de communauté, pas de sujet.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/organisateurs`),
+    )
+  })
+})
+
+describe("entrée du backoffice", () => {
+  it('mène aux évènements de la première communauté autorisée', async () => {
+    const { router } = await enter(GLOBAL_ADMIN)
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+    )
+  })
+
+  it('retrouve la dernière communauté utilisée après un rechargement', async () => {
+    const first = await enter(GLOBAL_ADMIN, `/c/${SECOND.id}/evenements`)
+    await waitFor(() => expect(window.localStorage.getItem('lehub.admin.communityId')).toBe(SECOND.id))
+    first.unmount()
+    vi.unstubAllGlobals()
+
+    const { router } = await enter(GLOBAL_ADMIN)
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/evenements`),
+    )
+  })
+
+  it('ignore une communauté mémorisée que la session n’organise plus', async () => {
+    window.localStorage.setItem('lehub.admin.communityId', SECOND.id)
+
+    // ORGANIZER n'organise que la première : la préférence n'est pas crue sur parole.
+    const { router } = await enter(ORGANIZER)
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+    )
+  })
+})
+
+describe('communauté de l’URL', () => {
+  it('retombe sur la première autorisée quand elle est inconnue, sans erreur', async () => {
+    const { router } = await enter(GLOBAL_ADMIN, '/c/00000000-dead-beef-0000-000000000000/evenements')
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it("retombe aussi quand elle existe mais que la session ne l'organise pas", async () => {
+    // Ce n'est pas la barrière : l'API refuse les écritures quoi qu'il arrive (#109).
+    const { router } = await enter(ORGANIZER, `/c/${SECOND.id}/evenements`)
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+    )
+  })
+
+  it('reprend la communauté dans le titre de l’écran', async () => {
+    await enter(GLOBAL_ADMIN, `/c/${SECOND.id}/evenements`)
+
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Évènements')
+    // La puce de contexte accompagne le titre plutôt que de s'y fondre.
+    expect(screen.getAllByText(SECOND.name).length).toBeGreaterThan(0)
+  })
+
+  it("laisse le titre sans communauté sur un écran d'administration générale", async () => {
+    await enter(GLOBAL_ADMIN, PATHS.technologies)
+
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Technologies')
+    // Le sélecteur reste visible mais ne pilote rien : il n'a pas disparu pour autant.
+    expect(await screen.findByRole('button', { name: /changer de communauté/i })).toBeTruthy()
+  })
+})

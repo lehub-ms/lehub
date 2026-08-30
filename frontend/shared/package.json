@@ -13,6 +13,9 @@
     "./components/form/OtpInput": "./src/components/form/OtpInput.tsx",
     "./components/form/PasswordInput": "./src/components/form/PasswordInput.tsx",
     "./pages/ResetPasswordPage": "./src/pages/ResetPasswordPage.tsx",
+    "./components/entities/EntityAvatar": "./src/components/entities/EntityAvatar.tsx",
+    "./components/entities/CommunityAvatar": "./src/components/entities/CommunityAvatar.tsx",
+    "./components/entities/TechnologyAvatar": "./src/components/entities/TechnologyAvatar.tsx",
     "./*": "./src/*.ts"
   },
   "scripts": {

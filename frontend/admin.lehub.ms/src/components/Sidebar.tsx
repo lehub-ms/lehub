@@ -6,8 +6,9 @@ import { SidebarBody } from './SidebarBody'
  * La barre latérale persistante du bureau.
  *
  * Largeurs et point de rupture repris de la maquette : 260px, 72px réduite, et le passage en
- * tiroir sous 900px. Ce n'est pas un palier Tailwind standard, d'où la variante littérale —
- * une barre de 260px plus du contenu tabulaire ne tient pas en dessous.
+ * tiroir au palier `md`, celui-là même que le site public utilise pour replier sa navigation.
+ * Un seul seuil dans le projet ; entre 768px et 900px la barre mange beaucoup de largeur, et
+ * c'est la réduction à 72px qui sert de porte de sortie.
  */
 export function Sidebar({
   communityId,
@@ -21,7 +22,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'flex shrink-0 flex-col overflow-x-hidden border-r border-primary/12 bg-white transition-[width] duration-200 max-[900px]:hidden',
+        'flex shrink-0 flex-col overflow-x-hidden border-r border-primary/12 bg-white transition-[width] duration-200 max-md:hidden',
         collapsed ? 'w-[72px]' : 'w-[260px]',
       )}
     >
