@@ -1,4 +1,4 @@
-import type { NamedRef } from '@/lib/api'
+import type { NamedRef } from '../../lib/api'
 import { EntityAvatar } from './EntityAvatar'
 
 interface CommunityAvatarProps {

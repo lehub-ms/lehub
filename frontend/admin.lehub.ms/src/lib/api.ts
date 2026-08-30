@@ -6,7 +6,15 @@
  */
 import { apiFetch } from '@lehub/shared/lib/api'
 
-export { ApiError, apiFetch, openSession, type OpenedSession } from '@lehub/shared/lib/api'
+export {
+  ApiError,
+  apiFetch,
+  listCommunities,
+  openSession,
+  type CommunitySummary,
+  type NamedRef,
+  type OpenedSession,
+} from '@lehub/shared/lib/api'
 
 export interface HealthStatus {
   status: string

@@ -4,9 +4,9 @@ import { Drawer } from 'vaul'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { activeFilterCount, type EventFilterSelection, type FilterOptionsData } from '@/lib/eventFilters'
-import { CommunityAvatar } from './CommunityAvatar'
+import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { FilterSection } from './FilterSection'
-import { TechnologyAvatar } from './TechnologyAvatar'
+import { TechnologyAvatar } from '@lehub/shared/components/entities/TechnologyAvatar'
 
 interface EventFilterDrawerProps {
   options: FilterOptionsData

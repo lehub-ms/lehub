@@ -2,27 +2,8 @@ import { screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { GLOBAL_ADMIN, ORDINARY_USER, ORGANIZER, openedSession } from './support/session-fixtures'
-import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-}
-
-/** Une session déjà ouverte, restaurée depuis le jeton de rafraîchissement du stockage. */
-function stubSignedIn(permissions: SessionPermissions) {
-  window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockImplementation((url: string) =>
-      Promise.resolve(
-        url.includes('/api/auth/token')
-          ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-          : jsonResponse(openedSession(permissions)),
-      ),
-    ),
-  )
-}
+import { COMMUNITIES, GLOBAL_ADMIN, ORDINARY_USER, ORGANIZER } from './support/session-fixtures'
+import { stubSignedIn } from './support/stub-session'
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -101,20 +82,27 @@ describe('accès au backoffice', () => {
     expect(screen.queryByRole('heading', { name: /n’avez pas accès/i })).toBeNull()
   })
 
-  it('laisse entrer un organisateur', async () => {
+  it('laisse entrer un organisateur, sur les évènements de sa communauté', async () => {
     stubSignedIn(ORGANIZER)
     const { router } = renderAt('/')
 
-    expect(await screen.findByRole('heading', { name: /bonjour/i })).toBeTruthy()
-    expect(router.state.location.pathname).toBe(PATHS.home)
+    // L'entrée du backoffice n'est plus un écran depuis #141 : c'est une redirection vers
+    // la section communauté, et un organisateur n'y atterrit que sur les siennes.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.id}/evenements`),
+    )
+    expect(await screen.findByRole('heading', { name: 'Évènements' })).toBeTruthy()
   })
 
   it('laisse entrer un administrateur global, même sans communauté', async () => {
     stubSignedIn(GLOBAL_ADMIN)
     const { router } = renderAt('/')
 
-    expect(await screen.findByRole('heading', { name: /bonjour/i })).toBeTruthy()
-    expect(router.state.location.pathname).toBe(PATHS.home)
+    // Un administrateur n'organise rien et voit pourtant toutes les communautés : il atterrit
+    // sur la première, exactement comme un organisateur sur la sienne.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.id}/evenements`),
+    )
   })
 
   it("n'expose aucun parcours d'inscription", async () => {

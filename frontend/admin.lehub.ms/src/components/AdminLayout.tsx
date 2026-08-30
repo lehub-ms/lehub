@@ -1,28 +1,104 @@
-import type { ReactNode } from 'react'
-import { Outlet, ScrollRestoration } from 'react-router'
+import * as Dialog from '@radix-ui/react-dialog'
+import { Menu } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Outlet, ScrollRestoration, useLocation } from 'react-router'
+import { CommunitiesProvider } from '@/community/CommunitiesProvider'
+import { readSidebarCollapsed, writeSidebarCollapsed } from '@/lib/preferences'
+import { Sidebar } from './Sidebar'
+import { SidebarBody } from './SidebarBody'
 import { Wordmark } from './Wordmark'
 
 /**
- * Le cadre des écrans habilités.
+ * La coquille du backoffice : une barre latérale persistante et une zone de contenu.
  *
- * Délibérément minimal : la Feature #138 le remplace par la coquille du backoffice — barre
- * latérale, sélecteur de communauté, compte connecté. Ce qui est ici est ce que la story #111
- * exige et rien de plus, pour ne pas préempter des décisions qui appartiennent à une autre
- * Feature.
+ * Sous le palier `md` la barre cède la place à une barre supérieure, et revient en tiroir
+ * superposé. Le tiroir est un `Dialog` Radix — il apporte le piège à focus, la fermeture par le
+ * fond et par la touche d'échappement, et le retour du focus au bouton d'ouverture, soit quatre
+ * exigences de la story pour une dépendance que le site public utilise déjà.
  */
 export function AdminLayout(): ReactNode {
+  // Lu au premier rendu plutôt que corrigé par un effet : la barre ne doit pas s'afficher
+  // déployée puis se replier sous les yeux de qui l'avait réduite.
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
+  const { pathname } = useLocation()
+
+  /* Un booléen, remis à faux au **changement** d'écran — et non un `openedAt === pathname`,
+     qui se refermait bien en naviguant mais se rouvrait tout seul au retour arrière : revenir
+     sur l'écran d'ouverture y rendait l'égalité vraie une seconde fois, et le tiroir modal
+     resurgissait par-dessus la page demandée.
+
+     L'ajustement se fait au rendu et non dans un effet : c'est le patron que React documente
+     pour dériver un état d'une valeur qui change, et il évite le rendu intermédiaire pendant
+     lequel le tiroir s'afficherait sur le nouvel écran avant d'être refermé. */
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [seenPathname, setSeenPathname] = useState(pathname)
+  if (seenPathname !== pathname) {
+    setSeenPathname(pathname)
+    setDrawerOpen(false)
+  }
+
+  const firstRender = useRef(true)
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    writeSidebarCollapsed(collapsed)
+  }, [collapsed])
+
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-slate-900/10 bg-white px-6 py-4">
-        <Wordmark className="text-xl" />
-      </header>
+    <CommunitiesProvider>
+      <div className="flex min-h-dvh">
+        <Sidebar
+          collapsed={collapsed}
+          onToggleCollapse={() => {
+            setCollapsed((current) => !current)
+          }}
+        />
 
-      <main id="contenu" className="flex-1 px-6 py-12">
-        <Outlet />
-      </main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <header className="sticky top-0 z-[150] flex items-center gap-3 border-b border-primary/12 bg-white px-4 py-3 md:hidden">
+              <Dialog.Trigger
+                aria-label="Ouvrir le menu"
+                className="flex size-11 items-center justify-center rounded-[10px] text-ink-body transition-colors hover:bg-primary-xs hover:text-primary"
+              >
+                <Menu aria-hidden="true" className="size-5" />
+              </Dialog.Trigger>
+              <Wordmark className="text-base" />
+            </header>
 
-      {/* Aucun script en ligne en mode bibliothèque, donc `script-src 'self'` reste tenable. */}
-      <ScrollRestoration />
-    </div>
+            <Dialog.Portal>
+              <Dialog.Overlay
+                data-testid="sidebar-backdrop"
+                className="fixed inset-0 z-[200] bg-slate-900/45"
+              />
+              <Dialog.Content
+                // Radix confine les technologies d'assistance par `aria-hidden` sur le reste
+                // plutôt que par `aria-modal` ; la story demande l'annonce modale, donc les deux.
+                aria-modal="true"
+                aria-describedby={undefined}
+                className="fixed top-0 bottom-0 left-0 z-[300] flex w-[260px] flex-col overflow-x-hidden border-r border-primary/12 bg-white shadow-[0_10px_40px_rgb(0_0_0/0.18)]"
+              >
+                <Dialog.Title className="sr-only">Menu du backoffice</Dialog.Title>
+                {/* Jamais réduit : le tiroir occupe déjà sa pleine largeur, et l'état du bureau
+                    n'a pas à s'y propager. */}
+                <SidebarBody collapsed={false} />
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+
+          <main
+            id="contenu"
+            className="flex-1 px-7 pt-7 pb-14 max-[640px]:px-3.5 max-[640px]:pt-5 max-[640px]:pb-10"
+          >
+            <Outlet />
+          </main>
+        </div>
+
+        {/* Aucun script en ligne en mode bibliothèque, donc `script-src 'self'` reste tenable. */}
+        <ScrollRestoration />
+      </div>
+    </CommunitiesProvider>
   )
 }

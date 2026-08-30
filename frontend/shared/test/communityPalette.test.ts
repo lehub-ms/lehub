@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PALETTE, communityColor, communityGradient, contrastRatio } from '@/lib/communityPalette'
+import { PALETTE, communityColor, communityGradient, contrastRatio } from '../src/lib/communityPalette'
 
 describe('communityColor', () => {
   it('is deterministic for a given id', () => {
