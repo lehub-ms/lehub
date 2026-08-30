@@ -9,10 +9,12 @@ import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 const FIRST = COMMUNITIES[0]!
 const SECOND = COMMUNITIES[1]!
 
+/** Voir `renderShell` : on attend la liste chargée, pas le seul repère de navigation. */
 async function enter(permissions: SessionPermissions, path = '/') {
   stubSignedIn(permissions)
   const rendered = renderAt(path)
   await screen.findByRole('navigation', { name: 'Navigation principale' })
+  await screen.findByRole('link', { name: 'Évènements' })
   return rendered
 }
 
@@ -48,11 +50,12 @@ describe('sélecteur de communauté', () => {
   it("ne propose à un organisateur que les communautés qu'il organise", async () => {
     await enter(ORGANIZER)
 
-    // Attendre que le sélecteur soit rendu avant d'affirmer ce qu'il ne contient pas :
-    // l'assertion négative serait autrement vraie pour la mauvaise raison.
-    expect(await screen.findByText(FIRST.name)).toBeTruthy()
+    // Portée à la barre : le nom de la communauté figure aussi dans la puce du titre, et une
+    // assertion non ciblée trouvait deux éléments dès que l'attente était correcte.
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    expect(within(nav).getByText(FIRST.name)).toBeTruthy()
     // Une seule communauté organisée : pas de menu à ouvrir, l'edge case le demande.
-    expect(screen.queryByRole('button', { name: /changer de communauté/i })).toBeNull()
+    expect(within(nav).queryByRole('button', { name: /changer de communauté/i })).toBeNull()
     expect(screen.queryByText(SECOND.name)).toBeNull()
   })
 
