@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@shared/theme.css';
+@import '@lehub/shared/theme.css';
 
 
 @layer base {

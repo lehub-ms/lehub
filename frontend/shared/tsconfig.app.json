@@ -5,14 +5,12 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -20,12 +18,11 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
-
-    "types": ["vite/client"],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    // `import.meta.env.VITE_API_BASE_URL` is read by src/auth/authClient.ts and src/lib/api.ts.
+    "types": ["vite/client"]
   },
-  "include": ["src", "test"]
+  // No `paths` block: this package resolves its own dependencies from its own node_modules,
+  // which is the whole point of it being a package. The applications' tsconfig.app.json no
+  // longer reaches in here either.
+  "include": ["src"]
 }

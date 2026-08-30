@@ -1,9 +1,9 @@
-# frontend/shared — le socle d'authentification des deux SPA
+# frontend/shared — le socle partagé des deux SPA
 
 Le parcours d'authentification est le même sur `lehub.ms` et sur `admin.lehub.ms` : mêmes
 routes de relais, mêmes jetons, mêmes messages d'erreur, mêmes champs de formulaire. Il vit
-donc ici, importé par les deux applications sous l'alias `@shared`, plutôt qu'en deux copies
-dont l'une prendrait du retard sur l'autre au premier correctif.
+donc ici, importé par les deux applications sous le nom `@lehub/shared`, plutôt qu'en deux
+copies dont l'une prendrait du retard sur l'autre au premier correctif.
 
 ```
 src/
@@ -11,6 +11,7 @@ src/
   components/   la carte d'authentification et les champs de formulaire
   lib/          transport HTTP, messages d'erreur, règles de mot de passe, utilitaires
   theme.css     les tokens du design system, importés par les deux index.css
+test/           les suites du paquet — voir « Correcteur et tests »
 ```
 
 **Ce qui ne vit pas ici** : les pages. `SignInPage` et `ResetPasswordPage` dépendent des
@@ -19,34 +20,93 @@ compte ». Chaque application compose les siennes à partir des hooks et des com
 ci-dessus. `useSignupFlow` reste également côté `lehub.ms` : le backoffice n'expose aucun
 parcours d'inscription.
 
-## Ce n'est pas un paquet
+## C'est un paquet npm interne
 
-Pas de `package.json`, pas de `node_modules`, pas de build. Le dépôt n'a pas de `package.json`
-racine (CLAUDE.md), donc pas d'espace de travail npm pour lier trois paquets entre eux ; et un
-paquet lié par `file:` installerait sa propre copie de React, ce qui casse les hooks.
+`@lehub/shared`, privé, jamais publié, consommé par les deux applications en `file:../shared`.
+Il n'introduit **aucun** espace de travail npm ni `package.json` racine — la règle du dépôt
+tient toujours : le paquet est interne à ce répertoire, et chaque application reste installée
+et construite pour elle-même.
 
-Ces sources sont donc compilées par le build de chaque application, et y résolvent leurs
-dépendances. Trois réglages, identiques des deux côtés, font tenir cela :
+Ce qu'il apporte, et que l'alias `@shared` ne pouvait pas donner : une dépendance qui ne sert
+qu'au socle est déclarée **ici et nulle part ailleurs**, et ce code est enfin relu par un
+correcteur.
+
+### La carte `exports`
+
+```jsonc
+"./theme.css": "./src/theme.css",
+"./components/AuthCard": "./src/components/AuthCard.tsx",   // … les 8 modules .tsx, nommément
+"./*": "./src/*.ts"                                         // tout le reste
+```
+
+Une clé littérale l'emporte sur le joker : les huit composants `.tsx` sont donc atteints sans
+extension, exactement comme les modules `.ts`. Côté application, un import ne se distingue pas
+de ce qu'il était sous l'alias, au préfixe près.
+
+Le prix, visible et assumé : **ajouter un composant `.tsx` au socle demande une ligne dans
+`exports`**. Ajouter un module `.ts` n'en demande aucune. Cette ligne est la surface publique
+du paquet, écrite là où on la lit.
+
+### Les dépendances
 
 | Où | Quoi | Pourquoi |
 |---|---|---|
-| `vite.config.ts` | `resolve.alias['@shared']` | l'import `@shared/...` |
-| `vite.config.ts` | `resolve.dedupe` | ces sources sont hors de la racine du projet : sans cela le bundler cherche `react` à côté d'elles et ne trouve rien. Garantit aussi un seul React dans le bundle |
-| `tsconfig.app.json` | `paths` + `include` | la même résolution pour `tsc`, qui sinon remonte depuis ce répertoire et n'atteint aucun `node_modules` |
+| `dependencies` | `clsx`, `tailwind-merge`, les deux `@fontsource-variable` | ne servent qu'au socle — déclarées une fois, plus dans les deux applications |
+| `peerDependencies` | `react`, `react-dom`, `lucide-react` | fournies par l'application qui consomme le paquet, qui les utilise aussi pour son propre code |
+| `devDependencies` | les mêmes, plus l'outillage | le socle en a besoin pour ses propres tests et son correcteur |
 
-La liste de `dedupe` et celle de `paths` sont les dépendances directes du socle : `react`,
-`clsx`, `tailwind-merge`, `lucide-react`. En ajouter une ici demande de l'ajouter aux deux
-applications — c'est le prix de l'absence de paquet, et il est visible.
+**`resolve.dedupe` reste dans les deux `vite.config.ts`, et reste indispensable.** Le paquet
+est lié par `file:`, donc résolu à son chemin réel : ses imports partent de
+`frontend/shared/node_modules`, où ses dépendances de développement installent un second React.
+`dedupe` force `react`, `react-dom` & co à se résoudre depuis la racine de l'application — c'est
+la garantie d'un seul React dans le bundle.
 
-**`react-router` n'en fait délibérément pas partie.** Le paquet ne publie que des `exports`, que
-`paths` ne sait pas suivre, et l'y forcer supposerait de pointer un chemin interne à sa
-distribution. C'est pourquoi rien ici ne navigue : `ResetPasswordPage` reçoit son lien de retour
-rendu et un rappel de fin de parcours, et chaque application y met ses propres routes. La
-contrainte s'est trouvée être la meilleure frontière — un composant du socle n'a pas à connaître
-les URL de qui l'utilise.
+### L'ordre d'installation, qui n'est pas négociable
 
-ESLint, lui, n'atteint pas ce répertoire : il refuse un chemin hors du répertoire de sa
-configuration, et lui en donner une supposerait de rendre au socle le `tsconfig.json` et le
-`node_modules` qu'on vient de lui retirer. `api/test/sharedFoundation.test.ts` couvre les deux
-règles de CLAUDE.md qu'ESLint apportait, sur le texte ; le reste est tenu par les deux
-`tsc -b`, `strict` compris.
+Installer une application ne peuple **pas** le `node_modules` du paquet qu'elle lie : son
+lockfile enregistre le manifeste du socle sans en installer les dépendances. Or le socle résout
+ses propres imports depuis son chemin réel — dont les deux `@import '@fontsource-variable/…'` de
+`theme.css`, qui ne sont plus déclarés ailleurs.
+
+`frontend/shared` s'installe donc **avant** les deux applications, et c'est écrit à chacun des
+trois endroits qui installent : `scripts/dev-up.sh`, `.github/workflows/ci.yml` et le job `web`
+de `.github/workflows/cd.yml`.
+
+### La directive `@source` de `theme.css`
+
+Tailwind v4 ne scanne que la racine du projet qui compile, et ce répertoire est en dehors —
+il est même atteint à travers `node_modules`, que Tailwind ignore par défaut. `@source '.'`
+reste donc dans `theme.css`, où elle décrit le socle plutôt que ses consommateurs.
+
+Son absence ne casse rien de visible : pas d'erreur, pas d'avertissement, un build vert, et
+toute classe utilisée par un composant du socle et par lui seul disparue des deux feuilles.
+C'est ce qui a vidé les deux écrans d'authentification de leurs styles de champ.
+`test/tailwindSource.test.ts` la surveille.
+
+### Correcteur et tests
+
+```bash
+npm --prefix frontend/shared run lint    # eslint — mêmes règles que les deux applications
+npm --prefix frontend/shared run build   # tsc -b — vérification de types, sans émission
+npm --prefix frontend/shared test        # vitest
+```
+
+La configuration ESLint est la copie conforme de celle des applications, `react-hooks` et
+`recommendedTypeChecked` compris : c'est ce que le montage précédent rendait impossible, et
+c'est ce qui a motivé le passage au paquet. `frontend/shared` figure dans la matrice
+d'intégration continue au même titre que les trois autres projets — `npm audit` bloquant en
+`high` inclus.
+
+Trois projets TypeScript, sur le patron de `/api` : `tsconfig.app.json` pour `src/` (types
+navigateur), `tsconfig.test.json` pour `test/` (qui ajoute les types Node, parce que la garde
+`@source` lit la feuille sur le disque), `tsconfig.node.json` pour `vitest.config.ts`.
+
+## Une frontière conservée : `react-router`
+
+Rien ici ne navigue. `ResetPasswordPage` reçoit son lien de retour déjà rendu et un rappel de
+fin de parcours, et chaque application y met ses propres routes.
+
+Cette frontière était d'abord une contrainte technique — `paths` ne savait pas suivre un paquet
+qui ne publie que des `exports` — et le paquet la lèverait aujourd'hui. Elle est gardée parce
+qu'elle s'est trouvée être la bonne : un composant du socle n'a pas à connaître les URL de qui
+l'utilise.

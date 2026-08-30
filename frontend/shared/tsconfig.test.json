@@ -1,0 +1,11 @@
+{
+  // Le même découpage que api/tsconfig.test.json : les suites ont besoin des types Node —
+  // `tailwindSource.test.ts` lit la feuille sur le disque — et les ouvrir dans le projet
+  // applicatif rendrait `fs` et `process` visibles depuis tout src/, dans un paquet qui ne
+  // s'exécute que dans un navigateur.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"]
+  },
+  "include": ["test"]
+}

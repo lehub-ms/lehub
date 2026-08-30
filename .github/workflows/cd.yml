@@ -277,6 +277,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
+            frontend/shared/package-lock.json
             frontend/lehub.ms/package-lock.json
             frontend/admin.lehub.ms/package-lock.json
       - name: Refuse an empty build identifier
@@ -298,6 +299,13 @@ jobs:
             fi
           done
           exit $status
+      # Both applications link @lehub/shared with `file:`, and installing them does not
+      # populate its node_modules. The shared foundation resolves its own imports from its
+      # real path — theme.css's two @fontsource-variable among them — so it is installed
+      # first or neither build finds them.
+      - name: Install the shared foundation
+        working-directory: frontend/shared
+        run: npm ci
       # A failed build publishes nothing for either application: the publish
       # steps only run once both builds have succeeded.
       - name: Build the public app

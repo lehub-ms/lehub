@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, Outlet } from 'react-router'
-import { useAuth } from '@shared/auth/useAuth'
-import { hasBackofficeAccess } from '@shared/lib/access'
+import { useAuth } from '@lehub/shared/auth/useAuth'
+import { hasBackofficeAccess } from '@lehub/shared/lib/access'
 import { PATHS } from '@/lib/navigation'
 
 /**

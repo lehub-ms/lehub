@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useAuth } from '@shared/auth/useAuth'
-import { accountLabel } from '@shared/lib/accountLabel'
+import { useAuth } from '@lehub/shared/auth/useAuth'
+import { accountLabel } from '@lehub/shared/lib/accountLabel'
 
 /**
  * L'accueil provisoire d'un compte habilité.

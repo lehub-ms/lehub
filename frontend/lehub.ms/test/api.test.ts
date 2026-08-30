@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, apiFetch } from '../src/lib/api'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 
 afterEach(() => {
   vi.unstubAllGlobals()

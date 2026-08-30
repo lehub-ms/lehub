@@ -24,14 +24,8 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["../shared/src/*"],
-      "react": ["./node_modules/@types/react"],
-      "react/*": ["./node_modules/@types/react/*"],
-      "clsx": ["./node_modules/clsx"],
-      "tailwind-merge": ["./node_modules/tailwind-merge"],
-      "lucide-react": ["./node_modules/lucide-react"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "test", "../shared/src"]
+  "include": ["src", "test"]
 }

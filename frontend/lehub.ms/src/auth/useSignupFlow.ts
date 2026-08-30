@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react'
-import { authMessage, FLOW_CONTROL_ERRORS } from '@shared/lib/authErrors'
+import { authMessage, FLOW_CONTROL_ERRORS } from '@lehub/shared/lib/authErrors'
 import {
   postAuthStep,
   SERVICE_UNAVAILABLE,
   tokensFrom,
   type AuthStepData,
   type AuthStepResult,
-} from '@shared/auth/authClient'
-import { storeTokens } from '@shared/auth/tokenStore'
-import { useAuth } from '@shared/auth/useAuth'
+} from '@lehub/shared/auth/authClient'
+import { storeTokens } from '@lehub/shared/auth/tokenStore'
+import { useAuth } from '@lehub/shared/auth/useAuth'
 
 /**
  * L'inscription, de bout en bout, telle qu'Entra la déroule.

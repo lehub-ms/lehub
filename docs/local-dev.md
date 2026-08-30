@@ -357,9 +357,17 @@ npm --prefix api run build                # tsc
 npm --prefix frontend/lehub.ms run lint   # eslint
 npm --prefix frontend/lehub.ms test
 npm --prefix frontend/lehub.ms run build  # tsc -b && vite build
+
+npm --prefix frontend/shared run lint     # eslint
+npm --prefix frontend/shared test         # vitest
+npm --prefix frontend/shared run build    # tsc -b, type-check only — the package emits nothing
 ```
 
 Same scripts in `frontend/admin.lehub.ms`.
+
+`frontend/shared` is the internal package `@lehub/shared`, which both front-ends link with
+`file:`. It installs **before** them — `dev-up.sh` already orders it that way. See
+`frontend/shared/README.md`.
 
 ## Troubleshooting
 
@@ -378,6 +386,7 @@ Same scripts in `frontend/admin.lehub.ms`.
 | `EVENTS_FETCH_ERROR` on `/api/events`, `/api/health` still fine | the API is up but the database is not | `docker compose ps`, then `./scripts/dev-up.sh` |
 | `MEDIA_BASE_URL must be set…` on `/api/communities` or `/api/events`, `/api/health` reports `mediaConfigured: false` | the setting was removed by hand from `api/local.settings.json` | rerun `./scripts/dev-start.sh` — `MEDIA_BASE_URL` is a managed key, rendered on every run |
 | `0001_….sql changed after it was applied` | a merged migration was edited | revert the file; corrections go in a **new** migration |
+| Front-end build fails on `@fontsource-variable/…` or `clsx` not found | `frontend/shared` was never installed — linking a `file:` package does not install its dependencies into the consumer | `npm --prefix frontend/shared ci`, then rebuild |
 | `npm ci` fails on a lockfile mismatch | `package.json` changed without refreshing the lockfile | `npm --prefix <pkg> install`, and commit the lockfile |
 
 ## Working without Azure

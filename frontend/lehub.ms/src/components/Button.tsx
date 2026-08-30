@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 import { BUTTON_BASE, BUTTON_VARIANTS } from '@/lib/button-styles'
 
 type Variant = 'primary' | 'outline' | 'ghost'

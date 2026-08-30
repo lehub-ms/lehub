@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { ResetPasswordPage as SharedResetPasswordPage } from '@shared/pages/ResetPasswordPage'
+import { ResetPasswordPage as SharedResetPasswordPage } from '@lehub/shared/pages/ResetPasswordPage'
 import { PATHS } from '@/lib/navigation'
 
 /**

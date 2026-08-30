@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 're
 import * as Accordion from '@radix-ui/react-accordion'
 import { ChevronDown } from 'lucide-react'
 import type { FilterOption } from '@/lib/eventFilters'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 import { FilterCheckboxRow } from './FilterCheckboxRow'
 
 interface SummaryItem {

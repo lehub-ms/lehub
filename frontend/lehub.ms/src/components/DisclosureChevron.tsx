@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react'
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 
 /**
  * Rotates and recolors on its ancestor Radix Accordion/Collapsible trigger's

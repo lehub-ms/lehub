@@ -17,8 +17,8 @@ Azure budgets in `/infra` are tripwires set above that cap, not the cap itself: 
 /api                         Azure Functions v4 (TypeScript, Node 22) — shared by both frontends
 /frontend/lehub.ms           Public SPA (React 19 + Vite)
 /frontend/admin.lehub.ms     Admin backoffice SPA (React 19 + Vite)
-/frontend/shared             Auth foundation + design tokens shared by both SPA, under
-                             the `@shared` alias. Not a package — see its README
+/frontend/shared             Auth foundation + design tokens shared by both SPA, consumed
+                             as the internal package `@lehub/shared` — see its README
 /docs                        Technical docs: local dev, deployment, ADRs
 /scripts                     Bash tooling: db init, MI bootstrap, local dev orchestration
                              (one Node helper, for the Azure SDK the CLI cannot replace)
@@ -65,6 +65,12 @@ npm --prefix frontend/lehub.ms run build      # tsc -b && vite build
 npm --prefix frontend/lehub.ms run lint       # eslint
 npm --prefix frontend/lehub.ms test           # vitest run
 
+# Shared foundation — install it before either front-end, always
+npm --prefix frontend/shared ci               # or `install`
+npm --prefix frontend/shared run build        # tsc -b, type-check only
+npm --prefix frontend/shared run lint         # eslint
+npm --prefix frontend/shared test             # vitest run
+
 # API
 npm --prefix api run dev                      # tsc --watch + func start
 npm --prefix api run build                    # tsc
@@ -103,9 +109,11 @@ instructions live in `docs/local-dev.md`.
 Two deliberate absences, both settled — do not reintroduce either:
 
 - **No root `package.json`.** `/scripts` orchestrates; `concurrently` is consumed from
-  `api/node_modules` rather than installed globally. `/frontend/shared` follows from this
-  rather than breaking it: with no npm workspace to link three packages, the shared sources
-  carry no `package.json` and are compiled by each application's own build.
+  `api/node_modules` rather than installed globally. `/frontend/shared` is an internal package
+  (`@lehub/shared`, private, linked with `file:../shared`) and does not weaken this: it
+  introduces no npm workspace and no central orchestrator, and each project stays installed and
+  built on its own. It must be installed **before** both front-ends everywhere — installing an
+  application does not populate the node_modules of the package it links.
 - **No `swa start` proxy and no Vite dev proxy.** A Function App can only be linked to one
   Static Web App, so both front-ends call the API cross-origin in every environment, and the
   local loop must exercise that same path rather than hide it.

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Outlet } from 'react-router'
-import { BackgroundMesh } from '@shared/components/BackgroundMesh'
+import { BackgroundMesh } from '@lehub/shared/components/BackgroundMesh'
 import { Wordmark } from './Wordmark'
 
 /**

@@ -1,4 +1,4 @@
-import { cn } from '@shared/lib/cn'
+import { cn } from '@lehub/shared/lib/cn'
 
 /**
  * Le logotype du backoffice : la marque LeHub, suivie de l'étiquette qui dit où l'on est.
