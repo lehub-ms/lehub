@@ -42,6 +42,12 @@ export const ORGANIZER: SessionPermissions = {
 }
 export const GLOBAL_ADMIN: SessionPermissions = { isGlobalAdmin: true, organizedCommunityIds: [] }
 
+/** Les deux qualités à la fois : ni un cas d'école, ni un cas théorique — un fondateur promu. */
+export const ADMIN_AND_ORGANIZER: SessionPermissions = {
+  isGlobalAdmin: true,
+  organizedCommunityIds: ['c1c1c1c1-0000-0000-0000-000000000001'],
+}
+
 export function openedSession(permissions: SessionPermissions) {
   return { user: MIRROR, permissions }
 }

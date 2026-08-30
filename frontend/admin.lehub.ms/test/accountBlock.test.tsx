@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { accountInitials } from '@/lib/accountInitials'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
+import { ADMIN_AND_ORGANIZER, GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
 import { stubSignedIn } from './support/stub-session'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
@@ -108,5 +108,44 @@ describe('bloc du compte connecté', () => {
     expect(trigger.textContent).not.toContain('Ada Lovelace')
     expect(trigger.getAttribute('aria-label')).toContain('Ada Lovelace')
     expect(trigger.getAttribute('aria-label')).toContain('Administrateur')
+  })
+})
+
+describe('le menu du compte au clavier et en fin de session', () => {
+  it('se referme par la touche d’échappement et rend le focus au bloc', async () => {
+    await enter(GLOBAL_ADMIN)
+    const trigger = await screen.findByRole('button', { name: /ouvrir le menu du compte/i })
+
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    await screen.findByRole('menu')
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
+  it('aboutit à l’état déconnecté même si la session a déjà expiré', async () => {
+    const { router } = await enter(GLOBAL_ADMIN)
+    const trigger = await screen.findByRole('button', { name: /ouvrir le menu du compte/i })
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    const menu = await screen.findByRole('menu')
+
+    // La session s'éteint pendant que le menu est ouvert : le jeton disparaît sous les pieds
+    // de l'utilisateur. Se déconnecter doit rester une opération qui aboutit, pas une erreur.
+    window.localStorage.removeItem('lehub.auth.refreshToken')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /se déconnecter/i }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(PATHS.signIn))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('annonce « Administrateur » à un compte qui est aussi organisateur', async () => {
+    await enter(ADMIN_AND_ORGANIZER)
+    const trigger = await screen.findByRole('button', { name: /ouvrir le menu du compte/i })
+
+    // La qualité la plus large l'emporte.
+    expect(trigger.textContent).toContain('Administrateur')
+    expect(trigger.textContent).not.toContain('Organisateur')
   })
 })

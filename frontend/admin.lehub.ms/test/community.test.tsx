@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { COMMUNITIES, GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
+import { ADMIN_AND_ORGANIZER, COMMUNITIES, GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
 import { stubSignedIn } from './support/stub-session'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
@@ -236,5 +236,21 @@ describe('la barre reste pilotable hors de la section communauté', () => {
     expect(
       within(nav).getByRole('link', { name: 'Organisateurs' }).getAttribute('aria-current'),
     ).toBe('page')
+  })
+})
+
+describe('compte à la fois administrateur et organisateur', () => {
+  it('voit les deux sections coexister, et toutes les communautés au sélecteur', async () => {
+    await enter(ADMIN_AND_ORGANIZER)
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+
+    await waitFor(() => expect(within(nav).getByRole('link', { name: 'Évènements' })).toBeTruthy())
+    expect(within(nav).getByRole('link', { name: 'Technologies' })).toBeTruthy()
+
+    // Administrateur : le sélecteur propose tout le référentiel, pas seulement ce qu'il organise.
+    const menu = await openPicker()
+    for (const community of COMMUNITIES) {
+      expect(within(menu).getByRole('menuitemradio', { name: community.name })).toBeTruthy()
+    }
   })
 })
