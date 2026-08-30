@@ -187,3 +187,43 @@ describe('tiroir mobile', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 })
+
+describe('constats de la revue', () => {
+  it('ne rouvre pas le tiroir au retour arrière', async () => {
+    const { router } = await renderShell()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir le menu' }))
+    await screen.findByRole('dialog')
+
+    await router.navigate(PATHS.technologies)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    // Le défaut : le tiroir était dérivé de l'écran d'ouverture, donc y revenir rendait
+    // l'égalité vraie une seconde fois et le tiroir modal resurgissait par-dessus la page.
+    await router.navigate(-1)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(EVENTS))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('mène aux évènements quand une adresse de communauté est tronquée', async () => {
+    // `/c/<id>` n'a pas de section : sans route d'index, le joker ne capture pas un reste vide
+    // et la zone de contenu restait blanche — pas même l'écran introuvable.
+    const { router } = await renderShell(`/c/${COMMUNITY}`)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(EVENTS))
+    expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy()
+  })
+
+  it("ne pose pas deux fois le même identifiant dans le document", async () => {
+    await renderShell()
+    fireEvent.click(screen.getByRole('button', { name: 'Ouvrir le menu' }))
+    await screen.findByRole('dialog')
+
+    // La barre fixe n'est masquée que par CSS : les deux copies coexistent dans le document,
+    // et un identifiant écrit en dur faisait pointer le `aria-labelledby` du tiroir sur le
+    // titre de l'autre.
+    const ids = Array.from(document.querySelectorAll('[id]')).map((node) => node.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})

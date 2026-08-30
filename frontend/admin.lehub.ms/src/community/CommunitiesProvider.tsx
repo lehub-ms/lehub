@@ -18,7 +18,7 @@ import { CommunitiesContext, type CommunitiesValue } from './CommunitiesContext'
  */
 export function CommunitiesProvider({ children }: { children: ReactNode }): ReactNode {
   const { state: session } = useAuth()
-  const fetched = useCommunities()
+  const { refetch, ...fetched } = useCommunities()
   const [preferredId, setPreferredId] = useState<string | null>(readLastCommunityId)
 
   const permissions = session.status === 'authenticated' ? session.permissions : null
@@ -40,8 +40,8 @@ export function CommunitiesProvider({ children }: { children: ReactNode }): Reac
   }, [])
 
   const value = useMemo<CommunitiesValue>(
-    () => ({ state, preferredId, selectCommunity }),
-    [state, preferredId, selectCommunity],
+    () => ({ state, preferredId, selectCommunity, retry: refetch }),
+    [state, preferredId, selectCommunity, refetch],
   )
 
   return <CommunitiesContext.Provider value={value}>{children}</CommunitiesContext.Provider>

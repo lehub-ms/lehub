@@ -2,8 +2,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { ADMIN_AND_ORGANIZER, COMMUNITIES, GLOBAL_ADMIN, ORGANIZER } from './support/session-fixtures'
-import { stubSignedIn } from './support/stub-session'
+import { ADMIN_AND_ORGANIZER, COMMUNITIES, GLOBAL_ADMIN, ORGANIZER, openedSession } from './support/session-fixtures'
+import { jsonResponse, stubSignedIn } from './support/stub-session'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
 const FIRST = COMMUNITIES[0]!
@@ -252,5 +252,49 @@ describe('compte à la fois administrateur et organisateur', () => {
     for (const community of COMMUNITIES) {
       expect(within(menu).getByRole('menuitemradio', { name: community.name })).toBeTruthy()
     }
+  })
+})
+
+describe('autres constats de la revue', () => {
+  it('ramène à la communauté précédente par le retour arrière', async () => {
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id}/evenements`)
+    const menu = await openPicker()
+
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: SECOND.name }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/evenements`))
+
+    // Empilé et non remplacé : basculer pour jeter un œil doit se défaire par le retour arrière.
+    await router.navigate(-1)
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`))
+  })
+
+  it("propose de réessayer quand la liste n'a pas pu être chargée, et le fait vraiment", async () => {
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    let attempt = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/auth/token')) {
+          return Promise.resolve(jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 }))
+        }
+        if (url.includes('/api/communities')) {
+          attempt += 1
+          // Le premier appel échoue, le second réussit : c'est ce que la notice promet.
+          return attempt === 1
+            ? Promise.reject(new TypeError('network'))
+            : Promise.resolve(jsonResponse(COMMUNITIES))
+        }
+        return Promise.resolve(jsonResponse(openedSession(GLOBAL_ADMIN)))
+      }),
+    )
+
+    const { router } = renderAt('/')
+    const retry = await screen.findByRole('button', { name: /réessayer/i })
+
+    fireEvent.click(retry)
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+    )
   })
 })

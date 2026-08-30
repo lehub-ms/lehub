@@ -1,5 +1,5 @@
 import { Building2, Calendar, Layers, UserRound, Users, type LucideIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '@lehub/shared/auth/useAuth'
 import { cn } from '@lehub/shared/lib/cn'
@@ -90,6 +90,11 @@ export function SidebarNav({ collapsed }: { collapsed: boolean }): ReactNode {
      fermement qu'une condition ici, et un test le vérifie. */
   const isGlobalAdmin = state.status === 'authenticated' && state.permissions.isGlobalAdmin
 
+  /* `SidebarBody` est monté deux fois — la barre fixe, que seul le CSS masque sous `md`, et le
+     tiroir. Un identifiant écrit en dur se retrouvait donc en double dans le document, et le
+     `aria-labelledby` du tiroir désignait le titre de l'autre copie. */
+  const adminLabelId = useId()
+
   const communityEntries: Entry[] =
     active === null
       ? []
@@ -119,18 +124,18 @@ export function SidebarNav({ collapsed }: { collapsed: boolean }): ReactNode {
           {collapsed ? (
             // Le titre disparaît avec les libellés, mais la section reste un groupe nommé pour
             // les technologies d'assistance.
-            <span className="sr-only" id="admin-section-label">
+            <span className="sr-only" id={adminLabelId}>
               Administration générale
             </span>
           ) : (
             <h2
-              id="admin-section-label"
+              id={adminLabelId}
               className="mb-1.5 px-3 text-[0.6875rem] font-bold tracking-[0.08em] whitespace-nowrap text-ink-muted uppercase"
             >
               Administration générale
             </h2>
           )}
-          <ul aria-labelledby="admin-section-label" className="flex flex-col gap-0.5">
+          <ul aria-labelledby={adminLabelId} className="flex flex-col gap-0.5">
             {GLOBAL_ENTRIES.map((entry) => (
               <NavEntry key={entry.to} entry={entry} collapsed={collapsed} />
             ))}

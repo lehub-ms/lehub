@@ -11,6 +11,8 @@ export interface CommunitiesValue {
   preferredId: string | null
   /** Retient une communauté et la rend immédiatement à l'écran, sans passer par le stockage. */
   selectCommunity: (communityId: string) => void
+  /** Rejoue l'appel après un échec. La notice d'erreur promet un réessai ; le voici. */
+  retry: () => void
 }
 
 /**

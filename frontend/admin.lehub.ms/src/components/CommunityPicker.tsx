@@ -42,8 +42,12 @@ export function CommunityPicker({ collapsed }: { collapsed: boolean }): ReactNod
 
     // La section, jamais le reste du chemin : basculer de communauté en gardant
     // « /evenements/<id> » emmènerait sur l'évènement d'une autre communauté.
+    // Empilé et non remplacé : qui bascule sur une autre communauté pour y jeter un œil
+    // s'attend à revenir sur la précédente par le retour arrière. Les redirections — l'entrée
+    // du backoffice, la canonisation de la casse — remplacent, elles, parce qu'elles ne sont
+    // pas des gestes de l'utilisateur.
     const section = pathname.split('/')[3] as CommunitySection | undefined
-    void navigate(communityPath(next.id, section ?? 'evenements'), { replace: true })
+    void navigate(communityPath(next.id, section ?? 'evenements'))
   }
 
   const face = (

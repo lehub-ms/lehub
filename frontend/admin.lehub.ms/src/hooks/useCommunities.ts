@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { listCommunities, type CommunitySummary } from '@/lib/api'
 
 export type CommunitiesState =
@@ -20,9 +20,9 @@ type Settled = { token: number } & ({ communities: CommunitySummary[] } | { erro
  * jamais une protection. Ces données sont lisibles de tous par construction, et c'est l'API
  * qui refuse les écritures (#109).
  */
-export function useCommunities(): CommunitiesState {
+export function useCommunities(): CommunitiesState & { refetch: () => void } {
   const [settled, setSettled] = useState<Settled | null>(null)
-  const [reloadToken] = useState(0)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -40,7 +40,11 @@ export function useCommunities(): CommunitiesState {
     }
   }, [reloadToken])
 
-  if (!settled || settled.token !== reloadToken) return { status: 'loading' }
-  if ('error' in settled) return { status: 'error', error: settled.error }
-  return { status: 'success', communities: settled.communities }
+  const refetch = useCallback(() => {
+    setReloadToken((token) => token + 1)
+  }, [])
+
+  if (!settled || settled.token !== reloadToken) return { status: 'loading', refetch }
+  if ('error' in settled) return { status: 'error', error: settled.error, refetch }
+  return { status: 'success', communities: settled.communities, refetch }
 }

@@ -8,6 +8,7 @@ import { RequireSession } from '@/components/RequireSession'
 import { PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
 import { NoAccessPage } from '@/pages/NoAccessPage'
+import { CommunityIndexRedirect } from '@/community/CommunityIndexRedirect'
 import { CommunityScope } from '@/community/CommunityScope'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import {
@@ -80,6 +81,7 @@ export const routes: RouteObject[] = [
                 caseSensitive: true,
                 Component: CommunityScope,
                 children: [
+                  { index: true, Component: CommunityIndexRedirect },
                   { path: 'evenements', caseSensitive: true, Component: EventsPage },
                   { path: 'organisateurs', caseSensitive: true, Component: OrganizersPage },
                   { path: '*', Component: NotFoundPage },
