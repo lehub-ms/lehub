@@ -147,3 +147,50 @@ describe('communauté de l’URL', () => {
     expect(await screen.findByRole('button', { name: /changer de communauté/i })).toBeTruthy()
   })
 })
+
+describe('navigation restreinte aux habilitations', () => {
+  it("n'offre l'administration générale qu'à un administrateur global", async () => {
+    await enter(GLOBAL_ADMIN)
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    await waitFor(() => expect(within(nav).getByRole('link', { name: 'Évènements' })).toBeTruthy())
+
+    for (const label of ['Communautés', 'Technologies', 'Administrateurs']) {
+      expect(within(nav).getByRole('link', { name: label }), label).toBeTruthy()
+    }
+  })
+
+  it("ne la propose pas à un organisateur, qui garde sa section communauté", async () => {
+    await enter(ORGANIZER)
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+
+    await waitFor(() => expect(within(nav).getByRole('link', { name: 'Évènements' })).toBeTruthy())
+    for (const label of ['Communautés', 'Technologies', 'Administrateurs']) {
+      expect(within(nav).queryByRole('link', { name: label }), label).toBeNull()
+    }
+    expect(within(nav).queryByText('Administration générale')).toBeNull()
+  })
+
+  it("refuse une route d'administration atteinte par URL, sans rien divulguer de l'écran", async () => {
+    const { router } = await enter(ORGANIZER, PATHS.technologies)
+
+    expect(await screen.findByRole('heading', { name: /réservée aux administrateurs/i })).toBeTruthy()
+    // La garde est une route parente : l'écran visé n'est jamais monté, donc son titre non
+    // plus. Masquer l'entrée dans la barre n'aurait été qu'un confort.
+    expect(screen.queryByRole('heading', { name: 'Technologies' })).toBeNull()
+    // Et le refus reste sur place : rediriger vers /acces-refuse renverrait un organisateur,
+    // qui y est habilité, vers l'accueil — le refus deviendrait une navigation silencieuse.
+    expect(router.state.location.pathname).toBe(PATHS.technologies)
+  })
+
+  it("n'affiche aucune section tant que les habilitations ne sont pas connues", () => {
+    // La session ne se résout jamais : `RequireSession` puis `RequireAccess` rendent `null`,
+    // donc la coquille n'est pas montée du tout — plus fort que masquer des sections.
+    window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => undefined)))
+
+    renderAt('/')
+
+    expect(screen.queryByRole('navigation', { name: 'Navigation principale' })).toBeNull()
+    expect(screen.queryByText('Administration générale')).toBeNull()
+  })
+})

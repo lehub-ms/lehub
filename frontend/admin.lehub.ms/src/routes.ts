@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router'
 import { AdminLayout } from '@/components/AdminLayout'
 import { AuthLayout } from '@/components/AuthLayout'
 import { RequireAccess } from '@/components/RequireAccess'
+import { RequireGlobalAdmin } from '@/components/RequireGlobalAdmin'
 import { RequireNoAccess } from '@/components/RequireNoAccess'
 import { RequireSession } from '@/components/RequireSession'
 import { PATHS } from '@/lib/navigation'
@@ -86,11 +87,19 @@ export const routes: RouteObject[] = [
               },
 
               /* Administration générale : des référentiels partagés, qui n'appartiennent à
-                 aucune communauté et dont les routes n'en portent donc pas. #140 les placera
-                 derrière la garde d'administrateur global. */
-              { path: PATHS.communities, caseSensitive: true, Component: CommunitiesPage },
-              { path: PATHS.technologies, caseSensitive: true, Component: TechnologiesPage },
-              { path: PATHS.administrators, caseSensitive: true, Component: AdministratorsPage },
+                 aucune communauté et dont les routes n'en portent donc pas.
+
+                 La garde est une route parente et non une vérification dans chaque écran :
+                 c'est ce qui garantit qu'un non-administrateur n'en monte aucun, et n'en
+                 apprend donc rien. */
+              {
+                Component: RequireGlobalAdmin,
+                children: [
+                  { path: PATHS.communities, caseSensitive: true, Component: CommunitiesPage },
+                  { path: PATHS.technologies, caseSensitive: true, Component: TechnologiesPage },
+                  { path: PATHS.administrators, caseSensitive: true, Component: AdministratorsPage },
+                ],
+              },
 
               { path: '*', Component: NotFoundPage },
             ],
