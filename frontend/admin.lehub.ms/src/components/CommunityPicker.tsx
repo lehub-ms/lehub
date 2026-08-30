@@ -4,10 +4,9 @@ import type { ReactNode } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { cn } from '@lehub/shared/lib/cn'
-import { useAllowedCommunities } from '@/community/useAllowedCommunities'
-import { useSelectedCommunity } from '@/community/useSelectedCommunity'
+import { useActiveCommunity } from '@/community/useActiveCommunity'
+import { useCommunitiesValue } from '@/community/useAllowedCommunities'
 import { communityPath, type CommunitySection } from '@/lib/navigation'
-import { writeLastCommunityId } from '@/lib/preferences'
 
 /**
  * Le sélecteur de communauté, en tête de la barre latérale.
@@ -18,25 +17,27 @@ import { writeLastCommunityId } from '@/lib/preferences'
  * dit rien à un lecteur d'écran.
  */
 export function CommunityPicker({ collapsed }: { collapsed: boolean }): ReactNode {
-  const communities = useAllowedCommunities()
-  const selected = useSelectedCommunity()
+  const { state: communities, selectCommunity } = useCommunitiesValue()
+  const shown = useActiveCommunity()
   const { communityId } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
   if (communities.status !== 'success' || communities.communities.length === 0) return null
-
-  // Hors de la section communauté, le sélecteur reste visible mais ne pilote rien : il n'y a
-  // pas de communauté dans l'URL, et les référentiels n'appartiennent à aucune. Il affiche
-  // alors la dernière retenue, pour ne pas se vider en passant sur ces écrans.
-  const shown = selected ?? communities.communities[0]
   if (!shown) return null
 
   const choose = (id: string): void => {
     const next = communities.communities.find((community) => community.id === id)
     if (!next) return
-    writeLastCommunityId(next.id)
 
+    // Retenir d'abord, toujours : c'est ce qui fait que la barre latérale repointe aussitôt
+    // sur la nouvelle communauté, y compris sur un écran d'administration générale où l'URL
+    // n'en porte aucune. Sans cela le clic n'avait aucun effet visible — le défaut constaté.
+    selectCommunity(next.id)
+
+    // Sur un écran d'administration générale, on ne navigue pas : ces référentiels
+    // n'appartiennent à aucune communauté, et la story demande que le sélecteur n'y pilote
+    // pas le contenu. Il pilote la barre, ce qui n'est pas la même chose.
     if (!communityId) return
 
     // La section, jamais le reste du chemin : basculer de communauté en gardant

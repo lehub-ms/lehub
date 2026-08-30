@@ -11,11 +11,9 @@ import { SidebarBody } from './SidebarBody'
  * c'est la réduction à 72px qui sert de porte de sortie.
  */
 export function Sidebar({
-  communityId,
   collapsed,
   onToggleCollapse,
 }: {
-  communityId: string | null
   collapsed: boolean
   onToggleCollapse: () => void
 }): ReactNode {
@@ -26,11 +24,7 @@ export function Sidebar({
         collapsed ? 'w-[72px]' : 'w-[260px]',
       )}
     >
-      <SidebarBody
-        communityId={communityId}
-        collapsed={collapsed}
-        onToggleCollapse={onToggleCollapse}
-      />
+      <SidebarBody collapsed={collapsed} onToggleCollapse={onToggleCollapse} />
     </aside>
   )
 }

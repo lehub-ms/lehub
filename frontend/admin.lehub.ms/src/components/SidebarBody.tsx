@@ -15,11 +15,9 @@ import { Wordmark } from './Wordmark'
  * l'inverse.
  */
 export function SidebarBody({
-  communityId,
   collapsed,
   onToggleCollapse,
 }: {
-  communityId: string | null
   collapsed: boolean
   /** Absent dans le tiroir : on n'y réduit rien, la barre y occupe déjà toute sa largeur. */
   onToggleCollapse?: () => void
@@ -46,7 +44,7 @@ export function SidebarBody({
         {collapsed ? null : <Wordmark className="text-[1.0625rem]" />}
       </div>
 
-      <SidebarNav communityId={communityId} collapsed={collapsed} />
+      <SidebarNav collapsed={collapsed} />
       <AccountBlock collapsed={collapsed} />
     </>
   )

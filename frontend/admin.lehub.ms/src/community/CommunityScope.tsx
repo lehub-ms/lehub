@@ -1,9 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
-import { Navigate, Outlet, useParams } from 'react-router'
+import { Navigate, Outlet, useLocation, useParams } from 'react-router'
 import { CommunitiesNotice } from '@/components/CommunitiesNotice'
 import { communityPath, PATHS } from '@/lib/navigation'
-import { writeLastCommunityId } from '@/lib/preferences'
-import { useAllowedCommunities } from './useAllowedCommunities'
+import { useCommunitiesValue } from './useAllowedCommunities'
 import { findCommunity } from './useSelectedCommunity'
 
 /**
@@ -18,14 +17,15 @@ import { findCommunity } from './useSelectedCommunity'
  */
 export function CommunityScope(): ReactNode {
   const { communityId } = useParams()
-  const communities = useAllowedCommunities()
+  const { pathname } = useLocation()
+  const { state: communities, selectCommunity } = useCommunitiesValue()
 
   const matched =
     communities.status === 'success' ? findCommunity(communities.communities, communityId) : null
 
   useEffect(() => {
-    if (matched) writeLastCommunityId(matched.id)
-  }, [matched])
+    if (matched) selectCommunity(matched.id)
+  }, [matched, selectCommunity])
 
   if (communities.status === 'loading') return null
   if (communities.status === 'error') return <CommunitiesNotice kind="error" />
@@ -35,6 +35,16 @@ export function CommunityScope(): ReactNode {
   // renvoyer ici vers une communauté qui n'existe pas.
   if (!first) return <Navigate to={PATHS.home} replace />
   if (!matched) return <Navigate to={communityPath(first.id, 'evenements')} replace />
+
+  /* Une URL par communauté, et une seule. SQL Server rend ses `UNIQUEIDENTIFIER` en majuscules
+     tandis qu'un lien copié à la main peut porter n'importe quelle casse ; la résolution est
+     insensible à la casse, mais tout ce qui compare des chemins ne l'est pas — le marquage de
+     l'entrée courante s'y perdait. Plutôt que de rendre chaque comparaison tolérante, l'URL est
+     ramenée à sa forme canonique une fois pour toutes, ce qui rejoint la règle du site public :
+     un chemin canonique par écran. */
+  if (communityId && matched.id !== communityId) {
+    return <Navigate to={pathname.replace(`/c/${communityId}`, `/c/${matched.id}`)} replace />
+  }
 
   return <Outlet />
 }

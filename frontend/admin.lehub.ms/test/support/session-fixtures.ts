@@ -14,16 +14,20 @@ export const MIRROR = {
 /**
  * Ce que rend `GET /api/communities`. La première porte l'identifiant qu'`ORGANIZER` organise,
  * pour que les deux profils voient des listes différentes de la même réponse.
+ *
+ * **Les identifiants sont en majuscules**, comme SQL Server rend ses `UNIQUEIDENTIFIER`. Des
+ * fixtures en minuscules ont laissé passer un défaut que l'application avait bel et bien : une
+ * fixture qui ne ressemble pas à la production ne teste pas la production.
  */
 export const COMMUNITIES: CommunitySummary[] = [
   {
-    id: 'c1c1c1c1-0000-0000-0000-000000000001',
+    id: 'C1C1C1C1-0000-0000-0000-000000000001',
     name: 'Azure User Group France',
     logoUrl: null,
     description: null,
   },
   {
-    id: 'c2c2c2c2-0000-0000-0000-000000000002',
+    id: 'C2C2C2C2-0000-0000-0000-000000000002',
     name: 'Power Platform France',
     logoUrl: null,
     description: null,

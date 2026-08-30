@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router'
 import { CommunitiesNotice } from '@/components/CommunitiesNotice'
-import { useAllowedCommunities } from '@/community/useAllowedCommunities'
+import { useCommunitiesValue } from '@/community/useAllowedCommunities'
 import { findCommunity } from '@/community/useSelectedCommunity'
 import { communityPath } from '@/lib/navigation'
-import { readLastCommunityId } from '@/lib/preferences'
 
 /**
  * L'entrée du backoffice n'est pas un écran, c'est une redirection.
@@ -16,12 +15,12 @@ import { readLastCommunityId } from '@/lib/preferences'
  * première communauté autorisée.
  */
 export function HomePage(): ReactNode {
-  const communities = useAllowedCommunities()
+  const { state: communities, preferredId } = useCommunitiesValue()
 
   if (communities.status === 'loading') return null
   if (communities.status === 'error') return <CommunitiesNotice kind="error" />
 
-  const remembered = findCommunity(communities.communities, readLastCommunityId() ?? undefined)
+  const remembered = findCommunity(communities.communities, preferredId)
   const target = remembered ?? communities.communities[0]
   if (!target) return <CommunitiesNotice kind="empty" />
 

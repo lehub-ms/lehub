@@ -5,7 +5,6 @@ import {
   Outlet,
   ScrollRestoration,
   useLocation,
-  useParams,
 } from "react-router";
 import { CommunitiesProvider } from "@/community/CommunitiesProvider";
 import { readSidebarCollapsed, writeSidebarCollapsed } from "@/lib/preferences";
@@ -25,7 +24,6 @@ export function AdminLayout(): ReactNode {
   // Lu au premier rendu plutôt que corrigé par un effet : la barre ne doit pas s'afficher
   // déployée puis se replier sous les yeux de qui l'avait réduite.
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
-  const { communityId = null } = useParams();
   const { pathname } = useLocation();
 
   // Le tiroir est dérivé de l'écran sur lequel il a été ouvert, plutôt que d'un booléen
@@ -48,7 +46,6 @@ export function AdminLayout(): ReactNode {
     <CommunitiesProvider>
       <div className="flex min-h-dvh">
         <Sidebar
-          communityId={communityId}
           collapsed={collapsed}
           onToggleCollapse={() => {
             setCollapsed((current) => !current);
@@ -89,7 +86,7 @@ export function AdminLayout(): ReactNode {
                 </Dialog.Title>
                 {/* Jamais réduit : le tiroir occupe déjà sa pleine largeur, et l'état du bureau
                   n'a pas à s'y propager. */}
-                <SidebarBody communityId={communityId} collapsed={false} />
+                <SidebarBody collapsed={false} />
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>

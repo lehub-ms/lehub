@@ -194,3 +194,47 @@ describe('navigation restreinte aux habilitations', () => {
     expect(screen.queryByText('Administration générale')).toBeNull()
   })
 })
+
+describe('la barre reste pilotable hors de la section communauté', () => {
+  it("garde ses entrées communauté sur un écran d'administration générale", async () => {
+    // Le défaut constaté : la barre dérivait uniquement de l'URL, or /technologies ne porte
+    // aucune communauté. La section disparaissait, et il ne restait aucun chemin de retour.
+    await enter(GLOBAL_ADMIN, PATHS.technologies)
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+
+    const events = await within(nav).findByRole('link', { name: 'Évènements' })
+    expect(events.getAttribute('href')).toBe(`/c/${FIRST.id}/evenements`)
+    expect(within(nav).getByRole('link', { name: 'Organisateurs' })).toBeTruthy()
+  })
+
+  it("fait repointer la barre quand on y choisit une communauté, sans quitter l'écran", async () => {
+    const { router } = await enter(GLOBAL_ADMIN, PATHS.technologies)
+    const menu = await openPicker()
+
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: SECOND.name }))
+
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    await waitFor(() =>
+      expect(within(nav).getByRole('link', { name: 'Évènements' }).getAttribute('href')).toBe(
+        `/c/${SECOND.id}/evenements`,
+      ),
+    )
+    // « Ne pilote rien » vise le contenu de l'écran, pas la barre : on reste sur les technologies.
+    expect(router.state.location.pathname).toBe(PATHS.technologies)
+  })
+
+  it("ramène l'URL à la casse canonique de la communauté", async () => {
+    // SQL Server rend ses identifiants en majuscules ; un lien recopié peut porter n'importe
+    // quelle casse, et tout ce qui compare des chemins s'y perdait — le marquage de l'entrée
+    // courante le premier.
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id.toLowerCase()}/organisateurs`)
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/organisateurs`),
+    )
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
+    expect(
+      within(nav).getByRole('link', { name: 'Organisateurs' }).getAttribute('aria-current'),
+    ).toBe('page')
+  })
+})

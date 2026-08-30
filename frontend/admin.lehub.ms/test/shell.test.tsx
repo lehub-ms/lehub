@@ -5,7 +5,7 @@ import { renderAt } from './support/render-route'
 import { GLOBAL_ADMIN } from './support/session-fixtures'
 import { stubSignedIn } from './support/stub-session'
 
-const COMMUNITY = 'c1c1c1c1-0000-0000-0000-000000000001'
+const COMMUNITY = 'C1C1C1C1-0000-0000-0000-000000000001'
 const EVENTS = `/c/${COMMUNITY}/evenements`
 
 /** La coquille ne se monte que derrière les gardes : il faut une session habilitée. */
@@ -50,6 +50,9 @@ describe('isSectionActive', () => {
 describe('coquille du backoffice', () => {
   it('pose une navigation nommée, un contenu principal unique et un titre de niveau un', async () => {
     await renderShell()
+    // Le contenu attend la liste des communautés : `CommunityScope` ne rend son `Outlet`
+    // qu'une fois la communauté résolue, donc le titre arrive après la navigation.
+    await screen.findByRole('heading', { level: 1 })
 
     expect(sidebarNav()).toBeTruthy()
     expect(screen.getAllByRole('main')).toHaveLength(1)
