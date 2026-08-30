@@ -232,10 +232,14 @@ describe('la barre reste pilotable hors de la section communauté', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/organisateurs`),
     )
+    // Le marquage suit la redirection d'un rendu : l'attendre, plutôt que de parier sur la
+    // vitesse de la machine — ce pari-là échouait sur le runner de la CI et pas en local.
     const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
-    expect(
-      within(nav).getByRole('link', { name: 'Organisateurs' }).getAttribute('aria-current'),
-    ).toBe('page')
+    await waitFor(() =>
+      expect(
+        within(nav).getByRole('link', { name: 'Organisateurs' }).getAttribute('aria-current'),
+      ).toBe('page'),
+    )
   })
 })
 
