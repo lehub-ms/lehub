@@ -8,11 +8,19 @@ import { stubSignedIn } from './support/stub-session'
 const COMMUNITY = 'C1C1C1C1-0000-0000-0000-000000000001'
 const EVENTS = `/c/${COMMUNITY}/evenements`
 
-/** La coquille ne se monte que derrière les gardes : il faut une session habilitée. */
+/**
+ * La coquille ne se monte que derrière les gardes : il faut une session habilitée.
+ *
+ * On attend l'entrée « Évènements » et non le seul repère de navigation. Le repère existe dès
+ * le premier rendu, alors que les entrées de la section dépendent de `GET /api/communities`,
+ * résolu un tour plus tard : rendre la main trop tôt laissait chaque assertion courir après le
+ * rendu, ce qui passait en local et échouait sur le runner de la CI.
+ */
 async function renderShell(path = EVENTS) {
   stubSignedIn(GLOBAL_ADMIN)
   const rendered = renderAt(path)
   await screen.findByRole('navigation', { name: 'Navigation principale' })
+  await within(sidebarNav()).findByRole('link', { name: 'Évènements' })
   return rendered
 }
 

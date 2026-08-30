@@ -7,10 +7,12 @@ import { ADMIN_AND_ORGANIZER, GLOBAL_ADMIN, ORGANIZER } from './support/session-
 import { stubSignedIn } from './support/stub-session'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
+/** Voir `renderShell` de `shell.test.tsx` : on attend la liste chargée. */
 async function enter(permissions: SessionPermissions) {
   stubSignedIn(permissions)
   const rendered = renderAt('/')
   await screen.findByRole('navigation', { name: 'Navigation principale' })
+  await screen.findByRole('link', { name: 'Évènements' })
   return rendered
 }
 
