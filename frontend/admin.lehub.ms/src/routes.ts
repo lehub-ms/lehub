@@ -8,6 +8,13 @@ import { PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
 import { NoAccessPage } from '@/pages/NoAccessPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import {
+  AdministratorsPage,
+  CommunitiesPage,
+  EventsPage,
+  OrganizersPage,
+  TechnologiesPage,
+} from '@/pages/placeholders'
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { SignInPage } from '@/pages/SignInPage'
 
@@ -58,6 +65,31 @@ export const routes: RouteObject[] = [
             Component: AdminLayout,
             children: [
               { index: true, Component: HomePage },
+
+              /* Section communauté : la communauté est un segment de route, donc un lien
+                 vers un de ces écrans se partage tel quel.
+
+                 Route parente plutôt que deux chemins absolus, pour que `communityId` reste
+                 résolu sous n'importe quel enfant — le formulaire d'évènement de #143, et
+                 jusqu'à l'écran introuvable d'une URL mal tapée. Sans elle, la coquille
+                 perdrait sa section communauté au premier segment de trop. */
+              {
+                path: PATHS.community,
+                caseSensitive: true,
+                children: [
+                  { path: 'evenements', caseSensitive: true, Component: EventsPage },
+                  { path: 'organisateurs', caseSensitive: true, Component: OrganizersPage },
+                  { path: '*', Component: NotFoundPage },
+                ],
+              },
+
+              /* Administration générale : des référentiels partagés, qui n'appartiennent à
+                 aucune communauté et dont les routes n'en portent donc pas. #140 les placera
+                 derrière la garde d'administrateur global. */
+              { path: PATHS.communities, caseSensitive: true, Component: CommunitiesPage },
+              { path: PATHS.technologies, caseSensitive: true, Component: TechnologiesPage },
+              { path: PATHS.administrators, caseSensitive: true, Component: AdministratorsPage },
+
               { path: '*', Component: NotFoundPage },
             ],
           },

@@ -10,7 +10,41 @@ export const PATHS = {
   signIn: '/connexion',
   resetPassword: '/mot-de-passe-oublie',
   noAccess: '/acces-refuse',
+
+  /* Section communauté. La communauté choisie est un segment de route et non un état caché :
+     un lien vers un évènement est ainsi complet, et un rechargement retombe au bon endroit. */
+  /** La route parente de la section : tout ce qui vit sous une communauté en dépend. */
+  community: '/c/:communityId',
+  communityEvents: '/c/:communityId/evenements',
+  communityOrganizers: '/c/:communityId/organisateurs',
+
+  /* Administration générale. Ces écrans ne portent pas de communauté — ils gèrent les
+     référentiels partagés, qui n'appartiennent à aucune. */
+  communities: '/communautes',
+  technologies: '/technologies',
+  administrators: '/administrateurs',
 } as const
+
+/** Les deux sections qui vivent sous une communauté, dans l'ordre de la barre latérale. */
+export const COMMUNITY_SECTIONS = ['evenements', 'organisateurs'] as const
+
+export type CommunitySection = (typeof COMMUNITY_SECTIONS)[number]
+
+/** Le chemin d'une section pour une communauté donnée. Écrit ici, jamais concaténé ailleurs. */
+export function communityPath(communityId: string, section: CommunitySection): string {
+  return `/c/${communityId}/${section}`
+}
+
+/**
+ * L'entrée de navigation correspondant à l'écran courant, routes enfants comprises : le
+ * formulaire d'un évènement laisse « Évènements » actif.
+ *
+ * La barre oblique finale n'est pas décorative — sans elle, `/evenements-archives` serait
+ * considéré comme un enfant de `/evenements`.
+ */
+export function isSectionActive(pathname: string, sectionPath: string): boolean {
+  return pathname === sectionPath || pathname.startsWith(`${sectionPath}/`)
+}
 
 /**
  * L'adresse du site public, d'où l'on vient et où l'on repart : un compte s'y crée, et c'est

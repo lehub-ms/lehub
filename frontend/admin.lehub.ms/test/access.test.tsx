@@ -2,27 +2,8 @@ import { screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { GLOBAL_ADMIN, ORDINARY_USER, ORGANIZER, openedSession } from './support/session-fixtures'
-import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-}
-
-/** Une session déjà ouverte, restaurée depuis le jeton de rafraîchissement du stockage. */
-function stubSignedIn(permissions: SessionPermissions) {
-  window.localStorage.setItem('lehub.auth.refreshToken', 'rt')
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockImplementation((url: string) =>
-      Promise.resolve(
-        url.includes('/api/auth/token')
-          ? jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 })
-          : jsonResponse(openedSession(permissions)),
-      ),
-    ),
-  )
-}
+import { GLOBAL_ADMIN, ORDINARY_USER, ORGANIZER } from './support/session-fixtures'
+import { stubSignedIn } from './support/stub-session'
 
 beforeEach(() => {
   window.localStorage.clear()
