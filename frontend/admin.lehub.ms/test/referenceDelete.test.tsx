@@ -12,10 +12,20 @@ const FREE = ADMIN_COMMUNITIES[1]!
 /** Archivée, 7 évènements : celle qu'on réactive. */
 const ARCHIVED = ADMIN_COMMUNITIES[2]!
 
-async function openPanelFor(name: string, overrides: FetchOverrides = {}): Promise<void> {
+async function openPanelFor(
+  name: string,
+  overrides: FetchOverrides = {},
+  { expandArchived = false } = {},
+): Promise<void> {
   stubSignedIn(GLOBAL_ADMIN, overrides)
   renderAt(PATHS.communities)
   await screen.findByRole('table')
+  // Une entrée archivée est repliée par défaut depuis #173. On déplie par le vrai contrôle
+  // plutôt qu'en semant la clé de stockage : cela exerce le chemin, et la clé n'est pas écrite
+  // en dur à un second endroit.
+  if (expandArchived) {
+    fireEvent.click(screen.getByRole('button', { name: /archivée/ }))
+  }
   fireEvent.click(screen.getByRole('button', { name: `Modifier ${name}` }))
 }
 
@@ -79,7 +89,7 @@ describe('suppression d’une entrée libre', () => {
 
   it('prévient que les désignations partiront avec la communauté', async () => {
     // FK_CommunityOrganizer_Community cascade : c'est vrai, donc c'est dit.
-    await openPanelFor(ARCHIVED.name)
+    await openPanelFor(ARCHIVED.name, {}, { expandArchived: true })
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
 
     // Celle-ci porte aussi des évènements : c'est l'autre variante qui s'affiche, et elle ne
@@ -168,7 +178,7 @@ describe('refus de supprimer une entrée référencée', () => {
 
 describe('réactivation', () => {
   it('remet une entrée archivée en service depuis le panneau', async () => {
-    await openPanelFor(ARCHIVED.name)
+    await openPanelFor(ARCHIVED.name, {}, { expandArchived: true })
 
     const group = within(screen.getByRole('dialog')).getByRole('radiogroup', { name: 'Statut' })
     expect(within(group).getByRole('radio', { name: 'Archivée' }).getAttribute('aria-checked')).toBe(

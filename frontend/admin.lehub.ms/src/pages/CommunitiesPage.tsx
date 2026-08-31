@@ -52,7 +52,10 @@ const COLUMNS: readonly Column<AdminCommunity, ColumnKey>[] = [
   {
     key: 'status',
     header: 'Statut',
-    sortable: true,
+    // Plus triable depuis #173 : la partition range déjà les actives avant les archivées, donc
+    // croissant est l'ordre rendu, décroissant ne peut pas franchir la frontière du groupe, et
+    // à l'intérieur d'une moitié toutes les valeurs sont égales. Le bouton ne déplacerait rien
+    // et ne changerait que `aria-sort` — un contrôle mort.
     width: '8rem',
     render: (community) => <StatusTag status={community.status} />,
   },
@@ -62,6 +65,12 @@ const COLUMNS: readonly Column<AdminCommunity, ColumnKey>[] = [
     du référentiel des technologies. */
 function searchableOf(community: AdminCommunity): readonly (string | null)[] {
   return [community.name, community.description]
+}
+
+/** Ce qui range une entrée derrière le repli (#173). Au niveau du module : elle entre dans les
+    dépendances d'un `useMemo`, et une lambda définie au rendu le relancerait à chaque passe. */
+function isArchived(community: AdminCommunity): boolean {
+  return community.status === 'archived'
 }
 
 function valueOf(community: AdminCommunity, key: ColumnKey): Comparable {
@@ -116,8 +125,11 @@ export function CommunitiesPage(): ReactNode {
       valueOf={valueOf}
       searchableOf={searchableOf}
       searchPlaceholder="Rechercher une communauté…"
-      singular="communauté"
-      plural="communautés"
+      noun={{ one: 'communauté', many: 'communautés' }}
+      activeWord={{ one: 'active', many: 'actives' }}
+      archivedWord={{ one: 'archivée', many: 'archivées' }}
+      isArchived={isArchived}
+      preferenceScope="communities"
       emptyTitle="Aucune communauté référencée"
       emptyDescription="Les communautés partenaires apparaîtront ici une fois ajoutées au référentiel."
       errorTitle="Impossible de charger les communautés"

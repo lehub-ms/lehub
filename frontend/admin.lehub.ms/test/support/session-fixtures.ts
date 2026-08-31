@@ -107,6 +107,17 @@ export const ADMIN_TECHNOLOGIES: AdminTechnology[] = [
     status: 'archived',
     eventCount: 2,
   },
+  // Une **seconde** archivée, et ce n'est pas de la décoration : avec une seule, « le tri
+  // réordonne les deux groupes » (#173) est intestable — un groupe d'une ligne est trié quoi
+  // qu'on fasse — et le compteur archivé ne peut jamais atteindre le pluriel.
+  {
+    id: 'B4B4B4B4-0000-0000-0000-000000000004',
+    name: 'Windows Phone',
+    logoPath: null,
+    logoUrl: null,
+    status: 'archived',
+    eventCount: 0,
+  },
 ]
 
 /** Les trois profils qui décident de l'accès au backoffice. */

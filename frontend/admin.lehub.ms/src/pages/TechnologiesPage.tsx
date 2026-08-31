@@ -37,7 +37,10 @@ const COLUMNS: readonly Column<AdminTechnology, ColumnKey>[] = [
   {
     key: 'status',
     header: 'Statut',
-    sortable: true,
+    // Plus triable depuis #173 : la partition range déjà les actives avant les archivées, donc
+    // croissant est l'ordre rendu, décroissant ne peut pas franchir la frontière du groupe, et
+    // à l'intérieur d'une moitié toutes les valeurs sont égales. Le bouton ne déplacerait rien
+    // et ne changerait que `aria-sort` — un contrôle mort.
     width: '8rem',
     render: (technology) => <StatusTag status={technology.status} />,
   },
@@ -46,6 +49,12 @@ const COLUMNS: readonly Column<AdminTechnology, ColumnKey>[] = [
 /** Le nom seul : une technologie ne porte pas de description, elle étiquette un évènement. */
 function searchableOf(technology: AdminTechnology): readonly (string | null)[] {
   return [technology.name]
+}
+
+/** Ce qui range une entrée derrière le repli (#173). Au niveau du module : elle entre dans les
+    dépendances d'un `useMemo`, et une lambda définie au rendu le relancerait à chaque passe. */
+function isArchived(technology: AdminTechnology): boolean {
+  return technology.status === 'archived'
 }
 
 function valueOf(technology: AdminTechnology, key: ColumnKey): Comparable {
@@ -87,8 +96,11 @@ export function TechnologiesPage(): ReactNode {
       valueOf={valueOf}
       searchableOf={searchableOf}
       searchPlaceholder="Rechercher une technologie…"
-      singular="technologie"
-      plural="technologies"
+      noun={{ one: 'technologie', many: 'technologies' }}
+      activeWord={{ one: 'active', many: 'actives' }}
+      archivedWord={{ one: 'archivée', many: 'archivées' }}
+      isArchived={isArchived}
+      preferenceScope="technologies"
       emptyTitle="Aucune technologie référencée"
       emptyDescription="Les technologies apparaîtront ici une fois ajoutées au référentiel."
       errorTitle="Impossible de charger les technologies"

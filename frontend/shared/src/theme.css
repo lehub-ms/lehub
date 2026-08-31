@@ -56,9 +56,12 @@
   --color-status-archived-surface: #f1f5f9;
   --color-status-archived-ink: #475569;
 
-  /* Les deux teintes de surface des tables du backoffice : l'en-tête et la ligne survolée. */
+  /* Les teintes de surface des tables du backoffice : l'en-tête, la ligne survolée, et la ligne
+     de groupe qui replie les entrées archivées (#173), un cran plus soutenue que l'en-tête pour
+     se lire comme une césure dans le flux des lignes. */
   --color-surface-subtle: #fafcff;
   --color-surface-hover: #f8fbff;
+  --color-surface-group: #f4f8fd;
 }
 
 /* ─── Ce que les composants du socle rendent ──────────────────────────────────

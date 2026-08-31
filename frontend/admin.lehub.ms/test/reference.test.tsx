@@ -8,6 +8,9 @@ import {
   GLOBAL_ADMIN,
   ORGANIZER,
 } from './support/session-fixtures'
+
+/** Les technologies que la table rend sans rien déplier. */
+const ACTIVE_TECHNOLOGIES = ADMIN_TECHNOLOGIES.filter((t) => t.status === 'active').length
 import { jsonResponse, stubSignedIn } from './support/stub-session'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 
@@ -34,11 +37,17 @@ function headerButton(table: HTMLElement, name: string): HTMLElement {
   return within(columnHeader(table, name)).getByRole('button')
 }
 
-/** Les libellés de la première colonne, dans l'ordre où la table les rend. */
+/**
+ * Les libellés de la première colonne, dans l'ordre où la table les rend.
+ *
+ * Les lignes à une seule cellule sont écartées : la ligne de groupe et la ligne « aucune entrée
+ * active » couvrent toute la largeur par `colSpan` et ne sont pas des entrées. Un filtre sur le
+ * nombre de cellules plutôt qu'un attribut de test posé dans le rendu de production.
+ */
 function names(table: HTMLElement): string[] {
   return within(table)
     .getAllByRole('row')
-    .slice(1)
+    .filter((row) => within(row).queryAllByRole('cell').length > 1)
     .map((row) => within(row).getAllByRole('cell')[0]?.textContent ?? '')
 }
 
@@ -53,23 +62,28 @@ afterEach(() => {
 })
 
 describe('référentiel des communautés', () => {
-  it('liste les entrées actives comme archivées, et les distingue par leur statut', async () => {
+  it('replie les entrées archivées derrière une ligne de groupe', async () => {
     const table = await enter(GLOBAL_ADMIN, PATHS.communities)
 
-    // Les archivées ne sont pas cachées : c'est de cette liste qu'on les réactive.
-    expect(names(table)).toHaveLength(ADMIN_COMMUNITIES.length)
-    expect(within(table).getByText('Archivée')).not.toBeNull()
+    // Les actives seules sont rendues ; l'archivée est derrière un compteur, d'où on la déplie.
+    expect(names(table)).toHaveLength(2)
     expect(within(table).getAllByText('Active')).toHaveLength(2)
+    expect(within(table).queryByText('Archivée')).toBeNull()
+
+    const group = within(table).getByRole('button', { name: '1 communauté archivée' })
+    expect(group.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('annonce le nombre d’entrées, accordé au singulier comme au pluriel', async () => {
     await enter(GLOBAL_ADMIN, PATHS.communities)
 
     // `role="status"` : la valeur change à chaque frappe, et c'est là qu'elle doit être annoncée.
-    expect(screen.getByRole('status').textContent).toBe('3 communautés')
+    // Les deux populations séparément : un total ne correspondrait à aucune des listes visibles.
+    expect(screen.getByRole('status').textContent).toBe('2 communautés actives · 1 archivée')
 
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Azure' } })
-    expect(screen.getByRole('status').textContent).toBe('1 communauté')
+    // Aucune archivée ne correspond : la part archivée disparaît plutôt que d'annoncer zéro.
+    expect(screen.getByRole('status').textContent).toBe('1 communauté active')
   })
 
   it('trie par colonne et inverse le sens au second clic, en l’annonçant', async () => {
@@ -98,8 +112,8 @@ describe('référentiel des communautés', () => {
   it('n’annonce aucun tri sur une colonne qui n’en a pas', async () => {
     const table = await enter(GLOBAL_ADMIN, PATHS.communities)
 
-    // Toutes les colonnes de cet écran sont triables ; ce qui ne doit pas l'être, c'est la
-    // colonne d'actions, qui ne porte pas d'en-tête nommé.
+    // Le nom et le compteur d'organisateurs sont triables ; le statut ne l'est plus depuis
+    // #173 — la partition l'ordonne déjà — et la colonne d'actions ne porte pas d'en-tête nommé.
     for (const header of within(table).getAllByRole('columnheader')) {
       const sortable = within(header).queryByRole('button') !== null
       expect(header.getAttribute('aria-sort') === null).toBe(!sortable)
@@ -115,7 +129,8 @@ describe('référentiel des communautés', () => {
     expect(names(table)[0]).toContain('Power Platform France')
 
     fireEvent.click(screen.getByRole('button', { name: 'Effacer la recherche' }))
-    expect(names(table)).toHaveLength(ADMIN_COMMUNITIES.length)
+    // Deux, pas trois : le groupe archivé s'est replié en même temps que la recherche.
+    expect(names(table)).toHaveLength(2)
   })
 
   it('trouve un nom accentué sans qu’on ait à taper l’accent', async () => {
@@ -123,7 +138,12 @@ describe('référentiel des communautés', () => {
 
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'generaliste' } })
 
+    // La seule correspondance est archivée : la recherche a donc déplié le groupe d'elle-même,
+    // sans quoi elle ne rendrait rien du tout.
     expect(names(table)).toHaveLength(1)
+    expect(
+      within(table).getByRole('button', { name: /archivée/ }).getAttribute('aria-expanded'),
+    ).toBe('true')
   })
 
   it('distingue une recherche sans résultat d’un référentiel vide', async () => {
@@ -164,7 +184,7 @@ describe('référentiel des technologies', () => {
   it('liste ses entrées sans colonne d’organisateurs ni description', async () => {
     const table = await enter(GLOBAL_ADMIN, PATHS.technologies)
 
-    expect(names(table)).toHaveLength(ADMIN_TECHNOLOGIES.length)
+    expect(names(table)).toHaveLength(ACTIVE_TECHNOLOGIES)
     expect(within(table).queryByRole('columnheader', { name: /Organisateurs/ })).toBeNull()
   })
 

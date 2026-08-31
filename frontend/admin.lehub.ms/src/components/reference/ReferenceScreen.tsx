@@ -10,11 +10,14 @@ import { SearchField } from '@/components/data/SearchField'
 import type { ReferenceListState } from '@/hooks/useReferenceList'
 import {
   nextSort,
+  partition,
   searchEntries,
   sortEntries,
   type Comparable,
   type SortState,
 } from '@/lib/referenceFilters'
+import { readArchivedExpanded, writeArchivedExpanded, type ReferenceScope } from '@/lib/preferences'
+import { quantify, type Word } from '@/lib/words'
 
 interface ReferenceScreenProps<T, K extends string> {
   title: string
@@ -30,8 +33,16 @@ interface ReferenceScreenProps<T, K extends string> {
   /** Les champs sur lesquels la recherche porte — le nom seul, ou le nom et la description. */
   searchableOf: (entry: T) => readonly (string | null)[]
   searchPlaceholder: string
-  singular: string
-  plural: string
+  /** « communauté » / « communautés ». */
+  noun: Word
+  /** « active » / « actives » : l'adjectif s'accorde au genre du nom, donc il vient d'ici. */
+  activeWord: Word
+  /** « archivée » / « archivées ». */
+  archivedWord: Word
+  /** Ce qui range une entrée dans le groupe replié (#173). */
+  isArchived: (entry: T) => boolean
+  /** Sous quelle clé la préférence de repli est retenue, par référentiel. */
+  preferenceScope: ReferenceScope
   emptyTitle: string
   emptyDescription: string
   errorTitle: string
@@ -71,8 +82,11 @@ export function ReferenceScreen<T, K extends string>({
   valueOf,
   searchableOf,
   searchPlaceholder,
-  singular,
-  plural,
+  noun,
+  activeWord,
+  archivedWord,
+  isArchived,
+  preferenceScope,
   emptyTitle,
   emptyDescription,
   errorTitle,
@@ -87,14 +101,49 @@ export function ReferenceScreen<T, K extends string>({
     direction: 'ascending',
   })
 
+  /* Lue au premier rendu, comme la barre latérale : un écran qui s'afficherait déplié puis se
+     replierait sous les yeux serait pire que pas de préférence du tout. Un initialiseur, jamais
+     un effet — `react-hooks/set-state-in-effect` l'interdit, et il a raison. */
+  const [preferred, setPreferred] = useState(() => readArchivedExpanded(preferenceScope))
+
+  /* Le repli **pendant** une recherche est un état à part, réarmé à chaque frappe. C'est ce qui
+     fait qu'effacer la recherche revient à la préférence sans avoir à la restaurer : il n'y a
+     rien à restaurer, la préférence n'a jamais bougé. L'ajustement se fait au rendu, le patron
+     que React documente pour dériver un état d'une valeur qui change — voir `AdminLayout`. */
+  const [expandedWhileSearching, setExpandedWhileSearching] = useState(true)
+  const [seenQuery, setSeenQuery] = useState(query)
+  if (seenQuery !== query) {
+    setSeenQuery(query)
+    setExpandedWhileSearching(true)
+  }
+
+  const searching = query.trim().length > 0
+  const expanded = searching ? expandedWhileSearching : preferred
+
   const entries = state.status === 'success' ? state.entries : null
 
-  // Recherche puis tri, jamais l'inverse : trier ce qu'on va jeter est du travail perdu, et le
-  // résultat est le même.
-  const visible = useMemo(() => {
-    if (!entries) return []
-    return sortEntries(searchEntries(entries, query, searchableOf), sort, valueOf)
-  }, [entries, query, sort, searchableOf, valueOf])
+  /* Recherche, puis tri, puis **partition en dernier**. Trier avant de jeter serait du travail
+     perdu ; partitionner avant de trier donnerait deux tris, un par groupe, ce que #173 refuse
+     nommément. Les deux moitiés sont des sous-suites d'une liste triée une seule fois. */
+  const { active, archived } = useMemo(() => {
+    if (!entries) return { active: [], archived: [] }
+    const visible = sortEntries(searchEntries(entries, query, searchableOf), sort, valueOf)
+    const split = partition(visible, isArchived)
+    return { active: split.rest, archived: split.matched }
+  }, [entries, query, sort, searchableOf, valueOf, isArchived])
+
+  function toggleArchived(): void {
+    /* Pendant une recherche, le repli est réel mais éphémère : il n'est pas retenu, et la frappe
+       suivante rouvre le groupe. Le contrôle reste donc vivant et son `aria-expanded` reste vrai
+       dans tous les cas — un bouton désactivé sortirait du parcours clavier, et un bouton qui
+       n'aurait aucun effet visible annoncerait un état qu'il n'a pas. */
+    if (searching) {
+      setExpandedWhileSearching(!expanded)
+      return
+    }
+    setPreferred(!expanded)
+    writeArchivedExpanded(preferenceScope, !expanded)
+  }
 
   return (
     <>
@@ -151,10 +200,16 @@ export function ReferenceScreen<T, K extends string>({
                 value={query}
                 onChange={setQuery}
               />
-              <ResultCount count={visible.length} singular={singular} plural={plural} />
+              <ResultCount
+                activeCount={active.length}
+                archivedCount={archived.length}
+                noun={noun}
+                activeWord={activeWord}
+                archivedWord={archivedWord}
+              />
             </div>
 
-            {visible.length === 0 ? (
+            {active.length === 0 && archived.length === 0 ? (
               <EmptyState
                 icon={SearchX}
                 title={`Aucun résultat pour « ${query} »`}
@@ -163,7 +218,7 @@ export function ReferenceScreen<T, K extends string>({
                   // Pas « Effacer la recherche » : le champ juste au-dessus porte déjà ce nom,
                   // et deux boutons de même intitulé s'annoncent à l'identique dans une liste de
                   // commandes. Celui-ci dit son résultat plutôt que son geste.
-                  label: `Afficher toutes les ${plural}`,
+                  label: `Afficher toutes les ${noun.many}`,
                   onClick: () => {
                     setQuery('')
                   },
@@ -173,12 +228,30 @@ export function ReferenceScreen<T, K extends string>({
               <DataTable
                 caption={title}
                 columns={columns}
-                entries={visible}
+                entries={active}
                 getRowId={getRowId}
                 sort={sort}
                 onSortChange={(key) => {
                   setSort((current) => nextSort(current, key))
                 }}
+                // « Entrée » et non le nom du référentiel : « Aucune communauté active » contre
+                // « Aucun évènement actif » demanderait d'accorder aussi l'article, là où
+                // « entrée » est féminin, générique et vrai partout.
+                emptyRow={
+                  searching
+                    ? 'Aucune entrée active ne correspond à cette recherche.'
+                    : 'Aucune entrée active.'
+                }
+                group={
+                  archived.length > 0
+                    ? {
+                        label: quantify(archived.length, noun, archivedWord),
+                        entries: archived,
+                        expanded,
+                        onToggle: toggleArchived,
+                      }
+                    : undefined
+                }
                 rowActions={(entry) => (
                   <button
                     type="button"

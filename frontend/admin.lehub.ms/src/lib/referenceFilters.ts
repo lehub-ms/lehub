@@ -72,3 +72,27 @@ export function searchEntries<T>(
     searchableOf(entry).some((field) => (field ? fold(field).includes(needle) : false)),
   )
 }
+
+/**
+ * Sépare une liste en deux, en préservant l'ordre dans chacune.
+ *
+ * L'ordre est tout le contrat : c'est lui qui fait que le tri des en-têtes reste **global**. Les
+ * deux moitiés sont des sous-suites de la liste déjà triée, jamais retriées.
+ *
+ * Trier chaque moitié séparément donnerait aujourd'hui le même résultat — l'ordre est total — et
+ * c'est précisément pour cela qu'il faut l'écrire : cela *encoderait* « chaque groupe a son
+ * ordre », et le prochain critère secondaire viendrait s'y greffer. Un tri qui ne vaudrait que
+ * pour le groupe visible serait un second tri, invisible et faux (#173).
+ */
+export function partition<T>(
+  entries: readonly T[],
+  predicate: (entry: T) => boolean,
+): { matched: T[]; rest: T[] } {
+  const matched: T[] = []
+  const rest: T[] = []
+  for (const entry of entries) {
+    if (predicate(entry)) matched.push(entry)
+    else rest.push(entry)
+  }
+  return { matched, rest }
+}
