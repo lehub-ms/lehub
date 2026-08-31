@@ -234,12 +234,12 @@ describe('EventFilterDrawer', () => {
     )
     const dialog = await openDrawer()
 
-    // Both are initials of their fixtures' names ("community 1"/"2" and "technology
+    // Both are the initials of their fixtures' names ("community 1"/"2" and "technology
     // 1") — a flat color square, unlike the community avatar, would render no text at
-    // all here. Both community fixtures share the initial "C", hence `getAllByText`.
-    expect(within(dialog).getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
+    // all here. The two community fixtures differ only by their index, hence the pattern.
+    expect(within(dialog).getAllByText(/^C\d$/, { selector: 'span' }).length).toBeGreaterThan(0)
     await user.click(within(dialog).getByRole('button', { name: /Technologie/ }))
-    expect(within(dialog).getByText('T', { selector: 'span' })).not.toBeNull()
+    expect(within(dialog).getByText('T1', { selector: 'span' })).not.toBeNull()
   })
 
   it('shows an option\u2019s logo in the drawer rows and in the collapsed-section summary chips', async () => {

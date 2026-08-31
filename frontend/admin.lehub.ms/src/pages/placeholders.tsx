@@ -5,8 +5,8 @@ import { useSelectedCommunity } from '@/community/useSelectedCommunity'
 /**
  * Les écrans que cette Feature n'a pas à remplir.
  *
- * #138 construit la coquille ; le contenu appartient à #143 (évènements), #150 (référentiels)
- * et #156 (désignations). Une page provisoire nommée vaut mieux qu'une route absente : la
+ * #138 construit la coquille ; le contenu appartient à #143 (évènements) et #156 (désignations
+ * et administrateurs). #150 a livré les siens, qui ont quitté ce fichier. Une page provisoire nommée vaut mieux qu'une route absente : la
  * navigation est vérifiable de bout en bout dès maintenant, et le remplacement est un
  * changement local plutôt qu'un ajout de route.
  */
@@ -54,14 +54,6 @@ export function EventsPage(): ReactNode {
 
 export function OrganizersPage(): ReactNode {
   return <ScopedPlaceholder title="Organisateurs" issue="la Feature #156" />
-}
-
-export function CommunitiesPage(): ReactNode {
-  return <Placeholder title="Communautés" issue="la Feature #150" />
-}
-
-export function TechnologiesPage(): ReactNode {
-  return <Placeholder title="Technologies" issue="la Feature #150" />
 }
 
 export function AdministratorsPage(): ReactNode {

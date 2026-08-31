@@ -246,7 +246,8 @@ describe('EntityRow — logos', () => {
     render(<EntityRow entities={[withLogo, withoutLogo]} kind="community" label="Organisé par" />)
 
     expect(row().querySelector('img')?.getAttribute('src')).toBe(withLogo.logoUrl)
-    expect(screen.getByText('C')).not.toBeNull()
+    // Les initiales de l'entité *sans* logo, la seconde : « community 2 ».
+    expect(screen.getByText('C2')).not.toBeNull()
   })
 
   it('falls back to the initial when a logo fails to load, with no broken-image glyph', () => {
@@ -257,7 +258,7 @@ describe('EntityRow — logos', () => {
     fireEvent.error(row().querySelector('img')!)
 
     expect(row().querySelector('img')).toBeNull()
-    expect(within(row()).getByText('T')).not.toBeNull()
+    expect(within(row()).getByText('T1')).not.toBeNull()
     // The name was never carried by the image, so it survives the swap.
     expect(within(row()).getByText(withLogo.name)).not.toBeNull()
   })

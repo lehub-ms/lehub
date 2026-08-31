@@ -1,5 +1,6 @@
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 import type { CommunitySummary } from '@lehub/shared/lib/api'
+import type { AdminCommunity, AdminTechnology } from '@/lib/api'
 
 /** La réponse de `POST /api/me/session`, en un seul endroit — comme côté site public. */
 export const MIRROR = {
@@ -31,6 +32,75 @@ export const COMMUNITIES: CommunitySummary[] = [
     name: 'Power Platform France',
     logoUrl: null,
     description: null,
+  },
+]
+
+/**
+ * Ce que rendent les deux vues d'administration des référentiels.
+ *
+ * Volontairement moins lisses que `COMMUNITIES` : une entrée archivée, une sans organisateur, une
+ * avec des évènements rattachés et une sans, un nom très long, un accent. Chacune correspond à un
+ * critère ou à un edge case de #151 et #155 — une fixture propre ne teste que le cas facile.
+ */
+export const ADMIN_COMMUNITIES: AdminCommunity[] = [
+  {
+    id: 'C1C1C1C1-0000-0000-0000-000000000001',
+    name: 'Azure User Group France',
+    description: 'L’écosystème Azure au cœur de vos projets cloud.',
+    logoPath: 'communities/azure-user-group-france.svg',
+    logoUrl: 'https://media.example/media/communities/azure-user-group-france.svg',
+    status: 'active',
+    organizerCount: 2,
+    eventCount: 3,
+  },
+  {
+    id: 'C2C2C2C2-0000-0000-0000-000000000002',
+    name: 'Power Platform France',
+    description: 'Low-code au service de tous.',
+    logoPath: null,
+    logoUrl: null,
+    status: 'active',
+    // Aucun organisateur désigné : ce n'est pas une anomalie.
+    organizerCount: 0,
+    // Aucun évènement : la seule que la suppression définitive puisse concerner.
+    eventCount: 0,
+  },
+  {
+    id: 'C3C3C3C3-0000-0000-0000-000000000003',
+    name: 'Communauté Généraliste du Numérique Responsable en Nouvelle-Aquitaine',
+    description: null,
+    logoPath: null,
+    logoUrl: null,
+    status: 'archived',
+    organizerCount: 1,
+    eventCount: 7,
+  },
+]
+
+export const ADMIN_TECHNOLOGIES: AdminTechnology[] = [
+  {
+    id: 'B1B1B1B1-0000-0000-0000-000000000001',
+    name: 'Azure',
+    logoPath: 'technologies/azure.svg',
+    logoUrl: 'https://media.example/media/technologies/azure.svg',
+    status: 'active',
+    eventCount: 4,
+  },
+  {
+    id: 'B2B2B2B2-0000-0000-0000-000000000002',
+    name: '.NET',
+    logoPath: null,
+    logoUrl: null,
+    status: 'active',
+    eventCount: 0,
+  },
+  {
+    id: 'B3B3B3B3-0000-0000-0000-000000000003',
+    name: 'Silverlight',
+    logoPath: null,
+    logoUrl: null,
+    status: 'archived',
+    eventCount: 2,
   },
 ]
 

@@ -11,13 +11,9 @@ import { NoAccessPage } from '@/pages/NoAccessPage'
 import { CommunityIndexRedirect } from '@/community/CommunityIndexRedirect'
 import { CommunityScope } from '@/community/CommunityScope'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import {
-  AdministratorsPage,
-  CommunitiesPage,
-  EventsPage,
-  OrganizersPage,
-  TechnologiesPage,
-} from '@/pages/placeholders'
+import { AdministratorsPage, EventsPage, OrganizersPage } from '@/pages/placeholders'
+import { CommunitiesPage } from '@/pages/CommunitiesPage'
+import { TechnologiesPage } from '@/pages/TechnologiesPage'
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { SignInPage } from '@/pages/SignInPage'
 

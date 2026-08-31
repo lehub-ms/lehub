@@ -76,11 +76,11 @@ describe('EventFilterPanel', () => {
       />,
     )
 
-    // Both are initials of their fixtures' names ("community 1"/"2" and "technology
+    // Both are the initials of their fixtures' names ("community 1"/"2" and "technology
     // 1") — a flat color square, unlike the community avatar, would render no text at
-    // all here. Both community fixtures share the initial "C", hence `getAllByText`.
-    expect(screen.getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
-    expect(screen.getByText('T', { selector: 'span' })).not.toBeNull()
+    // all here. The two community fixtures differ only by their index, hence the pattern.
+    expect(screen.getAllByText(/^C\d$/, { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('T1', { selector: 'span' })).not.toBeNull()
   })
 
   it('shows an option\u2019s logo when it has one, and the initial fallback when it does not', () => {
@@ -96,7 +96,7 @@ describe('EventFilterPanel', () => {
 
     expect(container.querySelector('img')?.getAttribute('src')).toBe(withLogo.logoUrl)
     // The logo-less option next to it still renders its initial, same slot, same row.
-    expect(screen.getAllByText('C', { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/^C\d$/, { selector: 'span' }).length).toBeGreaterThan(0)
   })
 
   it('toggles a community on click', async () => {

@@ -1,5 +1,5 @@
 import { Calendar, CalendarCheck, Mail, UserPlus } from 'lucide-react'
-import { LinkButton } from '@/components/LinkButton'
+import { LinkButton } from '@lehub/shared/components/LinkButton'
 import { PATHS } from '@/lib/navigation'
 
 const APPS = [
