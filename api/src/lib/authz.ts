@@ -6,6 +6,13 @@ import { type SessionPermissions } from './permissionsRepo'
  * Reading is not here, and that is the first rule: events, communities and technologies are
  * readable by anyone, anonymous visitors included. Only writes are arbitrated.
  *
+ * One nuance the backoffice added (#151): the *administration view* of a referential is
+ * arbitrated, and it is `canWriteReferenceData` that arbitrates it. It shows what the public
+ * contract deliberately withholds — archived entries, how many events hold an entry, how many
+ * organisers a community has — so it is not the reference data, it is the view of it, and the
+ * people entitled to see it are exactly the people entitled to write it. One expression, not two
+ * names for it.
+ *
  * Every function takes the permissions resolved for the request (#108) and returns a
  * boolean. Nothing here touches the database, the request or the token — which is what lets
  * every cell of the matrix be exercised, in both directions, without a server.
