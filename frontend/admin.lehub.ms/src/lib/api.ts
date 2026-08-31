@@ -4,7 +4,9 @@
  * parlent à la même Function App, en cross-origin, et rien de ce fichier n'est une décision
  * de confiance. L'API arbitre (#109).
  */
-import { apiFetch } from '@lehub/shared/lib/api'
+// `NamedRef` est aussi ré-exporté plus bas : un `export … from` republie le nom sans l'amener
+// dans la portée du module, et `AdminEvent` s'en sert.
+import { apiFetch, type NamedRef } from '@lehub/shared/lib/api'
 
 export {
   ApiError,
@@ -117,6 +119,51 @@ export function updateTechnology(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   })
+}
+
+/**
+ * Un évènement tel que le backoffice le voit — évènements passés compris, et avec de quoi
+ * remplir le formulaire.
+ *
+ * Deux paires de champs méritent leur redondance apparente. Le **chemin** de la bannière voyage
+ * avec son URL, pour la raison qui vaut déjà pour `logoPath` : le formulaire renvoie le chemin
+ * tel quel à l’enregistrement. Et les **identifiants** du type et du format voyagent avec leurs
+ * libellés, sans quoi le formulaire présélectionnerait ses listes en comparant des chaînes
+ * traduites.
+ *
+ * Attention au vocabulaire, il diverge et c’est délibéré : `format` porte `dbo.FormatType`
+ * (Conférence, Meetup, Webinaire…) que l’écran appelle « Type », et `mode` porte `dbo.EventMode`
+ * (Présentiel, En ligne, Hybride) que l’écran appelle « Format ». Le fil garde les noms que le
+ * contrat public a déjà publiés ; la traduction vit dans `lib/eventVocabulary.ts`, et là
+ * seulement.
+ */
+export interface AdminEvent {
+  id: string
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  bannerImagePath: string | null
+  bannerImageUrl: string | null
+  formatTypeId: string
+  format: string
+  eventModeId: string
+  mode: string
+  communities: NamedRef[]
+  technologies: NamedRef[]
+}
+
+/**
+ * Les évènements d’une communauté, du plus proche au plus lointain.
+ *
+ * La communauté est obligatoire : le backoffice regarde toujours celle que la barre latérale
+ * désigne. L’API refuse en 403 une communauté que la session n’organise pas (#109), que cet
+ * écran ait été atteignable ou non.
+ */
+export function listCommunityEvents(communityId: string): Promise<AdminEvent[]> {
+  return apiFetch<AdminEvent[]>(
+    `/api/manage/events?communityId=${encodeURIComponent(communityId)}`,
+  )
 }
 
 /** Les destinations que la route de téléversement accepte aujourd’hui. */

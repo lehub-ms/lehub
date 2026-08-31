@@ -1,4 +1,5 @@
 import { DESIGNATION_SCHEMAS } from './designationSchemas'
+import { EVENT_SCHEMAS } from './eventSchemas'
 import { REFERENCE_SCHEMAS } from './referenceSchemas'
 import { UPLOAD_DESTINATION } from './uploadSchemas'
 
@@ -25,4 +26,5 @@ export const ALL_REQUEST_SCHEMAS = [
   ...REFERENCE_SCHEMAS,
   UPLOAD_DESTINATION,
   ...DESIGNATION_SCHEMAS,
+  ...EVENT_SCHEMAS,
 ] as const

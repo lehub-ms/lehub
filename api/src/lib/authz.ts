@@ -52,6 +52,27 @@ export function canWriteReferenceData(permissions: SessionPermissions): boolean 
 }
 
 /**
+ * Reading the administration view of one community's events (#144).
+ *
+ * The second arbitrated *read* in this API, and it is arbitrated for the same reason as the
+ * first: it is not the event catalogue, which is public and stays public, it is the view an
+ * organiser works in. It carries what the public contract withholds — events already past, the
+ * banner's stored path, every attachment of every event — and it is scoped to a community
+ * rather than to the world. See the header above, and `canWriteReferenceData`'s note.
+ *
+ * Deliberately *not* `canWriteEvent` composed over the listing: the question here is asked
+ * before any event is read, about a community rather than about a row. An organiser sees their
+ * communities' events, an administrator sees any community's — and the events themselves each
+ * answer their own write question afterwards.
+ */
+export function canManageCommunityEvents(
+  permissions: SessionPermissions,
+  communityId: string,
+): boolean {
+  return permissions.isGlobalAdmin || organizes(permissions, communityId)
+}
+
+/**
  * Modifying or deleting an existing event.
  *
  * Attaching a community to an event is what shares its management, so being an organiser of

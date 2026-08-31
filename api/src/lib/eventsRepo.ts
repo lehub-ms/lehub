@@ -1,3 +1,4 @@
+import sql from 'mssql'
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import { getPool } from './sqlClient'
 
@@ -61,25 +62,17 @@ interface EventRow {
 }
 
 /**
- * Upcoming events, soonest first.
+ * The two link collections, as JSON rather than a delimited string so a name containing the
+ * delimiter cannot corrupt the result.
  *
- * Filtered on EndDate, not StartDate: issue #18 asks for past events to be excluded,
- * and a two-day conference is not past on its opening morning. Ordering stays on
- * StartDate, which IX_Event_StartDate backs.
+ * Written once and shared by the public listing and the backoffice one. They are the same
+ * attachments seen from two screens — an event's communities and technologies do not change
+ * shape because an organiser is the one looking — and the first copy had already been made
+ * before this was extracted.
  *
- * The two link collections come back as JSON rather than a delimited string so a
- * name containing the delimiter cannot corrupt the result.
+ * Correlated on `e.Id`, so every query embedding this must name the events table `e`.
  */
-const UPCOMING_EVENTS_QUERY = `
-SELECT
-  e.Id,
-  e.Title,
-  e.Description,
-  e.StartDate,
-  e.EndDate,
-  e.BannerImagePath,
-  ft.Name AS Format,
-  em.Name AS Mode,
+const ATTACHMENT_COLUMNS = `
   (SELECT c.Id AS id, c.Name AS name, c.LogoPath AS logoPath,
           CASE WHEN c.Status = 'archived' THEN 1 ELSE 0 END AS archived
      FROM dbo.EventCommunity ec
@@ -94,6 +87,26 @@ SELECT
     WHERE et.EventId = e.Id
     ORDER BY t.Name
       FOR JSON PATH) AS Technologies
+`
+
+/**
+ * Upcoming events, soonest first.
+ *
+ * Filtered on EndDate, not StartDate: issue #18 asks for past events to be excluded,
+ * and a two-day conference is not past on its opening morning. Ordering stays on
+ * StartDate, which IX_Event_StartDate backs.
+ */
+const UPCOMING_EVENTS_QUERY = `
+SELECT
+  e.Id,
+  e.Title,
+  e.Description,
+  e.StartDate,
+  e.EndDate,
+  e.BannerImagePath,
+  ft.Name AS Format,
+  em.Name AS Mode,
+${ATTACHMENT_COLUMNS}
 FROM dbo.Event e
 JOIN dbo.FormatType ft ON ft.Id = e.FormatTypeId
 JOIN dbo.EventMode  em ON em.Id = e.EventModeId
@@ -133,4 +146,104 @@ export async function listUpcomingEvents(): Promise<EventSummary[]> {
     communities: parseRefs(row.Communities, media),
     technologies: parseRefs(row.Technologies, media),
   }))
+}
+
+/**
+ * What the backoffice sees of an event, and the public contract deliberately does not.
+ *
+ * Three things set it apart from `EventSummary`. The **identifiers** of the format type and the
+ * event mode travel alongside their names, because the form has to preselect them and an API
+ * that only rendered `"Meetup"` would force the browser to match on a label. The **stored path**
+ * of the banner travels alongside its URL, for the reason `AdminCommunity` carries `logoPath`:
+ * the form sends the path straight back on save, and recomposing it from the URL would put
+ * `mediaUrls` in a browser. And past events are **not filtered out** — the whole point of #144
+ * is that an organiser corrects what has already happened.
+ *
+ * `format` is `dbo.FormatType` (Conférence, Meetup, Webinaire…) and `mode` is `dbo.EventMode`
+ * (Présentiel, En ligne, Hybride). The backoffice calls the first one « Type » and the second
+ * one « Format » — the screen's vocabulary, settled in #145, is not the wire's, and the single
+ * place the two are reconciled is `frontend/admin.lehub.ms/src/lib/eventVocabulary.ts`. The wire
+ * keeps the names the public contract already published.
+ */
+export interface AdminEvent {
+  id: string
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  bannerImagePath: string | null
+  bannerImageUrl: string | null
+  formatTypeId: string
+  format: string
+  eventModeId: string
+  mode: string
+  communities: NamedRef[]
+  technologies: NamedRef[]
+}
+
+interface AdminEventRow extends EventRow {
+  FormatTypeId: string
+  EventModeId: string
+}
+
+/**
+ * Every event carrying a given community, soonest first.
+ *
+ * `EXISTS` rather than a join to `EventCommunity`: an event carried by that community *and* by
+ * another one must appear once, and a join would emit it once per matching link row. It is an
+ * index seek on `IX_EventCommunity_CommunityId` (migration 0001).
+ *
+ * No filter on `EndDate`, unlike the public listing. Past events belong in this list — #174
+ * folds them behind a group row on the screen, which is a rendering decision and stays one:
+ * filtering them out here would make « la recherche traverse le repli » impossible to honour.
+ */
+export const LIST_COMMUNITY_EVENTS_QUERY = `
+SELECT
+  e.Id,
+  e.Title,
+  e.Description,
+  e.StartDate,
+  e.EndDate,
+  e.BannerImagePath,
+  e.FormatTypeId,
+  ft.Name AS Format,
+  e.EventModeId,
+  em.Name AS Mode,
+${ATTACHMENT_COLUMNS}
+FROM dbo.Event e
+JOIN dbo.FormatType ft ON ft.Id = e.FormatTypeId
+JOIN dbo.EventMode  em ON em.Id = e.EventModeId
+WHERE EXISTS (SELECT 1 FROM dbo.EventCommunity ec
+               WHERE ec.EventId = e.Id AND ec.CommunityId = @communityId)
+ORDER BY e.StartDate
+`
+
+/** Exported for its own sake: the mapping is the testable half, the query is not. */
+export function mapAdminEvent(media: MediaConfig) {
+  return (row: AdminEventRow): AdminEvent => ({
+    id: row.Id,
+    title: row.Title,
+    description: row.Description,
+    startDate: row.StartDate.toISOString(),
+    endDate: row.EndDate.toISOString(),
+    bannerImagePath: row.BannerImagePath,
+    bannerImageUrl: mediaUrl(row.BannerImagePath, media),
+    formatTypeId: row.FormatTypeId,
+    format: row.Format,
+    eventModeId: row.EventModeId,
+    mode: row.Mode,
+    communities: parseRefs(row.Communities, media),
+    technologies: parseRefs(row.Technologies, media),
+  })
+}
+
+export async function listCommunityEvents(communityId: string): Promise<AdminEvent[]> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('communityId', sql.UniqueIdentifier, communityId)
+    .query<AdminEventRow>(LIST_COMMUNITY_EVENTS_QUERY)
+
+  return result.recordset.map(mapAdminEvent(media))
 }
