@@ -5,21 +5,11 @@ import { useSelectedCommunity } from '@/community/useSelectedCommunity'
 /**
  * Les écrans que cette Feature n'a pas à remplir.
  *
- * #138 construit la coquille ; le contenu appartient à #143 (évènements) et #156 (désignations
- * et administrateurs). #150 a livré les siens, qui ont quitté ce fichier. Une page provisoire nommée vaut mieux qu'une route absente : la
- * navigation est vérifiable de bout en bout dès maintenant, et le remplacement est un
- * changement local plutôt qu'un ajout de route.
+ * #138 construit la coquille ; le contenu appartient à #143 (évènements). #150 et #156 ont livré
+ * les leurs, qui ont quitté ce fichier. Une page provisoire nommée vaut mieux qu'une route
+ * absente : la navigation est vérifiable de bout en bout dès maintenant, et le remplacement est
+ * un changement local plutôt qu'un ajout de route.
  */
-function Placeholder({ title, issue }: { title: string; issue: string }): ReactNode {
-  return (
-    <>
-      <h1 className="text-2xl font-bold">{title}</h1>
-      <p className="mt-2 text-[0.9375rem] text-ink-muted">
-        Cet écran est livré par {issue}. La navigation qui y mène est en place.
-      </p>
-    </>
-  )
-}
 
 /**
  * Le titre d'un écran de la section porte la communauté sur laquelle on travaille.
@@ -50,8 +40,4 @@ function ScopedPlaceholder({ title, issue }: { title: string; issue: string }): 
 
 export function EventsPage(): ReactNode {
   return <ScopedPlaceholder title="Évènements" issue="la Feature #143" />
-}
-
-export function AdministratorsPage(): ReactNode {
-  return <Placeholder title="Administrateurs" issue="la Feature #156" />
 }

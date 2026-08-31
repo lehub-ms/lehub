@@ -210,6 +210,32 @@ export function removeOrganizer(communityId: string, email: string): Promise<voi
   })
 }
 
+/**
+ * Les administrateurs globaux.
+ *
+ * Même forme que les organisateurs, sans communauté : le marqueur n'a pas de périmètre. Le
+ * retrait peut être refusé — `LAST_GLOBAL_ADMIN` — et c'est la modale qui restitue le refus.
+ */
+export function listAdministrators(): Promise<Account[]> {
+  return apiFetch<Account[]>('/api/manage/administrators')
+}
+
+export function designateAdministrator(email: string): Promise<Account> {
+  return apiFetch<Account>('/api/manage/administrators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function removeAdministrator(email: string): Promise<void> {
+  return apiFetch<void>('/api/manage/administrators', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
 export function deleteCommunity(id: string): Promise<void> {
   return apiFetch<void>(`/api/manage/communities/${id}`, { method: 'DELETE' })
 }
