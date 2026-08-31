@@ -73,6 +73,13 @@ WHEN NOT MATCHED THEN
   INSERT (Id, Name, LogoPath, Description)
   VALUES (source.Id, source.Name, source.LogoPath, source.Description);
 
+-- Status (migration 0006) is deliberately absent from both clauses above, and that absence is
+-- the rule rather than an omission. The INSERT names an explicit column list, so a new
+-- community takes the column's own 'active' default; and no WHEN MATCHED clause ever writes
+-- Status, so a community an administrator archived from the backoffice stays archived across
+-- every replay. Adding `UPDATE SET Status = source.Status` here would resurrect it — the very
+-- failure 0004 reasoned through for administrator promotion.
+
 -- ─── Events ──────────────────────────────────────────────────────────────────
 -- Formats:  F1 Conférence · F2 Meetup · F3 Webinaire · F4 Hackathon · F5 Atelier
 -- Modes:    D1 Présentiel · D2 En ligne · D3 Hybride

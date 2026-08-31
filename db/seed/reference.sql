@@ -77,3 +77,12 @@ WHEN NOT MATCHED THEN INSERT (Id, Name, LogoPath) VALUES (source.Id, source.Name
 -- Nothing is ever deleted here. A technology dropped from this block keeps its row, and
 -- FK_EventTechnology_Technology has no cascade, so the database refuses to remove one an
 -- event still references — which is the behaviour wanted, not an obstacle to work around.
+
+-- Status (migration 0006) is deliberately absent from both clauses above, and that absence
+-- is the rule, not an omission. The INSERT names an explicit column list, so a genuinely new
+-- technology takes the column's own 'active' default; and no WHEN MATCHED clause ever writes
+-- Status, so a technology an administrator archived from the backoffice stays archived
+-- across every replay. Adding `UPDATE SET Status = source.Status` here would resurrect it —
+-- the very failure 0004 reasoned through for administrator promotion. Story #153 states it
+-- as an edge case: replaying the reference data neither overwrites an entry created in place
+-- nor introduces a duplicate.
