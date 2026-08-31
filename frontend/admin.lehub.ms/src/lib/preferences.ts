@@ -35,7 +35,6 @@ export function writeSidebarCollapsed(collapsed: boolean): void {
   write(COLLAPSED_KEY, String(collapsed))
 }
 
-/**
 /** Les référentiels qui portent la préférence ci-dessous. Une chaîne libre s'y perdrait. */
 export type ReferenceScope = 'communities' | 'technologies'
 

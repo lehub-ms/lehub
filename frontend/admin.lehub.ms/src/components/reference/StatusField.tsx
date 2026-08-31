@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { cn } from '@lehub/shared/lib/cn'
 import type { ReferenceStatus } from '@/lib/api'
 
@@ -38,15 +38,19 @@ export function StatusField({
   value: ReferenceStatus
   onChange: (status: ReferenceStatus) => void
 }): ReactNode {
+  // `useId` et non un identifiant écrit en dur : deux panneaux montés en même temps, ou un
+  // second groupe de statut sur le même écran, rendraient le nom du `radiogroup` ambigu.
+  const labelId = useId()
+
   return (
     <div className="flex flex-col gap-1.5">
-      <span id="status-label" className="text-[0.8125rem] font-semibold text-ink">
+      <span id={labelId} className="text-[0.8125rem] font-semibold text-ink">
         Statut
       </span>
 
       <div
         role="radiogroup"
-        aria-labelledby="status-label"
+        aria-labelledby={labelId}
         className="inline-flex w-full overflow-hidden rounded-[10px] border border-primary/12 bg-white"
       >
         {OPTIONS.map((option, index) => {

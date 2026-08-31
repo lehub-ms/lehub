@@ -9,6 +9,7 @@ import {
   routeLabel,
 } from '../lib/httpErrors'
 import { UPDATE_TECHNOLOGY } from '../lib/referenceSchemas'
+import { technologyWriteRefusal } from '../lib/referenceResponses'
 import { guidParam, parseBody } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
@@ -52,12 +53,7 @@ export async function adminTechnology(
     )
   }
 
-  if (!result.ok) {
-    if (result.error === 'name-taken') {
-      return errorResponse(409, 'TECHNOLOGY_NAME_TAKEN', 'Another technology already has this name.')
-    }
-    return errorResponse(404, 'TECHNOLOGY_NOT_FOUND', 'No technology carries this identifier.')
-  }
+  if (!result.ok) return technologyWriteRefusal(result)
 
   return { status: 200, jsonBody: result.technology }
 }

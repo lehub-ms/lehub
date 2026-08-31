@@ -161,7 +161,13 @@ function ReferenceForm({
   const withSlug = kind === 'community'
   // Proposé depuis le nom tant qu'on ne l'a pas corrigé à la main : #166 demande les deux.
   const slug = withSlug ? (slugEdited ? (draft.slug ?? '') : slugify(name)) : undefined
-  const slugChanged = entry !== null && withSlug && slug !== entry.slug
+  /* Vidé, le champ ne vaut pas « efface l'adresse » : la colonne est NOT NULL et l'API ne
+     saurait qu'en faire. Sur une entrée existante il ne change donc rien — ni envoi, ni
+     avertissement. Sans cela le panneau annonçait « la nouvelle sera /c/ », faisait accepter la
+     rupture des liens partagés, et n'envoyait pas de slug du tout. */
+  const submittedSlug = slug === '' ? undefined : slug
+  const slugChanged =
+    entry !== null && withSlug && submittedSlug !== undefined && submittedSlug !== entry.slug
   const tooLong = (draft.description ?? '').length > DESCRIPTION_LIMIT
 
   async function submit(event: FormEvent | null, confirmed = false): Promise<void> {
@@ -192,7 +198,7 @@ function ReferenceForm({
 
     setSaving(true)
     try {
-      await onSubmit({ ...draft, name, ...(withSlug ? { slug: slug || undefined } : {}) })
+      await onSubmit({ ...draft, name, ...(withSlug ? { slug: submittedSlug } : {}) })
       onClose()
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 'COMMUNITY_SLUG_TAKEN') {
@@ -314,10 +320,12 @@ function ReferenceForm({
               className={INPUT_BASE}
               onChange={(event) => {
                 setSlugError(null)
-                // Dès la première frappe, il cesse de suivre le nom : une correction manuelle
-                // ne doit pas être écrasée au caractère suivant.
-                setSlugEdited(true)
-                setDraft((current) => ({ ...current, slug: event.target.value }))
+                const next = event.target.value
+                // Dès la première frappe, il cesse de suivre le nom : une correction manuelle ne
+                // doit pas être écrasée au caractère suivant. Le vider, en revanche, le remet à
+                // la proposition — c'est le geste le plus naturel pour dire « reprends le nom ».
+                setSlugEdited(next !== '')
+                setDraft((current) => ({ ...current, slug: next }))
               }}
             />
           </Field>

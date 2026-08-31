@@ -4,6 +4,7 @@ import { createTechnology, listAdminTechnologies } from '../lib/technologiesRepo
 import { errorResponse, forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
 import { CREATE_TECHNOLOGY } from '../lib/referenceSchemas'
 import { parseBody } from '../lib/validation'
+import { technologyWriteRefusal } from '../lib/referenceResponses'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
 /**
@@ -67,9 +68,7 @@ async function create(
     )
   }
 
-  if (!result.ok) {
-    return errorResponse(409, 'TECHNOLOGY_NAME_TAKEN', 'Another technology already has this name.')
-  }
+  if (!result.ok) return technologyWriteRefusal(result)
 
   return { status: 201, jsonBody: result.technology }
 }

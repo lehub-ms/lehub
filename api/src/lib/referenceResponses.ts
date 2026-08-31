@@ -1,6 +1,7 @@
 import type { HttpResponseInit } from '@azure/functions'
 import { errorResponse } from './httpErrors'
 import type { CommunityWriteResult } from './communitiesRepo'
+import type { TechnologyWriteResult } from './technologiesRepo'
 
 /**
  * The refusals a write to the community referential can produce, as HTTP.
@@ -31,5 +32,23 @@ export function communityWriteRefusal(
       return errorResponse(409, 'COMMUNITY_NAME_TAKEN', 'Another community already has this name.')
     case 'not-found':
       return errorResponse(404, 'COMMUNITY_NOT_FOUND', 'No community carries this identifier.')
+  }
+}
+
+/**
+ * Le pendant pour les technologies, qui n'ont pas de slug — donc deux issues, pas trois.
+ *
+ * Écrit plutôt que replié sur un `409` unique : `'not-found'` ici veut dire que l'INSERT a réussi
+ * et que la relecture n'a rien rendu, une incohérence côté serveur. L'annoncer « ce nom est déjà
+ * pris » enverrait chercher un doublon qui n'existe pas.
+ */
+export function technologyWriteRefusal(
+  result: Extract<TechnologyWriteResult, { ok: false }>,
+): HttpResponseInit {
+  switch (result.error) {
+    case 'name-taken':
+      return errorResponse(409, 'TECHNOLOGY_NAME_TAKEN', 'Another technology already has this name.')
+    case 'not-found':
+      return errorResponse(404, 'TECHNOLOGY_NOT_FOUND', 'No technology carries this identifier.')
   }
 }

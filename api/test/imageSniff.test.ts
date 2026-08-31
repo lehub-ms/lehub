@@ -115,6 +115,26 @@ describe('SVG', () => {
     expect(() => sniffImage(new TextEncoder().encode('<svg>&#x110000;</svg>'))).not.toThrow()
   })
 
+  it('reste linéaire sur un fichier fait d’ouvertures de commentaire', () => {
+    // Le repérage de la racine dépouillait les commentaires avec un quantificateur paresseux,
+    // qui repart de zéro à chaque « <!-- » : 1,15 s pour 160 kio, des minutes pour les 2 Mio que
+    // la route accepte, et l'instance à genoux. Le seuil est large — on mesure un ordre de
+    // grandeur, pas une horloge — mais il tombait dans le mur avant.
+    const bytes = new TextEncoder().encode('<!--'.repeat((512 * 1024) / 4))
+
+    const started = Date.now()
+    expect(sniffImage(bytes)).toBeNull()
+    expect(Date.now() - started).toBeLessThan(500)
+  })
+
+  it('franchit un prologue et des commentaires avant la racine, et s’arrête sur un commentaire non fermé', () => {
+    expect(sniffImage(new TextEncoder().encode('<?xml version="1.0"?>\n<!-- c --> <svg/>'))?.kind).toBe(
+      'svg',
+    )
+    expect(sniffImage(new TextEncoder().encode('<!-- c --><html/>'))).toBeNull()
+    expect(sniffImage(new TextEncoder().encode('<!-- jamais fermé <svg/>'))).toBeNull()
+  })
+
   it('refuse du binaire qui commence par des caractères imprimables', () => {
     const binary = new Uint8Array([...new TextEncoder().encode('<svg '), 0x00, 0xff])
     expect(sniffImage(binary)).toBeNull()

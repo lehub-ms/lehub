@@ -24,35 +24,47 @@
 ALTER TABLE dbo.Community ADD Slug NVARCHAR(80) NULL;
 
 EXEC(N'
-WITH folded AS (
-  SELECT
-    Id,
-    Name,
-    -- Accents stripped without a scalar function, and the collation is not decoration: the
-    -- Unicode string is converted to a single-byte code page that has no accented Latin
-    -- letter, so é degrades to e and ç to c on the way through. CP1253 is Greek, which is
-    -- exactly why it works -- an accent-insensitive *Latin1* collation keeps every accent,
-    -- because Latin1 can represent them. Anything the code page cannot represent at all --
-    -- an ideogram, an emoji -- becomes "?", which the separator class below sweeps away, and
-    -- that is what makes an untransposable name collapse to the empty string and fall through
-    -- to the identifier fallback rather than producing a row of dashes.
-    LOWER(CONVERT(NVARCHAR(200),
-      CONVERT(VARCHAR(200), Name) COLLATE SQL_Latin1_General_CP1253_CI_AI)) AS s
-  FROM dbo.Community
-),
-separated AS (
-  -- Every character that is not a-z or 0-9 becomes a dash. TRANSLATE needs both strings the
-  -- same length, hence the REPLICATE.
-  SELECT Id, Name,
-         TRANSLATE(s, N'' !"#$%&''''()*+,-./:;<=>?@[\]^_`{|}~'', REPLICATE(N''-'', 33)) AS s
-  FROM folded
-),
-collapsed AS (
+-- Materialised rather than chained in CTEs: the sweep below is a loop, and a CTE cannot hold
+-- one.
+SELECT
+  Id,
+  Name,
+  -- Accents stripped without a scalar function, and the collation is not decoration: the
+  -- Unicode string is converted to a single-byte code page that has no accented Latin letter,
+  -- so é degrades to e and ç to c on the way through. CP1253 is Greek, which is exactly why it
+  -- works -- an accent-insensitive *Latin1* collation keeps every accent, because Latin1 can
+  -- represent them. What the code page cannot represent at all -- an ideogram, an emoji --
+  -- becomes "?", which the sweep turns into a separator, and that is what makes an
+  -- untransposable name collapse to the empty string and fall through to the fallback.
+  LOWER(CONVERT(NVARCHAR(200),
+    CONVERT(VARCHAR(200), Name) COLLATE SQL_Latin1_General_CP1253_CI_AI)) AS s
+INTO #slug
+FROM dbo.Community;
+
+-- Everything that is not a-z, 0-9 or a dash becomes a dash, whatever it is.
+--
+-- A fixed TRANSLATE list is not enough and the reason is easy to miss: CP1253 round-trips more
+-- than Latin letters. The typographic apostrophe, the em dash, the ellipsis, the degree sign and
+-- the whole Greek block all survive the fold, so « L''École du Cloud » -- with the apostrophe
+-- macOS substitutes by default -- would have backfilled to « l''ecole-du-cloud ». That value is
+-- refused by isValidSlug on both sides, which would then block every save of that community
+-- until someone retyped the slug by hand. The seeded corpus is clean, so no test would have
+-- caught it.
+--
+-- PATINDEX under a binary collation, without which the class [^a-z0-9-] would consider « É » to
+-- be a letter and leave it in place. One pass per offending character, over a table of tens of
+-- rows.
+WHILE EXISTS (SELECT 1 FROM #slug WHERE PATINDEX(''%[^a-z0-9-]%'', s COLLATE Latin1_General_BIN2) > 0)
+  UPDATE #slug
+     SET s = STUFF(s, PATINDEX(''%[^a-z0-9-]%'', s COLLATE Latin1_General_BIN2), 1, N''-'')
+   WHERE PATINDEX(''%[^a-z0-9-]%'', s COLLATE Latin1_General_BIN2) > 0;
+
+WITH collapsed AS (
   -- Six passes: each halves a run of separators, so up to 64 consecutive ones collapse to one.
   SELECT Id, Name, REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
     s, N''--'', N''-''), N''--'', N''-''), N''--'', N''-''),
        N''--'', N''-''), N''--'', N''-''), N''--'', N''-'') AS s
-  FROM separated
+  FROM #slug
 ),
 trimmed AS (
   SELECT Id, Name, TRIM(N''-'' FROM s) AS s FROM collapsed
@@ -86,6 +98,8 @@ UPDATE c
    SET c.Slug = CASE WHEN n.rn = 1 THEN n.s ELSE n.s + N''-'' + CAST(n.rn AS NVARCHAR(10)) END
   FROM dbo.Community AS c
   JOIN numbered AS n ON n.Id = c.Id;
+
+DROP TABLE #slug;
 ');
 
 -- NOT NULL only once every row has one, which is what makes the backfill above mandatory

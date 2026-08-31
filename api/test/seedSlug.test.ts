@@ -73,6 +73,18 @@ describe('le backfill de la migration 0007', () => {
     expect(MIGRATION).not.toMatch(/COLLATE Latin1_General_CI_AI/)
   })
 
+  it('ramène tout ce qui n’est ni lettre ni chiffre à un séparateur, et pas seulement la ponctuation ASCII', () => {
+    // CP1253 ne fait pas que replier les accents : il laisse passer l'apostrophe typographique,
+    // le tiret cadratin, les points de suspension, le degré et tout le bloc grec. Une liste
+    // TRANSLATE fixe les manquait, et « L'École du Cloud » — avec l'apostrophe que macOS
+    // substitue par défaut — se remplissait en « l'ecole-du-cloud », que `isValidSlug` refuse
+    // des deux côtés et qui bloquait ensuite tout enregistrement de cette communauté.
+    expect(MIGRATION).toContain('PATINDEX')
+    expect(MIGRATION).toContain('[^a-z0-9-]')
+    // Sous collation binaire, sans quoi la classe considérerait « É » comme une lettre.
+    expect(MIGRATION).toContain('Latin1_General_BIN2')
+  })
+
   it('rend la colonne NOT NULL et unique une fois le remplissage fait', () => {
     expect(MIGRATION).toContain('ALTER COLUMN Slug NVARCHAR(80) NOT NULL')
     expect(MIGRATION).toContain('CREATE UNIQUE INDEX UX_Community_Slug')

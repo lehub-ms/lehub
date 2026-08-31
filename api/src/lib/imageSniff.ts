@@ -134,13 +134,46 @@ function looksLikeSvg(bytes: Uint8Array): boolean {
 
   // The first element has to be the root `<svg`: a prolog and comments may precede it, nothing
   // else may.
-  const withoutProlog = scanned
-    .replace(/^﻿/, '')
-    .replace(/<\?xml[^>]*\?>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .trimStart()
+  return startsWithSvgRoot(scanned)
+}
 
-  return /^<\s*svg[\s>]/i.test(withoutProlog)
+/**
+ * Whether the first element, once a prolog and any comments are stepped over, is `<svg`.
+ *
+ * Walked by hand rather than stripped with `/<!--[\s\S]*?-->/g`. A lazy quantifier restarts its
+ * scan at every `<!--`, so a body made of nothing but unterminated comment openers costs O(n²):
+ * measured at 77 ms for 40 kB and 1.15 s for 160 kB, which extrapolates to minutes of pinned
+ * event loop at the 2 MiB this route accepts. The upload sits behind an authorisation check, so
+ * only an administrator could reach it — an argument for fixing it rather than for leaving it: a
+ * malformed file must not be able to take the instance down.
+ *
+ * This walks forward once and never revisits a character.
+ */
+function startsWithSvgRoot(text: string): boolean {
+  let index = text.charCodeAt(0) === 0xfeff ? 1 : 0
+
+  for (;;) {
+    while (index < text.length && /\s/.test(text.charAt(index))) index += 1
+
+    if (text.startsWith('<?xml', index)) {
+      const end = text.indexOf('?>', index)
+      if (end === -1) return false
+      index = end + 2
+      continue
+    }
+
+    if (text.startsWith('<!--', index)) {
+      const end = text.indexOf('-->', index)
+      // An unterminated comment swallows the rest: there is no root element after it.
+      if (end === -1) return false
+      index = end + 3
+      continue
+    }
+
+    // `[\s/>]` et pas `[\s>]` : une racine auto-fermante `<svg/>` est un document vide mais
+    // valide, et rien ne justifiait de la traiter comme un fichier inconnu.
+    return /^<\s*svg[\s/>]/i.test(text.slice(index, index + 16))
+  }
 }
 
 /** `null` when the bytes are not one of the accepted images — the caller answers 415. */

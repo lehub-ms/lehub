@@ -222,3 +222,33 @@ describe('slugify côté formulaire', () => {
     expect(slugify('日本語')).toBe('')
   })
 })
+
+describe('champ vidé', () => {
+  it('reprend la proposition du nom plutôt que de prétendre effacer l’adresse', async () => {
+    await openPanel()
+    fireEvent.click(screen.getByRole('button', { name: `Modifier ${ADMIN_FIRST.name}` }))
+
+    fireEvent.change(within(panel()).getByLabelText(/Adresse/), { target: { value: '' } })
+
+    // Le champ retombe sur ce que le nom propose, il ne reste pas vide.
+    expect(within(panel()).getByLabelText(/Adresse/)).toHaveProperty('value', ADMIN_FIRST.slug)
+  })
+
+  it('n’avertit pas d’un changement qui n’aura pas lieu', async () => {
+    // Vidé, le champ annonçait « la nouvelle sera /c/ », faisait accepter la rupture des liens,
+    // puis n'envoyait aucun slug.
+    await openPanel()
+    fireEvent.click(screen.getByRole('button', { name: `Modifier ${ADMIN_FIRST.name}` }))
+
+    fireEvent.change(within(panel()).getByLabelText(/Adresse/), { target: { value: '' } })
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(bodiesFor('PATCH', `/api/manage/communities/${ADMIN_FIRST.id}`)).toHaveLength(1)
+    })
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(bodiesFor('PATCH', `/api/manage/communities/${ADMIN_FIRST.id}`)[0]).toMatchObject({
+      slug: ADMIN_FIRST.slug,
+    })
+  })
+})
