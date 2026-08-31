@@ -49,6 +49,11 @@ export function stubSignedIn(
       if (url.includes('/api/auth/token')) {
         return Promise.resolve(jsonResponse({ access_token: 'at', refresh_token: 'rt2', expires_in: 3600 }))
       }
+      // **Avant** `/api/manage/communities`, dont le préfixe l'attraperait : la route des
+      // organisateurs en est un chemin enfant. Vide par défaut — une suite qui ne parle pas de
+      // désignations n'a pas à les déclarer, mais l'écran les lit dès qu'on le traverse, et
+      // sans cette branche il recevrait la session en guise de tableau.
+      if (url.includes('/organizers')) return Promise.resolve(jsonResponse([]))
       // Avant `/api/communities`, qui ne les attraperait pas — les chemins diffèrent — mais
       // dont la proximité invite à s'y tromper en ajoutant une branche.
       if (url.includes('/api/manage/communities')) {

@@ -103,6 +103,25 @@ export function canDetachCommunity(
 }
 
 /**
+ * Searching the LeHub accounts, in order to designate one of them.
+ *
+ * Reserved to whoever can grant something, somewhere: an administrator, or an organiser of at
+ * least one community. An ordinary account has nothing to do there, and the route is the only
+ * thing in this API that reads anyone else's name and address, so the guard is not a formality
+ * — an unguarded search *is* the directory the backoffice deliberately does not publish.
+ *
+ * Coarser than the two predicates below it, and that is the honest shape: the search itself has
+ * no perimeter. Who may be designated *where* is decided by the designation, not by the lookup,
+ * and pretending otherwise would mean passing a community to a route that does not need one.
+ *
+ * The condition is `hasBackofficeAccess`'s twin (frontend/shared/src/lib/access.ts). They are
+ * written twice on purpose: this one arbitrates, that one only displays.
+ */
+export function canSearchAccounts(permissions: SessionPermissions): boolean {
+  return permissions.isGlobalAdmin || permissions.organizedCommunityIds.length > 0
+}
+
+/**
  * Designating or removing an organiser on a community.
  *
  * An organiser may co-opt on the communities they organise, and nowhere else. It is the only

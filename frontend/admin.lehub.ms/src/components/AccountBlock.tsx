@@ -1,10 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, ExternalLink, LogOut, UserRound } from 'lucide-react'
+import { ChevronDown, ExternalLink, LogOut } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useAuth } from '@lehub/shared/auth/useAuth'
 import { accountLabel } from '@lehub/shared/lib/accountLabel'
 import { cn } from '@lehub/shared/lib/cn'
-import { accountInitials } from '@/lib/accountInitials'
+import { PersonAvatar } from '@/components/people/PersonAvatar'
 import { PUBLIC_SITE_URL } from '@/lib/navigation'
 
 const ITEM =
@@ -14,7 +14,7 @@ const ITEM =
  * Le bas de la barre latérale : sous quelle identité et à quel titre on est connecté, et le
  * seul menu de l'application.
  *
- * Le libellé vient d'`accountLabel` et les initiales d'`accountInitials`, qui ne reçoivent l'un
+ * Le libellé vient d'`accountLabel` et les initiales de `PersonAvatar`, qui ne reçoivent l'un
  * comme l'autre qu'un prénom et un nom — l'adresse email n'a aucun chemin jusqu'ici, et un test
  * l'asserte sur le rendu entier de la barre plutôt que sur ce seul bloc.
  */
@@ -24,7 +24,6 @@ export function AccountBlock({ collapsed }: { collapsed: boolean }): ReactNode {
   if (state.status !== 'authenticated') return null
 
   const label = accountLabel(state.user)
-  const initials = accountInitials(state.user)
   // La qualité la plus large l'emporte : un compte à la fois administrateur et organisateur
   // est annoncé comme administrateur.
   const role = state.permissions.isGlobalAdmin ? 'Administrateur' : 'Organisateur'
@@ -42,9 +41,7 @@ export function AccountBlock({ collapsed }: { collapsed: boolean }): ReactNode {
           aria-label={`${label}, ${role}. Ouvrir le menu du compte`}
           title={collapsed ? `${label} — ${role}` : undefined}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-primary to-primary-light font-heading text-[0.8125rem] font-bold text-white">
-            {initials ?? <UserRound aria-hidden="true" className="size-4" />}
-          </span>
+          <PersonAvatar person={state.user} size={36} />
           {collapsed ? null : (
             <>
               <span className="flex min-w-0 flex-1 flex-col overflow-hidden">

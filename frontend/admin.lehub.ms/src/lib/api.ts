@@ -142,6 +142,100 @@ export function uploadImage(file: File, destination: UploadDestination): Promise
   return apiFetch<UploadedImage>('/api/media/uploads', { method: 'POST', body: form })
 }
 
+/**
+ * Un compte LeHub, tel que le backoffice a le droit de le voir.
+ *
+ * Trois champs, et c'est la spécification et non un début (#157) : ni habilitations d'autrui,
+ * ni identifiant d'objet de l'identité, ni date de connexion. L'absence d'identifiant est ce
+ * qui fait de l'adresse la clé d'une personne partout ici — voir `api/src/lib/designationSchemas.ts`.
+ */
+export interface Account {
+  givenName: string
+  surname: string
+  email: string
+}
+
+export interface AccountSearchResult {
+  accounts: Account[]
+  /** Plus de comptes correspondaient qu'il n'en est rendu : le panneau invite à préciser. */
+  truncated: boolean
+}
+
+/** La longueur minimale d'une recherche, annoncée par le panneau et exigée par le serveur. */
+export const MIN_SEARCH_LENGTH = 2
+
+/** Le nombre de correspondances rendues au maximum, au-delà duquel `truncated` est vrai. */
+export const MAX_SEARCH_RESULTS = 20
+
+/**
+ * Un POST qui ne crée rien, et c'est délibéré.
+ *
+ * Le terme cherché est régulièrement une adresse email entière — #157 demande qu'une adresse
+ * saisie en entier corresponde exactement — et Application Insights enregistre l'URL complète
+ * de chaque requête, chaîne de requête comprise. Un `GET ?q=` classerait donc ces adresses dans
+ * la télémétrie à chaque frappe. Le corps, lui, n'y est pas.
+ */
+export function searchAccounts(q: string): Promise<AccountSearchResult> {
+  return apiFetch<AccountSearchResult>('/api/manage/accounts/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q }),
+  })
+}
+
+/**
+ * Les organisateurs d'une communauté.
+ *
+ * L'adresse est la clé d'une personne, et le retrait la porte dans un corps plutôt que dans le
+ * chemin : Application Insights enregistre l'URL complète de chaque requête, et une adresse
+ * placée là serait journalisée à chaque appel. Voir `api/src/lib/designationSchemas.ts`.
+ */
+export function listCommunityOrganizers(communityId: string): Promise<Account[]> {
+  return apiFetch<Account[]>(`/api/manage/communities/${communityId}/organizers`)
+}
+
+export function designateOrganizer(communityId: string, email: string): Promise<Account> {
+  return apiFetch<Account>(`/api/manage/communities/${communityId}/organizers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function removeOrganizer(communityId: string, email: string): Promise<void> {
+  return apiFetch<void>(`/api/manage/communities/${communityId}/organizers`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+/**
+ * Les administrateurs globaux.
+ *
+ * Même forme que les organisateurs, sans communauté : le marqueur n'a pas de périmètre. Le
+ * retrait peut être refusé — `LAST_GLOBAL_ADMIN` — et c'est la modale qui restitue le refus.
+ */
+export function listAdministrators(): Promise<Account[]> {
+  return apiFetch<Account[]>('/api/manage/administrators')
+}
+
+export function designateAdministrator(email: string): Promise<Account> {
+  return apiFetch<Account>('/api/manage/administrators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function removeAdministrator(email: string): Promise<void> {
+  return apiFetch<void>('/api/manage/administrators', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
 export function deleteCommunity(id: string): Promise<void> {
   return apiFetch<void>(`/api/manage/communities/${id}`, { method: 'DELETE' })
 }
