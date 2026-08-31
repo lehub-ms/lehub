@@ -176,7 +176,7 @@ password the shared volume was never initialised with.
 | File | Rendered how | Holds |
 |---|---|---|
 | `.env` | rewritten every run | this workspace's slot, slug and database, plus the shared SA password |
-| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD`, `MEDIA_BASE_URL`, `ENTRA_*` and `Host.CORS` are managed |
+| `api/local.settings.json` | managed keys rewritten every run, the rest kept | Functions settings; `SQL_DATABASE`, `SQL_PASSWORD`, `MEDIA_BASE_URL`, `MEDIA_STORAGE_AUTH_MODE`, `ENTRA_*` and `Host.CORS` are managed |
 | `frontend/*/.env.local` | rewritten every run | `VITE_API_BASE_URL`, `VITE_DEV_PORT`, `VITE_DEV_HOST`, `VITE_ENTRA_*` |
 | `frontend/*/.env.test` | committed fixture, never rendered | the API origin the tests assert; depends on no server |
 
@@ -233,6 +233,18 @@ bootstrap then creates the `media` container with anonymous blob-level read — 
 `db/seed/media`, which the seed files reference. Logos and banners are therefore real from
 the first page load, fetched cross-origin from the emulator's port `10000` exactly as they
 are fetched from the storage account in Azure.
+
+Writing to the container is the other direction, and it goes through the API: `POST
+/api/media/uploads` is the only path by which a logo or a banner reaches it, and the container
+accepts no other. In the cloud that write is authenticated by the user-assigned managed
+identity, which already holds *Storage Blob Data Contributor* on the media account, and no key
+or shared-access signature exists to fall back on — `allowSharedKeyAccess` is false there.
+Azurite speaks plain HTTP and accepts no Entra token, so the local loop takes the other branch:
+`MEDIA_STORAGE_AUTH_MODE=emulator` makes the API use the same `UseDevelopmentStorage=true`
+connection string `scripts/lib/blob-seed.mjs` already uses. It is a managed key of
+`api/local.settings.json`, rewritten on every `dev-start.sh`, so a workspace bootstrapped before
+the upload route existed picks it up without being told. The service URL and the container name
+are derived from `MEDIA_BASE_URL` rather than declared again.
 
 What is uploaded comes in two tiers, and the top-level folder decides which. The technology
 icons under `technologies/` are **reference media**: `db/seed/reference.sql` points at them

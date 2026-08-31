@@ -8,6 +8,7 @@
 //   Values.SQL_DATABASE   the workspace's own database on the shared SQL instance
 //   Values.SQL_PASSWORD   the shared instance password, from the Git common directory
 //   Values.MEDIA_BASE_URL absolute base of the media container, on the host in use
+//   Values.MEDIA_STORAGE_AUTH_MODE  always "emulator" locally: Azurite accepts no Entra token
 //   Values.ENTRA_*        the dev identity tenant the local loop borrows
 //   Host.CORS             the front-end origins of this workspace's slot
 //
@@ -53,6 +54,10 @@ const managedValues = {
   // Follows the host the applications are served on: an image served from the loopback is
   // unreachable from a phone, so the page would render with every visual missing.
   MEDIA_BASE_URL: required('LEHUB_MEDIA_BASE_URL'),
+  // Constant rather than derived, and managed rather than left to the template: a workspace
+  // bootstrapped before the upload route existed would otherwise never receive the key, and the
+  // symptom would be a 500 on an upload with a healthy-looking configuration everywhere else.
+  MEDIA_STORAGE_AUTH_MODE: 'emulator',
   // The dev tenant, borrowed locally. Managed like the rest so a workspace can never keep a
   // client ID the registration no longer serves. None of them is a credential — the API
   // validates tokens against them, it never presents them.

@@ -1,4 +1,5 @@
 import { type SessionPermissions } from './permissionsRepo'
+import { type UploadDestination } from './uploadSchemas'
 
 /**
  * The write matrix of LeHub, as pure predicates.
@@ -125,4 +126,23 @@ export function canDesignateOrganizer(permissions: SessionPermissions, community
  */
 export function canManageGlobalAdmins(permissions: SessionPermissions): boolean {
   return permissions.isGlobalAdmin
+}
+
+/**
+ * Uploading an image to a given destination.
+ *
+ * The destination decides, not the route: a community logo and an event banner travel through
+ * the same endpoint and are not the same permission. Writing it as a table rather than as an
+ * `if` in the handler is what lets #149 add `event-banner` — answered by `canWriteEvent` over
+ * the event's communities — without touching the refusal itself.
+ */
+export function canUploadTo(
+  permissions: SessionPermissions,
+  destination: UploadDestination,
+): boolean {
+  switch (destination) {
+    case 'community-logo':
+    case 'technology-logo':
+      return canWriteReferenceData(permissions)
+  }
 }

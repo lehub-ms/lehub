@@ -144,6 +144,15 @@ resource appSettings 'Microsoft.Web/sites/config@2024-04-01' = {
     // both front-ends anyway.
     MEDIA_BASE_URL: mediaBaseUrl
 
+    // The upload route writes to that same container through the user-assigned identity, which
+    // already holds Storage Blob Data Contributor on the media account (roleAssignments.bicep).
+    // No key and no SAS exists to fall back on: allowSharedKeyAccess is false there.
+    // The service URL and the container name are derived from MEDIA_BASE_URL rather than
+    // declared again — a second setting saying the same thing is a second setting that can
+    // disagree with the first.
+    MEDIA_STORAGE_AUTH_MODE: 'mi'
+    MEDIA_MI_CLIENT_ID: managedIdentityClientId
+
     // Safe in the clear: the component refuses local authentication, so the connection
     // string alone cannot publish anything. The authentication string is what actually
     // lets the host ingest, and it names an identity rather than carrying a key.

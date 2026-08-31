@@ -11,6 +11,7 @@
     "SQL_PASSWORD": "<replace-with-MSSQL_SA_PASSWORD-from-.env>",
 
     "MEDIA_BASE_URL": "http://127.0.0.1:10000/devstoreaccount1/media",
+    "MEDIA_STORAGE_AUTH_MODE": "emulator",
 
     "ENTRA_TENANT_ID": "<rendered from infra/main.dev.bicepparam>",
     "ENTRA_CLIENT_ID": "<rendered from infra/main.dev.bicepparam>",
