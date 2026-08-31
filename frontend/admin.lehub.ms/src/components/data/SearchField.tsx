@@ -41,7 +41,18 @@ export function SearchField({ label, placeholder, value, onChange }: SearchField
         onChange={(event) => {
           onChange(event.target.value)
         }}
-        className={cn(INPUT_BASE, 'pl-10', value && 'pr-10')}
+        className={cn(
+          INPUT_BASE,
+          'pl-10',
+          value && 'pr-10',
+          // WebKit dessine sa propre croix d'effacement sur un `type="search"`, et elle
+          // apparaît au survol : deux croix côte à côte, dont une seule rend le focus au champ.
+          // On garde `type="search"` — c'est lui qui annonce le rôle `searchbox` et qui donne
+          // l'effacement par Échap — et on retire la native, dont on ne contrôle ni la place ni
+          // le comportement. La maquette évitait le problème avec un `type="text"`, au prix du
+          // rôle.
+          '[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none',
+        )}
       />
       {value ? (
         <button
