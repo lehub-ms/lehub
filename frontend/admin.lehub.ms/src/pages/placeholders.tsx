@@ -52,10 +52,6 @@ export function EventsPage(): ReactNode {
   return <ScopedPlaceholder title="Évènements" issue="la Feature #143" />
 }
 
-export function OrganizersPage(): ReactNode {
-  return <ScopedPlaceholder title="Organisateurs" issue="la Feature #156" />
-}
-
 export function AdministratorsPage(): ReactNode {
   return <Placeholder title="Administrateurs" issue="la Feature #156" />
 }

@@ -183,6 +183,33 @@ export function searchAccounts(q: string): Promise<AccountSearchResult> {
   })
 }
 
+/**
+ * Les organisateurs d'une communauté.
+ *
+ * L'adresse est la clé d'une personne, et le retrait la porte dans un corps plutôt que dans le
+ * chemin : Application Insights enregistre l'URL complète de chaque requête, et une adresse
+ * placée là serait journalisée à chaque appel. Voir `api/src/lib/designationSchemas.ts`.
+ */
+export function listCommunityOrganizers(communityId: string): Promise<Account[]> {
+  return apiFetch<Account[]>(`/api/manage/communities/${communityId}/organizers`)
+}
+
+export function designateOrganizer(communityId: string, email: string): Promise<Account> {
+  return apiFetch<Account>(`/api/manage/communities/${communityId}/organizers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function removeOrganizer(communityId: string, email: string): Promise<void> {
+  return apiFetch<void>(`/api/manage/communities/${communityId}/organizers`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
 export function deleteCommunity(id: string): Promise<void> {
   return apiFetch<void>(`/api/manage/communities/${id}`, { method: 'DELETE' })
 }

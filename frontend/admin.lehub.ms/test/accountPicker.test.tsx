@@ -22,7 +22,8 @@ function searchBodies(): { q: string }[] {
   }
   return fetchMock.mock.calls
     .filter(([url, init]) => url.includes(SEARCH) && init?.method === 'POST')
-    .map(([, init]) => JSON.parse(String(init?.body)) as { q: string })
+    // Le corps est toujours une chaîne JSON ici : `searchAccounts` le compose lui-même.
+    .map(([, init]) => JSON.parse(init?.body as string) as { q: string })
 }
 
 function answers(result: { accounts: Account[]; truncated?: boolean }): FetchOverrides {
