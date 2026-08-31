@@ -57,7 +57,7 @@ describe('habilitation des vues d’administration', () => {
     it(`refuse la liste des communautés à ${label}, en 403 et en le journalisant`, async () => {
       const ctx = context()
       const response = await adminCommunities(
-        request('admin/communities'),
+        request('manage/communities'),
         ctx,
         session(permissions),
       )
@@ -67,7 +67,7 @@ describe('habilitation des vues d’administration', () => {
 
       const logged = JSON.stringify(ctx.errors)
       expect(logged).toContain('Authorization refused')
-      expect(logged).toContain('read:admin-communities')
+      expect(logged).toContain('read:managed-communities')
       expect(logged).toContain(IDENTITY.objectId)
       // Le journal identifie l'appelant, il ne le décrit pas.
       expect(logged).not.toContain(IDENTITY.email)
@@ -75,7 +75,7 @@ describe('habilitation des vues d’administration', () => {
 
     it(`refuse la liste des technologies à ${label}`, async () => {
       const response = await adminTechnologies(
-        request('admin/technologies'),
+        request('manage/technologies'),
         context(),
         session(permissions),
       )
@@ -86,7 +86,7 @@ describe('habilitation des vues d’administration', () => {
 
   it('ne dit pas à un non-administrateur ce qu’il aurait vu', async () => {
     const response = await adminCommunities(
-      request('admin/communities'),
+      request('manage/communities'),
       context(),
       session(ORGANIZER),
     )
@@ -101,7 +101,7 @@ describe('habilitation des vues d’administration', () => {
     // Pas de base ici, donc l'appel échoue en aval — mais en 500 de lecture, pas en 403 : la
     // garde a bien laissé passer.
     const response = await adminCommunities(
-      request('admin/communities'),
+      request('manage/communities'),
       context(),
       session(ADMIN),
     )

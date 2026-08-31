@@ -55,14 +55,14 @@ describe('suppression d’une entrée libre', () => {
 
   it('supprime et met la table à jour', async () => {
     await openPanelFor(FREE.name, {
-      [`/api/admin/communities/${FREE.id}`]: () => noContent(),
+      [`/api/manage/communities/${FREE.id}`]: () => noContent(),
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
     fireEvent.click(within(confirmation()).getByRole('button', { name: 'Supprimer' }))
 
     await waitFor(() => {
-      expect(callsTo('DELETE', `/api/admin/communities/${FREE.id}`)).toBe(1)
+      expect(callsTo('DELETE', `/api/manage/communities/${FREE.id}`)).toBe(1)
     })
     await waitFor(() => {
       expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -108,15 +108,15 @@ describe('refus de supprimer une entrée référencée', () => {
     fireEvent.click(within(confirmation()).getByRole('button', { name: 'Archiver' }))
 
     await waitFor(() => {
-      expect(callsTo('PATCH', `/api/admin/communities/${REFERENCED.id}`)).toBe(1)
+      expect(callsTo('PATCH', `/api/manage/communities/${REFERENCED.id}`)).toBe(1)
     })
-    expect(callsTo('DELETE', `/api/admin/communities/${REFERENCED.id}`)).toBe(0)
+    expect(callsTo('DELETE', `/api/manage/communities/${REFERENCED.id}`)).toBe(0)
   })
 
   it('bascule sur place quand le refus arrive en cours de route', async () => {
     // La course de #155 : l'entrée était libre au chargement, un évènement l'a rattachée depuis.
     await openPanelFor(FREE.name, {
-      [`/api/admin/communities/${FREE.id}`]: () =>
+      [`/api/manage/communities/${FREE.id}`]: () =>
         jsonResponse({ code: 'REFERENCE_IN_USE', message: 'nope', eventCount: 2 }, 409),
     })
 
@@ -154,7 +154,7 @@ describe('réactivation', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(callsTo('PATCH', `/api/admin/communities/${ARCHIVED.id}`)).toBe(1)
+      expect(callsTo('PATCH', `/api/manage/communities/${ARCHIVED.id}`)).toBe(1)
     })
   })
 })

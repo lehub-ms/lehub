@@ -51,10 +51,10 @@ export function stubSignedIn(
       }
       // Avant `/api/communities`, qui ne les attraperait pas — les chemins diffèrent — mais
       // dont la proximité invite à s'y tromper en ajoutant une branche.
-      if (url.includes('/api/admin/communities')) {
+      if (url.includes('/api/manage/communities')) {
         return Promise.resolve(jsonResponse(ADMIN_COMMUNITIES))
       }
-      if (url.includes('/api/admin/technologies')) {
+      if (url.includes('/api/manage/technologies')) {
         return Promise.resolve(jsonResponse(ADMIN_TECHNOLOGIES))
       }
       // La coquille lit la liste des communautés dès qu'elle se monte : sans elle, chaque

@@ -54,6 +54,19 @@ describe('enregistrement des fonctions', () => {
     expect(new Set(pairs).size).toBe(pairs.length)
   })
 
+  it('n’emprunte aucun préfixe réservé par l’hôte Functions', () => {
+    // `/admin` est l'API de gestion de l'hôte. Une fonction dont la route commence par là est
+    // refusée au démarrage — « The specified route conflicts with one or more built in routes »
+    // — et rien dans la compilation ni dans les tests de handler ne le voit : seul l'hôte le
+    // dit, au lancement. Le préfixe de route `api` n'y change rien, la réservation est celle de
+    // l'hôte et non celle du chemin publié.
+    for (const { route, file } of registrations()) {
+      const first = route.split('/')[0]
+      expect({ file, first }).not.toEqual({ file, first: 'admin' })
+      expect({ file, first }).not.toEqual({ file, first: 'runtime' })
+    }
+  })
+
   it('garde des chemins littéraux en minuscules, sans barre oblique initiale', () => {
     // Le préfixe /api est celui de l'hôte : une route qui commencerait par une barre oblique se
     // publierait à un chemin double. Les segments de paramètre restent en casse mixte

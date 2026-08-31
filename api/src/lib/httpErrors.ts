@@ -12,7 +12,7 @@ export function errorResponse(status: number, code: string, message: string): Ht
 }
 
 /**
- * `POST /api/admin/communities` — the route as every trace in this file spells it.
+ * `POST /api/manage/communities` — the route as every trace in this file spells it.
  *
  * Written once because it was already written twice, and the two spellings had started to
  * drift. `withAuth` keeps its own inline copy: it builds the label before it has anything to

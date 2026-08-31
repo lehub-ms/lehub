@@ -63,7 +63,7 @@ export const CREATE_COMMUNITY = z
   .meta({
     id: 'CreateCommunity',
     title: 'Création d’une communauté',
-    description: 'Le corps attendu par POST /api/admin/communities.',
+    description: 'Le corps attendu par POST /api/manage/communities.',
   })
 
 /**
@@ -91,7 +91,7 @@ export const UPDATE_COMMUNITY = z
   .meta({
     id: 'UpdateCommunity',
     title: 'Modification d’une communauté',
-    description: 'Le corps attendu par PATCH /api/admin/communities/{communityId}.',
+    description: 'Le corps attendu par PATCH /api/manage/communities/{communityId}.',
   })
 
 /**
@@ -107,7 +107,7 @@ export const CREATE_TECHNOLOGY = z
   .meta({
     id: 'CreateTechnology',
     title: 'Création d’une technologie',
-    description: 'Le corps attendu par POST /api/admin/technologies.',
+    description: 'Le corps attendu par POST /api/manage/technologies.',
   })
 
 export const UPDATE_TECHNOLOGY = z
@@ -122,7 +122,7 @@ export const UPDATE_TECHNOLOGY = z
   .meta({
     id: 'UpdateTechnology',
     title: 'Modification d’une technologie',
-    description: 'Le corps attendu par PATCH /api/admin/technologies/{technologyId}.',
+    description: 'Le corps attendu par PATCH /api/manage/technologies/{technologyId}.',
   })
 
 /**

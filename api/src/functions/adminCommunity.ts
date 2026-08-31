@@ -102,6 +102,11 @@ async function remove(id: string, context: InvocationContext): Promise<HttpRespo
 app.http('adminCommunity', {
   methods: ['PATCH', 'DELETE'],
   authLevel: 'anonymous',
-  route: 'admin/communities/{communityId}',
+  // `manage/` and not `admin/`: the Functions host reserves `/admin` for its own management
+  // API, and refuses to start any function whose route begins with it — "The specified route
+  // conflicts with one or more built in routes". The reservation is the host's, not the route
+  // prefix's, so `api/admin/...` is refused just the same. The file and function names keep
+  // saying `admin`, because they describe who the route is for; only the URL had to move.
+  route: 'manage/communities/{communityId}',
   handler: withAuthorization(adminCommunity),
 })

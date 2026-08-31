@@ -136,7 +136,7 @@ describe('changement de slug', () => {
 
   it('nomme la communauté qui porte déjà le slug quand le serveur refuse', async () => {
     await openPanel({
-      [`/api/admin/communities/${ADMIN_FIRST.id}`]: () =>
+      [`/api/manage/communities/${ADMIN_FIRST.id}`]: () =>
         jsonResponse(
           { code: 'COMMUNITY_SLUG_TAKEN', message: 'taken', holder: 'DevCom Lyon' },
           409,

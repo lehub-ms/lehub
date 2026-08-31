@@ -61,11 +61,11 @@ export interface AdminCommunity extends ReferenceEntryBase {
 export type AdminTechnology = ReferenceEntryBase
 
 export function listAdminCommunities(): Promise<AdminCommunity[]> {
-  return apiFetch<AdminCommunity[]>('/api/admin/communities')
+  return apiFetch<AdminCommunity[]>('/api/manage/communities')
 }
 
 export function listAdminTechnologies(): Promise<AdminTechnology[]> {
-  return apiFetch<AdminTechnology[]>('/api/admin/technologies')
+  return apiFetch<AdminTechnology[]>('/api/manage/technologies')
 }
 
 /** Le corps accepté à la création. Le serveur fait foi — voir `api/src/lib/referenceSchemas.ts`. */
@@ -81,7 +81,7 @@ export interface CommunityInput {
 export type TechnologyInput = Omit<CommunityInput, 'description'>
 
 export function createCommunity(input: CommunityInput): Promise<AdminCommunity> {
-  return apiFetch<AdminCommunity>('/api/admin/communities', {
+  return apiFetch<AdminCommunity>('/api/manage/communities', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -93,7 +93,7 @@ export function updateCommunity(
   id: string,
   patch: Partial<CommunityInput>,
 ): Promise<AdminCommunity> {
-  return apiFetch<AdminCommunity>(`/api/admin/communities/${id}`, {
+  return apiFetch<AdminCommunity>(`/api/manage/communities/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -101,7 +101,7 @@ export function updateCommunity(
 }
 
 export function createTechnology(input: TechnologyInput): Promise<AdminTechnology> {
-  return apiFetch<AdminTechnology>('/api/admin/technologies', {
+  return apiFetch<AdminTechnology>('/api/manage/technologies', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -112,7 +112,7 @@ export function updateTechnology(
   id: string,
   patch: Partial<TechnologyInput>,
 ): Promise<AdminTechnology> {
-  return apiFetch<AdminTechnology>(`/api/admin/technologies/${id}`, {
+  return apiFetch<AdminTechnology>(`/api/manage/technologies/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -143,9 +143,9 @@ export function uploadImage(file: File, destination: UploadDestination): Promise
 }
 
 export function deleteCommunity(id: string): Promise<void> {
-  return apiFetch<void>(`/api/admin/communities/${id}`, { method: 'DELETE' })
+  return apiFetch<void>(`/api/manage/communities/${id}`, { method: 'DELETE' })
 }
 
 export function deleteTechnology(id: string): Promise<void> {
-  return apiFetch<void>(`/api/admin/technologies/${id}`, { method: 'DELETE' })
+  return apiFetch<void>(`/api/manage/technologies/${id}`, { method: 'DELETE' })
 }

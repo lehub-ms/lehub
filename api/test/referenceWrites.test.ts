@@ -67,8 +67,8 @@ function code(response: { jsonBody?: unknown }): string {
  */
 describe('habilitation des écritures', () => {
   const cases = [
-    ['POST', 'admin/communities', adminCommunities, 'create:community'],
-    ['POST', 'admin/technologies', adminTechnologies, 'create:technology'],
+    ['POST', 'manage/communities', adminCommunities, 'create:community'],
+    ['POST', 'manage/technologies', adminTechnologies, 'create:technology'],
   ] as const
 
   for (const [method, path, handler, action] of cases) {
@@ -90,7 +90,7 @@ describe('habilitation des écritures', () => {
     // charge utile était fausse » de « je n'ai pas le droit », ce qui est un canal
     // d'énumération. Le corps ci-dessous est volontairement invalide.
     const response = await adminCommunity(
-      write('PATCH', `admin/communities/${ID}`, { nope: true }, { communityId: ID }),
+      write('PATCH', `manage/communities/${ID}`, { nope: true }, { communityId: ID }),
       context(),
       session(ORGANIZER),
     )
@@ -102,7 +102,7 @@ describe('habilitation des écritures', () => {
 describe('validation des écritures', () => {
   it('refuse un corps sans nom à la création', async () => {
     const response = await adminCommunities(
-      write('POST', 'admin/communities', { description: 'sans nom' }),
+      write('POST', 'manage/communities', { description: 'sans nom' }),
       context(),
       session(ADMIN),
     )
@@ -113,7 +113,7 @@ describe('validation des écritures', () => {
 
   it('refuse une description plus longue que la colonne, plutôt que de la tronquer', async () => {
     const response = await adminCommunities(
-      write('POST', 'admin/communities', { name: 'A', description: 'd'.repeat(301) }),
+      write('POST', 'manage/communities', { name: 'A', description: 'd'.repeat(301) }),
       context(),
       session(ADMIN),
     )
@@ -123,7 +123,7 @@ describe('validation des écritures', () => {
 
   it('refuse une modification vide', async () => {
     const response = await adminCommunity(
-      write('PATCH', `admin/communities/${ID}`, {}, { communityId: ID }),
+      write('PATCH', `manage/communities/${ID}`, {}, { communityId: ID }),
       context(),
       session(ADMIN),
     )
@@ -133,7 +133,7 @@ describe('validation des écritures', () => {
 
   it('refuse une description sur une technologie, qui n’en porte pas', async () => {
     const response = await adminTechnologies(
-      write('POST', 'admin/technologies', { name: 'Azure', description: 'x' }),
+      write('POST', 'manage/technologies', { name: 'Azure', description: 'x' }),
       context(),
       session(ADMIN),
     )
@@ -143,7 +143,7 @@ describe('validation des écritures', () => {
 
   it('refuse un identifiant de chemin malformé avant toute requête', async () => {
     const response = await adminTechnology(
-      write('PATCH', 'admin/technologies/pas-un-guid', { name: 'A' }, {
+      write('PATCH', 'manage/technologies/pas-un-guid', { name: 'A' }, {
         technologyId: 'pas-un-guid',
       }),
       context(),
@@ -206,7 +206,7 @@ describe('suppression', () => {
     const response = await adminCommunity(
       new HttpRequest({
         method: 'DELETE',
-        url: `https://api.example.com/api/admin/communities/${ID}`,
+        url: `https://api.example.com/api/manage/communities/${ID}`,
         params: { communityId: ID },
       }),
       ctx,

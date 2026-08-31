@@ -11,7 +11,7 @@ const SCHEMA = z.strictObject({
 function request(body: unknown, params: Record<string, string> = {}): HttpRequest {
   return new HttpRequest({
     method: 'POST',
-    url: 'https://api.example.com/api/admin/communities',
+    url: 'https://api.example.com/api/manage/communities',
     params,
     body: { string: typeof body === 'string' ? body : JSON.stringify(body) },
     headers: { 'content-type': 'application/json' },

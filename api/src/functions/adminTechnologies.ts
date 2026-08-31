@@ -26,7 +26,7 @@ export async function adminTechnologies(
   if (!canWriteReferenceData(session.permissions)) {
     return forbidden(context, {
       route: routeLabel(request),
-      action: request.method === 'POST' ? 'create:technology' : 'read:admin-technologies',
+      action: request.method === 'POST' ? 'create:technology' : 'read:managed-technologies',
       objectId: session.identity.objectId,
     })
   }
@@ -77,6 +77,11 @@ async function create(
 app.http('adminTechnologies', {
   methods: ['GET', 'POST'],
   authLevel: 'anonymous',
-  route: 'admin/technologies',
+  // `manage/` and not `admin/`: the Functions host reserves `/admin` for its own management
+  // API, and refuses to start any function whose route begins with it — "The specified route
+  // conflicts with one or more built in routes". The reservation is the host's, not the route
+  // prefix's, so `api/admin/...` is refused just the same. The file and function names keep
+  // saying `admin`, because they describe who the route is for; only the URL had to move.
+  route: 'manage/technologies',
   handler: withAuthorization(adminTechnologies),
 })

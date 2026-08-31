@@ -139,7 +139,7 @@ describe('référentiel des communautés', () => {
   })
 
   it('invite à créer la première entrée quand le référentiel est vide', async () => {
-    stubSignedIn(GLOBAL_ADMIN, { '/api/admin/communities': () => jsonResponse([]) })
+    stubSignedIn(GLOBAL_ADMIN, { '/api/manage/communities': () => jsonResponse([]) })
     renderAt(PATHS.communities)
 
     expect(await screen.findByText('Aucune communauté référencée')).not.toBeNull()
@@ -148,7 +148,7 @@ describe('référentiel des communautés', () => {
 
   it('propose de réessayer quand la liste n’a pas pu être chargée', async () => {
     stubSignedIn(GLOBAL_ADMIN, {
-      '/api/admin/communities': (attempt) =>
+      '/api/manage/communities': (attempt) =>
         attempt === 1 ? jsonResponse({ code: 'BOOM' }, 500) : jsonResponse(ADMIN_COMMUNITIES),
     })
     renderAt(PATHS.communities)

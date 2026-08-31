@@ -54,7 +54,7 @@ describe('panneau de création', () => {
 
   it('crée une entrée active par défaut, et n’envoie que ce qui a été saisi', async () => {
     await enter(PATHS.communities, {
-      '/api/admin/communities': (attempt) =>
+      '/api/manage/communities': (attempt) =>
         attempt === 1 ? jsonResponse(ADMIN_COMMUNITIES) : jsonResponse(ADMIN_COMMUNITIES[1]!, 201),
     })
 
@@ -65,9 +65,9 @@ describe('panneau de création', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(bodiesFor('POST', '/api/admin/communities')).toHaveLength(1)
+      expect(bodiesFor('POST', '/api/manage/communities')).toHaveLength(1)
     })
-    expect(bodiesFor('POST', '/api/admin/communities')[0]).toEqual({
+    expect(bodiesFor('POST', '/api/manage/communities')[0]).toEqual({
       // Rogné avant l'envoi : trois espaces ne sont pas un nom.
       name: 'Cloud Native Nantes',
       description: null,
@@ -79,7 +79,7 @@ describe('panneau de création', () => {
   it('referme le panneau et remet la table à jour, sans recharger l’écran', async () => {
     let listed = 0
     await enter(PATHS.communities, {
-      '/api/admin/communities': () => {
+      '/api/manage/communities': () => {
         listed += 1
         return jsonResponse(ADMIN_COMMUNITIES)
       },
@@ -107,12 +107,12 @@ describe('panneau de création', () => {
     const name = within(panel()).getByLabelText(/Nom/)
     expect(name.getAttribute('aria-invalid')).toBe('true')
     expect(document.activeElement).toBe(name)
-    expect(bodiesFor('POST', '/api/admin/communities')).toHaveLength(0)
+    expect(bodiesFor('POST', '/api/manage/communities')).toHaveLength(0)
   })
 
   it('annonce le doublon de nom sur le champ, avec un message explicite', async () => {
     await enter(PATHS.communities, {
-      '/api/admin/communities': (attempt) =>
+      '/api/manage/communities': (attempt) =>
         attempt === 1
           ? jsonResponse(ADMIN_COMMUNITIES)
           : jsonResponse({ code: 'COMMUNITY_NAME_TAKEN', message: 'taken' }, 409),
@@ -141,7 +141,7 @@ describe('panneau de création', () => {
 
     expect(within(panel()).getByText(/dépasse 300 caractères/)).not.toBeNull()
     // Jamais tronquée en silence : rien n'est parti.
-    expect(bodiesFor('POST', '/api/admin/communities')).toHaveLength(0)
+    expect(bodiesFor('POST', '/api/manage/communities')).toHaveLength(0)
   })
 })
 
@@ -163,9 +163,9 @@ describe('panneau de modification', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(bodiesFor('PATCH', `/api/admin/communities/${FIRST.id}`)).toHaveLength(1)
+      expect(bodiesFor('PATCH', `/api/manage/communities/${FIRST.id}`)).toHaveLength(1)
     })
-    expect(bodiesFor('PATCH', `/api/admin/communities/${FIRST.id}`)[0]).toMatchObject({
+    expect(bodiesFor('PATCH', `/api/manage/communities/${FIRST.id}`)[0]).toMatchObject({
       name: 'Renommée',
     })
   })
@@ -252,9 +252,9 @@ describe('panneau des technologies', () => {
     fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => {
-      expect(bodiesFor('POST', '/api/admin/technologies')).toHaveLength(1)
+      expect(bodiesFor('POST', '/api/manage/technologies')).toHaveLength(1)
     })
-    expect(bodiesFor('POST', '/api/admin/technologies')[0]).toEqual({
+    expect(bodiesFor('POST', '/api/manage/technologies')[0]).toEqual({
       name: 'Bicep',
       logoPath: null,
       status: 'active',
