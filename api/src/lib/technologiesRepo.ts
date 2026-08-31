@@ -1,8 +1,8 @@
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import sql from 'mssql'
 import { getPool } from './sqlClient'
-import { isUniqueViolation } from './sqlErrors'
-import { type ReferenceStatus } from './communitiesRepo'
+import { isForeignKeyViolation, isUniqueViolation } from './sqlErrors'
+import { type DeleteResult, type ReferenceStatus } from './communitiesRepo'
 
 /**
  * The technology referential.
@@ -172,4 +172,57 @@ export async function updateTechnology(
   const row = rows[0]
   if (!row) return { ok: false, error: 'not-found' }
   return { ok: true, technology: mapAdminTechnology(media)(row) }
+}
+
+/** Même construction que côté communautés, dont le commentaire porte le raisonnement. */
+export const DELETE_TECHNOLOGY_QUERY = `
+DECLARE @events INT = (SELECT COUNT(*) FROM dbo.EventTechnology WHERE TechnologyId = @id);
+DECLARE @exists INT = (SELECT COUNT(*) FROM dbo.Technology WHERE Id = @id);
+
+DELETE FROM dbo.Technology
+WHERE Id = @id
+  AND NOT EXISTS (SELECT 1 FROM dbo.EventTechnology WHERE TechnologyId = @id);
+
+SELECT @events AS ReferencingEvents, @@ROWCOUNT AS DeletedRows, @exists AS Existed;
+`
+
+interface DeleteRow {
+  ReferencingEvents: number
+  DeletedRows: number
+  Existed: number
+}
+
+export async function deleteTechnology(id: string): Promise<DeleteResult> {
+  const pool = await getPool()
+
+  let row: DeleteRow | undefined
+  try {
+    const result = await pool
+      .request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query<DeleteRow>(DELETE_TECHNOLOGY_QUERY)
+    row = result.recordset[0]
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      return { ok: false, error: 'referenced', eventCount: await countReferencingEvents(id) }
+    }
+    throw error
+  }
+
+  if (!row || row.Existed === 0) return { ok: false, error: 'not-found' }
+  if (row.DeletedRows === 0) {
+    return { ok: false, error: 'referenced', eventCount: row.ReferencingEvents }
+  }
+  return { ok: true }
+}
+
+async function countReferencingEvents(id: string): Promise<number> {
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('id', sql.UniqueIdentifier, id)
+    .query<{ EventCount: number }>(
+      'SELECT COUNT(*) AS EventCount FROM dbo.EventTechnology WHERE TechnologyId = @id',
+    )
+  return result.recordset[0]?.EventCount ?? 0
 }

@@ -137,3 +137,11 @@ export function uploadImage(file: File, destination: UploadDestination): Promise
 
   return apiFetch<UploadedImage>('/api/media/uploads', { method: 'POST', body: form })
 }
+
+export function deleteCommunity(id: string): Promise<void> {
+  return apiFetch<void>(`/api/admin/communities/${id}`, { method: 'DELETE' })
+}
+
+export function deleteTechnology(id: string): Promise<void> {
+  return apiFetch<void>(`/api/admin/technologies/${id}`, { method: 'DELETE' })
+}

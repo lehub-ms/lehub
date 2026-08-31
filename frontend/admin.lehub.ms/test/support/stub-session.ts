@@ -11,6 +11,11 @@ export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
+/** Un 204 ne porte pas de corps, et `Response` refuse d'en construire un qui en aurait un. */
+export function noContent(): Response {
+  return new Response(null, { status: 204 })
+}
+
 /**
  * Une session déjà ouverte, restaurée depuis le jeton de rafraîchissement du stockage.
  *

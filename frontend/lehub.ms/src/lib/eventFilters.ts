@@ -25,6 +25,11 @@ export interface FilterOptionsData {
 function dedupeById(refs: NamedRef[]): FilterOption[] {
   const seen = new Map<string, FilterOption>()
   for (const ref of refs) {
+    // Une entrée archivée n'est plus proposée au filtrage (#155). Elle reste bel et bien sur les
+    // cartes des évènements qui la référencent : le rattachement est intact, c'est la
+    // *proposition* qui disparaît. Sans cela, une communauté qui a cessé son activité resterait
+    // offerte comme filtre aussi longtemps qu'un évènement passé la porte.
+    if (ref.archived === true) continue
     if (!seen.has(ref.id)) seen.set(ref.id, ref)
   }
   return [...seen.values()]

@@ -10,8 +10,10 @@ import {
 import { StatusTag } from '@/components/reference/StatusTag'
 import type { Column } from '@/components/data/DataTable'
 import { useReferenceList } from '@/hooks/useReferenceList'
+import { DeleteAction } from '@/components/reference/DeleteAction'
 import {
   createCommunity,
+  deleteCommunity,
   listAdminCommunities,
   updateCommunity,
   type AdminCommunity,
@@ -140,6 +142,26 @@ export function CommunitiesPage(): ReactNode {
           }}
           onSubmit={save}
           restoreFocusTo={trigger}
+          destructiveAction={
+            panel.mode === 'edit' ? (
+              <DeleteAction
+                name={panel.entry.name}
+                determiner="cette communauté"
+                eventCount={panel.entry.eventCount}
+                organizerCount={panel.entry.organizerCount}
+                onDelete={async () => {
+                  await deleteCommunity(panel.entry.id)
+                  setPanel({ mode: 'closed' })
+                  state.refetch()
+                }}
+                onArchive={async () => {
+                  await updateCommunity(panel.entry.id, { status: 'archived' })
+                  setPanel({ mode: 'closed' })
+                  state.refetch()
+                }}
+              />
+            ) : undefined
+          }
         />
       }
     />

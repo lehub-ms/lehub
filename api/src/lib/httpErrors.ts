@@ -88,6 +88,25 @@ export function listFetchError(
 }
 
 /**
+ * Refuses a deletion the database still holds a reference for, and says how many.
+ *
+ * The first error body in this API to carry a field beyond `{ code, message }`, and the reason
+ * is that the screen has a *sentence* to compose — "3 events still reference this community" —
+ * and cannot compose it from a code alone. The count travels as a number, the French wording
+ * stays the front-end's, which is the split the header of this file already draws.
+ *
+ * A 409 and not a 403: this is not a permission, and it must not be logged as an authorisation
+ * event. Not a 400 either — the request is perfectly well formed and the entry does exist.
+ */
+export function conflictWithCount(
+  code: string,
+  message: string,
+  eventCount: number,
+): HttpResponseInit {
+  return { status: 409, jsonBody: { code, message, eventCount } }
+}
+
+/**
  * One field of a refused body, as the log records it: where it was, and what was wrong with
  * it. Never *what it contained*.
  */

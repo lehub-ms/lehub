@@ -10,8 +10,10 @@ import {
 import { StatusTag } from '@/components/reference/StatusTag'
 import type { Column } from '@/components/data/DataTable'
 import { useReferenceList } from '@/hooks/useReferenceList'
+import { DeleteAction } from '@/components/reference/DeleteAction'
 import {
   createTechnology,
+  deleteTechnology,
   listAdminTechnologies,
   updateTechnology,
   type AdminTechnology,
@@ -113,6 +115,25 @@ export function TechnologiesPage(): ReactNode {
           }}
           onSubmit={save}
           restoreFocusTo={trigger}
+          destructiveAction={
+            panel.mode === 'edit' ? (
+              <DeleteAction
+                name={panel.entry.name}
+                determiner="cette technologie"
+                eventCount={panel.entry.eventCount}
+                onDelete={async () => {
+                  await deleteTechnology(panel.entry.id)
+                  setPanel({ mode: 'closed' })
+                  state.refetch()
+                }}
+                onArchive={async () => {
+                  await updateTechnology(panel.entry.id, { status: 'archived' })
+                  setPanel({ mode: 'closed' })
+                  state.refetch()
+                }}
+              />
+            ) : undefined
+          }
         />
       }
     />

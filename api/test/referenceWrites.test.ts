@@ -4,8 +4,8 @@ import { adminCommunities } from '../src/functions/adminCommunities'
 import { adminCommunity } from '../src/functions/adminCommunity'
 import { adminTechnologies } from '../src/functions/adminTechnologies'
 import { adminTechnology } from '../src/functions/adminTechnology'
-import { CREATE_COMMUNITY_QUERY } from '../src/lib/communitiesRepo'
-import { CREATE_TECHNOLOGY_QUERY } from '../src/lib/technologiesRepo'
+import { CREATE_COMMUNITY_QUERY, DELETE_COMMUNITY_QUERY } from '../src/lib/communitiesRepo'
+import { CREATE_TECHNOLOGY_QUERY, DELETE_TECHNOLOGY_QUERY } from '../src/lib/technologiesRepo'
 import { isForeignKeyViolation, isUniqueViolation } from '../src/lib/sqlErrors'
 import { type SessionPermissions } from '../src/lib/permissionsRepo'
 import { type AuthenticatedIdentity } from '../src/lib/tokenValidation'
@@ -181,5 +181,39 @@ describe('verdicts de la base', () => {
   it('reconnaît une violation de clé étrangère, et ne la confond pas avec l’unicité', () => {
     expect(isForeignKeyViolation({ number: 547 })).toBe(true)
     expect(isForeignKeyViolation({ number: 2627 })).toBe(false)
+  })
+})
+
+describe('suppression', () => {
+  it('compte, puis supprime sous condition — la course est fermée côté base', () => {
+    // Entre le comptage et le DELETE, un évènement peut être rattaché. La condition sur le
+    // DELETE ferme cette fenêtre, et l'erreur 547 la ferme une seconde fois si la contrainte
+    // tranche la première.
+    expect(DELETE_COMMUNITY_QUERY).toContain('NOT EXISTS')
+    expect(DELETE_COMMUNITY_QUERY).toContain('@@ROWCOUNT')
+    expect(DELETE_TECHNOLOGY_QUERY).toContain('NOT EXISTS')
+  })
+
+  it('distingue « introuvable » de « référencée » dans la même réponse', () => {
+    // Sans le compte d'existence, une entrée référencée et une entrée inexistante rendraient
+    // toutes deux zéro ligne supprimée, et l'API répondrait 404 sur la première.
+    expect(DELETE_COMMUNITY_QUERY).toContain('AS Existed')
+    expect(DELETE_COMMUNITY_QUERY).toContain('AS ReferencingEvents')
+  })
+
+  it('refuse la suppression à un non-administrateur, et le journalise', async () => {
+    const ctx = context()
+    const response = await adminCommunity(
+      new HttpRequest({
+        method: 'DELETE',
+        url: `https://api.example.com/api/admin/communities/${ID}`,
+        params: { communityId: ID },
+      }),
+      ctx,
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(403)
+    expect(JSON.stringify(ctx.errors)).toContain('delete:community')
   })
 })

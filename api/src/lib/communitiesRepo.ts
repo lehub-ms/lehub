@@ -1,7 +1,7 @@
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import sql from 'mssql'
 import { getPool } from './sqlClient'
-import { isUniqueViolation } from './sqlErrors'
+import { isForeignKeyViolation, isUniqueViolation } from './sqlErrors'
 
 export interface CommunitySummary {
   id: string
@@ -252,4 +252,75 @@ export async function updateCommunity(
   const row = rows[0]
   if (!row) return { ok: false, error: 'not-found' }
   return { ok: true, community: mapAdminCommunity(media)(row) }
+}
+
+export type DeleteResult =
+  | { ok: true }
+  /** Des évènements la retiennent. Le nombre est ce que l'écran a à dire. */
+  | { ok: false; error: 'referenced'; eventCount: number }
+  | { ok: false; error: 'not-found' }
+
+/**
+ * Compte d'abord, supprime ensuite — et la suppression porte sa propre condition.
+ *
+ * Le `NOT EXISTS` n'est pas une ceinture de plus : entre le comptage et le DELETE, un évènement
+ * peut être rattaché, et c'est la course que l'edge case de #155 décrit. La condition la ferme
+ * côté base ; l'erreur 547 la ferme une seconde fois si la contrainte tranche la première. Dans
+ * les deux cas le résultat est le même refus, avec un compte relu.
+ *
+ * Supprimer une communauté emporte ses désignations d'organisateur — `FK_CommunityOrganizer_
+ * Community` cascade depuis la migration 0005, et c'est voulu : une désignation sur une
+ * communauté qui n'existe plus n'accorde rien.
+ */
+export const DELETE_COMMUNITY_QUERY = `
+DECLARE @events INT = (SELECT COUNT(*) FROM dbo.EventCommunity WHERE CommunityId = @id);
+DECLARE @exists INT = (SELECT COUNT(*) FROM dbo.Community WHERE Id = @id);
+
+DELETE FROM dbo.Community
+WHERE Id = @id
+  AND NOT EXISTS (SELECT 1 FROM dbo.EventCommunity WHERE CommunityId = @id);
+
+SELECT @events AS ReferencingEvents, @@ROWCOUNT AS DeletedRows, @exists AS Existed;
+`
+
+interface DeleteRow {
+  ReferencingEvents: number
+  DeletedRows: number
+  Existed: number
+}
+
+export async function deleteCommunity(id: string): Promise<DeleteResult> {
+  const pool = await getPool()
+
+  let row: DeleteRow | undefined
+  try {
+    const result = await pool
+      .request()
+      .input('id', sql.UniqueIdentifier, id)
+      .query<DeleteRow>(DELETE_COMMUNITY_QUERY)
+    row = result.recordset[0]
+  } catch (error) {
+    if (isForeignKeyViolation(error)) {
+      return { ok: false, error: 'referenced', eventCount: await countReferencingEvents(id) }
+    }
+    throw error
+  }
+
+  if (!row || row.Existed === 0) return { ok: false, error: 'not-found' }
+  if (row.DeletedRows === 0) {
+    return { ok: false, error: 'referenced', eventCount: row.ReferencingEvents }
+  }
+  return { ok: true }
+}
+
+/** Relu après une course : le message doit nommer un nombre, pas dire « quelques-uns ». */
+async function countReferencingEvents(id: string): Promise<number> {
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('id', sql.UniqueIdentifier, id)
+    .query<{ EventCount: number }>(
+      'SELECT COUNT(*) AS EventCount FROM dbo.EventCommunity WHERE CommunityId = @id',
+    )
+  return result.recordset[0]?.EventCount ?? 0
 }
