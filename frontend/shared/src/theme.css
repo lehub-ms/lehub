@@ -43,6 +43,22 @@
   /* Raised from the mock-up's #64748b, which lands at 4.47:1 on the canvas and so
      misses AA by a hair. #63738a reads identically and clears it at 4.53:1. */
   --color-ink-muted: #63738a;
+
+  /* Le statut d'une entrée de référentiel, repris des maquettes du backoffice : le vert de
+     `.tag-active`, l'ardoise de `.seg-archived`. Deux surfaces, deux encres.
+
+     L'encre archivée est celle du sélecteur (#475569) et non celle de la pastille (#64748b) :
+     cette dernière tombe à 4.34:1 sur sa propre surface et manque le plancher AA, tandis que
+     celle-ci le passe largement à 6.92:1. Même arbitrage que `--color-ink-muted` juste au-dessus,
+     et troisième correction due au projet Claude Design. */
+  --color-status-active-surface: #ecfdf5;
+  --color-status-active-ink: #047857;
+  --color-status-archived-surface: #f1f5f9;
+  --color-status-archived-ink: #475569;
+
+  /* Les deux teintes de surface des tables du backoffice : l'en-tête et la ligne survolée. */
+  --color-surface-subtle: #fafcff;
+  --color-surface-hover: #f8fbff;
 }
 
 /* ─── Ce que les composants du socle rendent ──────────────────────────────────

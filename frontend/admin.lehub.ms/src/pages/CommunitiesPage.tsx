@@ -29,7 +29,7 @@ const COLUMNS: readonly Column<AdminCommunity, ColumnKey>[] = [
     sortable: true,
     render: (community) => (
       <div className="flex min-w-0 items-center gap-3">
-        <CommunityAvatar community={community} size={36} hidden />
+        <CommunityAvatar community={community} size={36} hidden className="rounded-[10px]" />
         <div className="min-w-0">
           <p className="truncate font-semibold text-ink">{community.name}</p>
           {/* Tronquée plutôt que repliée : une description longue ne doit pas faire grandir la

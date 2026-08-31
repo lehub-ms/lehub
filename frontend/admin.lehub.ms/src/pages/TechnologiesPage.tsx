@@ -29,7 +29,7 @@ const COLUMNS: readonly Column<AdminTechnology, ColumnKey>[] = [
     sortable: true,
     render: (technology) => (
       <div className="flex min-w-0 items-center gap-3">
-        <TechnologyAvatar technology={technology} size={36} hidden />
+        <TechnologyAvatar technology={technology} size={36} hidden className="rounded-[10px]" />
         <p className="truncate font-semibold text-ink">{technology.name}</p>
       </div>
     ),

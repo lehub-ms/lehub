@@ -222,12 +222,14 @@ function ReferenceForm({
         size={56}
         seed={entry?.id ?? name}
         hidden
+        className="rounded-[12px]"
       />
     ) : (
       <TechnologyAvatar
         technology={{ id: entry?.id ?? '', name: name || '?', logoUrl: draft.logoUrl }}
         size={56}
         hidden
+        className="rounded-[12px]"
       />
     )
 

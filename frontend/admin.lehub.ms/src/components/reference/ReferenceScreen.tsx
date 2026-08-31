@@ -182,9 +182,11 @@ export function ReferenceScreen<T, K extends string>({
                 rowActions={(entry) => (
                   <button
                     type="button"
-                    // 44px sans condition de point de rupture : une règle vaut mieux qu'une
-                    // exception, et la barre latérale applique déjà la même.
-                    className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary"
+                    // 34 px comme la maquette sur un écran pointé, 44 px sur mobile : la
+                    // maquette passe sous le plancher tactile que les non-négociables imposent,
+                    // et le point de rupture est ce qui réconcilie les deux plutôt que d'avoir à
+                    // choisir.
+                    className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary sm:size-[34px]"
                     aria-label={`Modifier ${labelOf(entry)}`}
                     onClick={(event) => {
                       onEdit(entry, event.currentTarget)

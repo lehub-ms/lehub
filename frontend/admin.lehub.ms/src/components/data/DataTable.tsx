@@ -57,7 +57,7 @@ export function DataTable<T, K extends string>({
       <table className="w-full min-w-[34rem] border-collapse text-left text-[0.9375rem]">
         <caption className="sr-only">{caption}</caption>
         <thead>
-          <tr className="border-b border-slate-200">
+          <tr>
             {columns.map((column) => {
               const sorted = sort.key === column.key
               return (
@@ -67,7 +67,10 @@ export function DataTable<T, K extends string>({
                   style={column.width ? { width: column.width } : undefined}
                   aria-sort={column.sortable ? (sorted ? sort.direction : 'none') : undefined}
                   className={cn(
-                    'py-3 font-heading text-[0.8125rem] font-semibold text-ink-muted',
+                    // Les en-têtes des maquettes : petites capitales espacées sur un fond très
+                    // légèrement teinté, qui pose la table sans la cerner.
+                    'group h-11 border-b border-primary/12 bg-surface-subtle text-[0.75rem] font-bold tracking-[0.06em] uppercase text-ink-muted',
+                    column.sortable ? 'p-0' : 'px-[18px]',
                     column.align === 'right' && 'text-right',
                   )}
                 >
@@ -78,28 +81,39 @@ export function DataTable<T, K extends string>({
                         onSortChange(column.key)
                       }}
                       className={cn(
-                        'inline-flex min-h-11 items-center gap-1 rounded-lg px-1 transition-colors hover:text-primary',
+                        'flex h-11 w-full items-center gap-1.5 px-[18px] font-[inherit] tracking-[inherit] uppercase transition-colors hover:text-primary',
+                        column.align === 'right' && 'justify-end',
                         sorted && 'text-primary',
                       )}
                     >
                       {column.header}
+                      {/* Le chevron ne s'affiche qu'au survol ou sur la colonne triée : affiché
+                          partout, il donne à chaque en-tête l'air d'être trié. Il reste dans le
+                          flux — masqué par l'opacité et non retiré — pour que la largeur de
+                          l'en-tête ne saute pas au survol. */}
                       {sorted && sort.direction === 'descending' ? (
                         <ChevronUp aria-hidden="true" className="size-3.5" />
                       ) : (
                         <ChevronDown
                           aria-hidden="true"
-                          className={cn('size-3.5', !sorted && 'opacity-40')}
+                          className={cn(
+                            'size-3.5 transition-opacity',
+                            sorted ? 'opacity-100' : 'opacity-0 group-hover:opacity-50',
+                          )}
                         />
                       )}
                     </button>
                   ) : (
-                    <span className="px-1">{column.header}</span>
+                    column.header
                   )}
                 </th>
               )
             })}
             {rowActions ? (
-              <th scope="col" className="w-24 py-3 text-right">
+              <th
+                scope="col"
+                className="h-11 w-24 border-b border-primary/12 bg-surface-subtle px-[18px] text-right"
+              >
                 <span className="sr-only">Actions</span>
               </th>
             ) : null}
@@ -107,17 +121,20 @@ export function DataTable<T, K extends string>({
         </thead>
         <tbody>
           {entries.map((entry) => (
-            <tr key={getRowId(entry)} className="border-b border-slate-100 last:border-0">
+            <tr
+              key={getRowId(entry)}
+              className="border-b border-primary/8 transition-colors last:border-0 hover:bg-surface-hover"
+            >
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={cn('py-2.5 pr-3', column.align === 'right' && 'text-right')}
+                  className={cn('px-[18px] py-3', column.align === 'right' && 'text-right')}
                 >
                   {column.render(entry)}
                 </td>
               ))}
               {rowActions ? (
-                <td className="py-2.5 text-right">
+                <td className="px-[18px] py-3 text-right">
                   <div className="inline-flex items-center justify-end gap-1">
                     {rowActions(entry)}
                   </div>
