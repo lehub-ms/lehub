@@ -87,7 +87,7 @@ function handler(stored: typeof STORED | null = STORED) {
     () => Promise.resolve(stored),
     (id, patch) => {
       written.push({ id, patch })
-      return Promise.resolve({ ok: true, event: { ...STORED, ...patch } })
+      return Promise.resolve({ ok: true, event: STORED })
     },
   )
   return { route, written }
@@ -362,7 +362,7 @@ describe('rattachement et retrait des communautés', () => {
       () => Promise.resolve(stored),
       (id, patch) => {
         written.push({ id, patch })
-        return Promise.resolve({ ok: true, event: { ...stored, ...patch } })
+        return Promise.resolve({ ok: true, event: stored })
       },
     )
     return {
