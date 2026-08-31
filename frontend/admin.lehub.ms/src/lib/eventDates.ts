@@ -149,6 +149,31 @@ export function fromLocalInput(local: string): string | null {
 }
 
 /**
+ * Un évènement est-il passé ? (#174)
+ *
+ * **Sa date de fin est révolue**, et rien d'autre : elle est toujours renseignée depuis
+ * l'amendement de #145. Un évènement commencé mais non terminé n'est donc pas passé — c'est même
+ * celui sur lequel un organisateur est le plus susceptible d'agir.
+ *
+ * La comparaison porte sur deux **instants**, pas sur deux heures murales, et c'est ce qui rend
+ * la frontière indépendante du fuseau de la machine : `Date.parse` d'un ISO avec offset et
+ * `Date.now()` désignent tous deux un point du temps. C'est une garantie plus forte que ce que
+ * #174 demande en parlant d'`Europe/Paris` — le fuseau ne décide que de l'*affichage* des dates,
+ * jamais de leur ordre.
+ *
+ * `now` est un paramètre plutôt qu'un appel interne : l'écran le fige au montage, pour qu'un
+ * évènement qui se termine pendant que la page est ouverte ne change pas de groupe tout seul —
+ * l'edge case que #174 énonce — et pour que les tests n'aient pas à manipuler l'horloge.
+ *
+ * Une date illisible n'est pas passée : mieux vaut la laisser sous les yeux, où elle se corrige,
+ * que la replier dans un groupe qu'on n'ouvre pas.
+ */
+export function isPastEvent(endDate: string, now: number): boolean {
+  const end = Date.parse(endDate)
+  return !Number.isNaN(end) && end < now
+}
+
+/**
  * L'instant d'une date ISO, en millisecondes, pour trier.
  *
  * Un nombre et non la chaîne : `referenceFilters` compare les chaînes avec `localeCompare`, dont

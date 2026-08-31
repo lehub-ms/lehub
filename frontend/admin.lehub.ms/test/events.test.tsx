@@ -36,11 +36,29 @@ function headerButton(table: HTMLElement, name: string): HTMLElement {
   return within(header).getByRole('button')
 }
 
+/**
+ * L'horloge est figée, et seulement elle.
+ *
+ * Les fixtures portent des dates de 2026 : sans cela, ces tests changeraient de sens le jour où
+ * le calendrier les dépasse — « Rétrospective Build » est passé, les deux autres sont à venir, et
+ * c'est ce qui décide du repli de #174. `toFake: ['Date']` laisse les minuteurs réels, dont
+ * `waitFor` a besoin.
+ */
+const NOW = new Date('2026-08-31T12:00:00Z')
+
+/** Le groupe des évènements passés, déplié. Replié par défaut depuis #174. */
+function expandPast(): void {
+  fireEvent.click(screen.getByRole('button', { name: /passé/ }))
+}
+
 beforeEach(() => {
   window.localStorage.clear()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(NOW)
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   window.localStorage.clear()
@@ -49,6 +67,10 @@ afterEach(() => {
 describe('liste des évènements', () => {
   it('ne montre que les évènements de la communauté sélectionnée', async () => {
     const table = await enter(ORGANIZER, AZUG_EVENTS)
+
+    // Deux à venir d'emblée ; le troisième est passé et attend derrière son groupe (#174).
+    expect(titles(table)).toHaveLength(2)
+    expandPast()
 
     const rendered = titles(table)
     expect(rendered).toHaveLength(3)
@@ -89,11 +111,13 @@ describe('liste des évènements', () => {
   it('trie par date de début croissante par défaut', async () => {
     const table = await enter(ORGANIZER, AZUG_EVENTS)
 
-    // Rétrospective (juin) < Azure Deep Dive (septembre) < Soirée commune (octobre).
+    // Azure Deep Dive (septembre) < Soirée commune (octobre) ; la Rétrospective de juin est
+    // passée, et le repli la place après le groupe plutôt que devant tout le monde.
+    expandPast()
     expect(titles(table).map((title) => title.slice(0, 12))).toEqual([
-      'Rétrospectiv',
       'Azure Deep D',
       'Soirée commu',
+      'Rétrospectiv',
     ])
   })
 
@@ -109,12 +133,13 @@ describe('liste des évènements', () => {
   })
 
   it('trie les dates dans l’ordre du temps, et non dans celui des libellés', async () => {
-    // « 11 juin 2026 » précède « 10 sept. 2026 » dans le temps mais le suit alphabétiquement :
+    // « 2 oct. 2026 » précède « 10 sept. 2026 » alphabétiquement et le suit dans le temps :
     // c'est ce que le tri sur l'horodatage, et non sur la chaîne rendue, garantit.
     const table = await enter(ORGANIZER, AZUG_EVENTS)
 
     fireEvent.click(headerButton(table, 'Fin'))
-    expect(titles(table)[0]).toContain('Rétrospective')
+    expect(titles(table)[0]).toContain('Azure Deep Dive')
+    expect(titles(table)[1]).toContain('Soirée commune')
   })
 
   it('cherche dans le titre et dans la description, et se vide d’un geste', async () => {
@@ -129,19 +154,21 @@ describe('liste des évènements', () => {
     expect(titles(table)).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Effacer la recherche' }))
-    expect(titles(screen.getByRole('table'))).toHaveLength(3)
+    // Deux : la recherche effacée, le passé se replie à nouveau.
+    expect(titles(screen.getByRole('table'))).toHaveLength(2)
   })
 
   it('annonce le nombre d’évènements affichés, accordé au nombre', async () => {
     await enter(ORGANIZER, AZUG_EVENTS)
 
+    // Les deux populations séparément : un total ne correspondrait à aucune des deux listes.
     const count = screen.getByRole('status')
-    expect(count.textContent).toBe('3 évènements')
+    expect(count.textContent).toBe('2 évènements à venir · 1 passé')
 
     fireEvent.change(screen.getByRole('searchbox', { name: /Rechercher/ }), {
       target: { value: 'deep dive' },
     })
-    expect(screen.getByRole('status').textContent).toBe('1 évènement')
+    expect(screen.getByRole('status').textContent).toBe('1 évènement à venir')
   })
 
   it('mène au formulaire depuis le titre comme depuis l’action de ligne', async () => {
@@ -167,6 +194,7 @@ describe('liste des évènements', () => {
 
     // Une seule des trois lignes porte une bannière : les deux autres n'ont donc pas d'image
     // du tout, plutôt qu'une balise pointant dans le vide.
+    expandPast()
     const images = within(table).getAllByRole('presentation', { hidden: true })
     expect(images.filter((image) => image.tagName === 'IMG')).toHaveLength(1)
   })

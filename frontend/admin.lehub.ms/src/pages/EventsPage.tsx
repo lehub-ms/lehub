@@ -11,21 +11,19 @@ import { SearchField } from '@/components/data/SearchField'
 import { DeleteEventDialog } from '@/components/events/DeleteEventDialog'
 import { EventThumb } from '@/components/events/EventThumb'
 import { useSelectedCommunity } from '@/community/useSelectedCommunity'
+import { useGroupedTable } from '@/hooks/useGroupedTable'
 import { useReferenceList } from '@/hooks/useReferenceList'
 import { listCommunityEvents, type AdminEvent } from '@/lib/api'
-import { eventDateParts, eventTimestamp } from '@/lib/eventDates'
+import { eventDateParts, eventTimestamp, isPastEvent } from '@/lib/eventDates'
 import { eventPath, newEventPath } from '@/lib/navigation'
-import {
-  nextSort,
-  searchEntries,
-  sortEntries,
-  type Comparable,
-  type SortState,
-} from '@/lib/referenceFilters'
+import type { Comparable } from '@/lib/referenceFilters'
+import { quantify } from '@/lib/words'
 
 type ColumnKey = 'title' | 'startDate' | 'endDate' | 'mode'
 
 const NOUN = { one: 'évènement', many: 'évènements' }
+/** Masculin, contrairement à « archivée » des référentiels : l'accord vient du nom. */
+const PAST_WORD = { one: 'passé', many: 'passés' }
 
 /**
  * Ce sur quoi la recherche porte : le titre et la description (#144).
@@ -85,19 +83,29 @@ export function EventsPage(): ReactNode {
      plutôt qu'un identifiant : la confirmation doit le **nommer** (#149). */
   const [pendingDelete, setPendingDelete] = useState<AdminEvent | null>(null)
 
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<SortState<ColumnKey>>({
-    key: 'startDate',
-    direction: 'ascending',
-  })
-
   const entries = state.status === 'success' ? state.entries : null
 
-  /* Recherche puis tri : trier ce qu'on s'apprête à jeter est du travail perdu. */
-  const visible = useMemo(
-    () => (entries ? sortEntries(searchEntries(entries, query, searchableOf), sort, valueOf) : []),
-    [entries, query, sort],
-  )
+  /* La frontière passé/à-venir est figée **au montage** : un évènement qui se termine pendant
+     que la page est ouverte n'a pas à changer de groupe tout seul (#174). Un initialiseur, pas
+     un appel au rendu, qui en ferait une valeur nouvelle à chaque passe. */
+  const [now] = useState(() => Date.now())
+  const isPast = useCallback((event: AdminEvent) => isPastEvent(event.endDate, now), [now])
+
+  /* Recherche, tri, partition et repli : la même mécanique que les référentiels (#173), donc le
+     même hook. Ce n'est pas « archivé » ici mais « passé », et c'est tout ce qui change. */
+  // Les paramètres de type sont explicites : sans eux, `K` s'infère à `'startDate'` seul et les
+  // trois autres colonnes cessent d'être triables aux yeux du compilateur.
+  const table = useGroupedTable<AdminEvent, ColumnKey>({
+    entries,
+    defaultSortKey: 'startDate',
+    valueOf,
+    searchableOf,
+    isGrouped: isPast,
+    preferenceScope: 'events',
+  })
+  const { query, setQuery, searching, expanded } = table
+  const upcoming = table.visible
+  const past = table.grouped
 
   const newPath = community ? newEventPath(community.slug) : null
 
@@ -198,15 +206,18 @@ export function EventsPage(): ReactNode {
                 value={query}
                 onChange={setQuery}
               />
+              {/* Séparément, comme #174 le demande : un total ne correspondrait à aucune des
+                  deux listes visibles, le passé étant derrière un repli. */}
               <ResultCount
-                activeCount={visible.length}
-                archivedCount={0}
+                activeCount={upcoming.length}
+                archivedCount={past.length}
                 noun={NOUN}
+                activeWord={{ one: 'à venir', many: 'à venir' }}
                 archivedWord={{ one: 'passé', many: 'passés' }}
               />
             </div>
 
-            {visible.length === 0 ? (
+            {upcoming.length === 0 && past.length === 0 ? (
               <EmptyState
                 icon={SearchX}
                 title={`Aucun résultat pour « ${query} »`}
@@ -222,12 +233,27 @@ export function EventsPage(): ReactNode {
               <DataTable
                 caption="Évènements de la communauté"
                 columns={columns}
-                entries={visible}
+                entries={upcoming}
                 getRowId={(event) => event.id}
-                sort={sort}
-                onSortChange={(key) => {
-                  setSort((current) => nextSort(current, key))
-                }}
+                sort={table.sort}
+                onSortChange={table.onSortChange}
+                // Tous passés, ou une recherche qui ne ramène que du passé : la place du groupe
+                // à venir porte un état vide explicite plutôt que de disparaître (#174).
+                emptyRow={
+                  searching
+                    ? 'Aucun évènement à venir ne correspond à cette recherche.'
+                    : 'Aucun évènement à venir.'
+                }
+                group={
+                  past.length > 0
+                    ? {
+                        label: quantify(past.length, NOUN, PAST_WORD),
+                        entries: past,
+                        expanded,
+                        onToggle: table.toggleGroup,
+                      }
+                    : undefined
+                }
                 rowActions={(event) => (
                   <>
                     {community ? (
