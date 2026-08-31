@@ -71,14 +71,14 @@ describe('sélecteur de communauté', () => {
   })
 
   it("fait suivre l'URL en changeant de communauté, sans changer d'écran", async () => {
-    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id}/organisateurs`)
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.slug}/organisateurs`)
     const menu = await openPicker()
 
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: SECOND.name }))
 
     // La section est conservée : on change de communauté, pas de sujet.
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/organisateurs`),
+      expect(router.state.location.pathname).toBe(`/c/${SECOND.slug}/organisateurs`),
     )
   })
 })
@@ -87,19 +87,19 @@ describe("entrée du backoffice", () => {
   it('mène aux évènements de la première communauté autorisée', async () => {
     const { router } = await enter(GLOBAL_ADMIN)
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`),
     )
   })
 
   it('retrouve la dernière communauté utilisée après un rechargement', async () => {
-    const first = await enter(GLOBAL_ADMIN, `/c/${SECOND.id}/evenements`)
+    const first = await enter(GLOBAL_ADMIN, `/c/${SECOND.slug}/evenements`)
     await waitFor(() => expect(window.localStorage.getItem('lehub.admin.communityId')).toBe(SECOND.id))
     first.unmount()
     vi.unstubAllGlobals()
 
     const { router } = await enter(GLOBAL_ADMIN)
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${SECOND.slug}/evenements`),
     )
   })
 
@@ -109,7 +109,7 @@ describe("entrée du backoffice", () => {
     // ORGANIZER n'organise que la première : la préférence n'est pas crue sur parole.
     const { router } = await enter(ORGANIZER)
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`),
     )
   })
 })
@@ -119,21 +119,21 @@ describe('communauté de l’URL', () => {
     const { router } = await enter(GLOBAL_ADMIN, '/c/00000000-dead-beef-0000-000000000000/evenements')
 
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`),
     )
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it("retombe aussi quand elle existe mais que la session ne l'organise pas", async () => {
     // Ce n'est pas la barrière : l'API refuse les écritures quoi qu'il arrive (#109).
-    const { router } = await enter(ORGANIZER, `/c/${SECOND.id}/evenements`)
+    const { router } = await enter(ORGANIZER, `/c/${SECOND.slug}/evenements`)
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`),
     )
   })
 
   it('reprend la communauté dans le titre de l’écran', async () => {
-    await enter(GLOBAL_ADMIN, `/c/${SECOND.id}/evenements`)
+    await enter(GLOBAL_ADMIN, `/c/${SECOND.slug}/evenements`)
 
     const heading = await screen.findByRole('heading', { level: 1 })
     expect(heading.textContent).toBe('Évènements')
@@ -206,7 +206,7 @@ describe('la barre reste pilotable hors de la section communauté', () => {
     const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
 
     const events = await within(nav).findByRole('link', { name: 'Évènements' })
-    expect(events.getAttribute('href')).toBe(`/c/${FIRST.id}/evenements`)
+    expect(events.getAttribute('href')).toBe(`/c/${FIRST.slug}/evenements`)
     expect(within(nav).getByRole('link', { name: 'Organisateurs' })).toBeTruthy()
   })
 
@@ -219,21 +219,21 @@ describe('la barre reste pilotable hors de la section communauté', () => {
     const nav = screen.getByRole('navigation', { name: 'Navigation principale' })
     await waitFor(() =>
       expect(within(nav).getByRole('link', { name: 'Évènements' }).getAttribute('href')).toBe(
-        `/c/${SECOND.id}/evenements`,
+        `/c/${SECOND.slug}/evenements`,
       ),
     )
     // « Ne pilote rien » vise le contenu de l'écran, pas la barre : on reste sur les technologies.
     expect(router.state.location.pathname).toBe(PATHS.technologies)
   })
 
-  it("ramène l'URL à la casse canonique de la communauté", async () => {
+  it("ramène l'URL à la casse canonique du slug", async () => {
     // SQL Server rend ses identifiants en majuscules ; un lien recopié peut porter n'importe
     // quelle casse, et tout ce qui compare des chemins s'y perdait — le marquage de l'entrée
     // courante le premier.
-    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id.toLowerCase()}/organisateurs`)
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.slug.toUpperCase()}/organisateurs`)
 
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/organisateurs`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/organisateurs`),
     )
     // Le marquage suit la redirection d'un rendu : l'attendre, plutôt que de parier sur la
     // vitesse de la machine — ce pari-là échouait sur le runner de la CI et pas en local.
@@ -264,15 +264,15 @@ describe('compte à la fois administrateur et organisateur', () => {
 
 describe('autres constats de la revue', () => {
   it('ramène à la communauté précédente par le retour arrière', async () => {
-    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.id}/evenements`)
+    const { router } = await enter(GLOBAL_ADMIN, `/c/${FIRST.slug}/evenements`)
     const menu = await openPicker()
 
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: SECOND.name }))
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${SECOND.id}/evenements`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${SECOND.slug}/evenements`))
 
     // Empilé et non remplacé : basculer pour jeter un œil doit se défaire par le retour arrière.
     await router.navigate(-1)
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`))
   })
 
   it("propose de réessayer quand la liste n'a pas pu être chargée, et le fait vraiment", async () => {
@@ -301,7 +301,7 @@ describe('autres constats de la revue', () => {
     fireEvent.click(retry)
 
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${FIRST.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${FIRST.slug}/evenements`),
     )
   })
 })

@@ -24,5 +24,5 @@ export function HomePage(): ReactNode {
   const target = remembered ?? communities.communities[0]
   if (!target) return <CommunitiesNotice kind="empty" />
 
-  return <Navigate to={communityPath(target.id, 'evenements')} replace />
+  return <Navigate to={communityPath(target.slug, 'evenements')} replace />
 }

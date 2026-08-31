@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { NamedRef } from '../../lib/api'
 import { communityColor } from '../../lib/communityPalette'
 import { cn } from '../../lib/cn'
+import { initials } from '../../lib/initials'
 
 export type EntityKind = 'community' | 'technology'
 
@@ -12,7 +13,6 @@ export type EntityKind = 'community' | 'technology'
  * class so both kinds go through the same single code path.
  */
 const TECHNOLOGY_FALLBACK = '#475569'
-
 interface EntityAvatarProps {
   entity: NamedRef
   kind: EntityKind
@@ -20,6 +20,16 @@ interface EntityAvatarProps {
   className?: string
   /** Set by callers that already name the entity (pill text, the row's `aria-label`). */
   hidden?: boolean
+  /**
+   * What the fallback colour is drawn from, when it should not be the entity's id.
+   *
+   * The edit panel previews a community *being created*, which has no id yet — the server
+   * assigns it. Without this the preview would draw one colour and the saved row another, and
+   * "what you see in the panel is what the public site will show" would be false at exactly the
+   * moment someone is looking at it. Seeding on the name keeps the preview stable while it is
+   * typed and is what the create form uses.
+   */
+  seed?: string
 }
 
 /**
@@ -30,12 +40,20 @@ interface EntityAvatarProps {
  * logo and no-logo entries aligned — and what makes the `onError` swap cost zero layout,
  * so it can never disturb `EntityRow`'s width measurement.
  */
-export function EntityAvatar({ entity, kind, size = 24, className, hidden }: EntityAvatarProps) {
+export function EntityAvatar({
+  entity,
+  kind,
+  size = 24,
+  className,
+  hidden,
+  seed,
+}: EntityAvatarProps) {
   // The media host is on the CSP's img-src, so a cross-origin logo does load. What that
   // does not guarantee is that the blob behind the stored path exists: the API composes
   // the URL without checking. Same reasoning — and same remedy — as `CommunitiesCarousel`.
   const [logoFailed, setLogoFailed] = useState(false)
   const showLogo = entity.logoUrl !== null && !logoFailed
+  const mark = initials(entity.name)
 
   return (
     <span
@@ -56,8 +74,12 @@ export function EntityAvatar({ entity, kind, size = 24, className, hidden }: Ent
         ...(showLogo
           ? {}
           : {
-              fontSize: Math.round(size * 0.4375),
-              backgroundColor: kind === 'community' ? communityColor(entity.id) : TECHNOLOGY_FALLBACK,
+              // Two glyphs need to be smaller than one to sit inside the same disc without
+              // touching its edge. Driven by what is actually rendered, so a one-word name keeps
+              // the larger, better-balanced single initial.
+              fontSize: Math.round(size * (mark.length > 1 ? 0.36 : 0.4375)),
+              backgroundColor:
+                kind === 'community' ? communityColor(seed ?? entity.id) : TECHNOLOGY_FALLBACK,
             }),
       }}
     >
@@ -79,7 +101,7 @@ export function EntityAvatar({ entity, kind, size = 24, className, hidden }: Ent
           }}
         />
       ) : (
-        entity.name.charAt(0).toUpperCase()
+        mark
       )}
     </span>
   )

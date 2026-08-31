@@ -18,13 +18,27 @@ export class ApiError extends Error {
   readonly status: number
   /** The `{ code, message }` body the API answers errors with, when it sent one. */
   readonly code: string | null
+  /**
+   * The parsed error body, when there was one.
+   *
+   * Most refusals say everything in their `code`. A few carry a value the screen has to put in a
+   * sentence — `REFERENCE_IN_USE` carries how many events hold the entry — and reading it off a
+   * typed field beats casting the error at the call site.
+   */
+  readonly body: Record<string, unknown> | null
 
   /** `status` is 0 when the request never reached the server. */
-  constructor(message: string, status: number, code: string | null = null, options?: ErrorOptions) {
+  constructor(
+    message: string,
+    status: number,
+    code: string | null = null,
+    options?: ErrorOptions & { body?: Record<string, unknown> | null },
+  ) {
     super(message, options)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.body = options?.body ?? null
   }
 }
 
@@ -46,15 +60,19 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     let code: string | null = null
+    let parsed: Record<string, unknown> | null = null
     try {
       const body: unknown = await response.json()
-      if (typeof body === 'object' && body !== null && typeof (body as { code?: unknown }).code === 'string') {
-        code = (body as { code: string }).code
+      if (typeof body === 'object' && body !== null) {
+        parsed = body as Record<string, unknown>
+        if (typeof parsed['code'] === 'string') code = parsed['code']
       }
     } catch {
       // An error without a readable body is still an error; the status carries it.
     }
-    throw new ApiError(`L'API a répondu ${response.status}.`, response.status, code)
+    throw new ApiError(`L'API a répondu ${response.status}.`, response.status, code, {
+      body: parsed,
+    })
   }
 
   if (response.status === 204) return undefined as T
@@ -136,10 +154,26 @@ export interface NamedRef {
   name: string
   /** Absolute, composed by the API from the blob path it stores. Null when there is no logo. */
   logoUrl: string | null
+  /**
+   * Archivée dans le référentiel (#155). Facultatif : `listCommunities` ne le rend pas, seuls
+   * les rattachements imbriqués dans un évènement le portent.
+   *
+   * Une entrée archivée **reste affichée** sur les évènements qui la référencent — c'est tout
+   * l'intérêt d'archiver plutôt que de supprimer. Elle cesse seulement d'être *proposée* : voir
+   * `deriveFilterOptions` du site public.
+   */
+  archived?: boolean
 }
 
 export interface CommunitySummary {
   id: string
+  /**
+   * L'adresse lisible de la communauté (#166).
+   *
+   * L'identifiant reste la clé — de la base comme du contrat d'API, qui n'accepte jamais autre
+   * chose. Le slug est une façon d'adresser un écran, pas une seconde identité.
+   */
+  slug: string
   name: string
   logoUrl: string | null
   description: string | null

@@ -1,10 +1,18 @@
 import { type SessionPermissions } from './permissionsRepo'
+import { type UploadDestination } from './uploadSchemas'
 
 /**
  * The write matrix of LeHub, as pure predicates.
  *
  * Reading is not here, and that is the first rule: events, communities and technologies are
  * readable by anyone, anonymous visitors included. Only writes are arbitrated.
+ *
+ * One nuance the backoffice added (#151): the *administration view* of a referential is
+ * arbitrated, and it is `canWriteReferenceData` that arbitrates it. It shows what the public
+ * contract deliberately withholds — archived entries, how many events hold an entry, how many
+ * organisers a community has — so it is not the reference data, it is the view of it, and the
+ * people entitled to see it are exactly the people entitled to write it. One expression, not two
+ * names for it.
  *
  * Every function takes the permissions resolved for the request (#108) and returns a
  * boolean. Nothing here touches the database, the request or the token — which is what lets
@@ -118,4 +126,23 @@ export function canDesignateOrganizer(permissions: SessionPermissions, community
  */
 export function canManageGlobalAdmins(permissions: SessionPermissions): boolean {
   return permissions.isGlobalAdmin
+}
+
+/**
+ * Uploading an image to a given destination.
+ *
+ * The destination decides, not the route: a community logo and an event banner travel through
+ * the same endpoint and are not the same permission. Writing it as a table rather than as an
+ * `if` in the handler is what lets #149 add `event-banner` — answered by `canWriteEvent` over
+ * the event's communities — without touching the refusal itself.
+ */
+export function canUploadTo(
+  permissions: SessionPermissions,
+  destination: UploadDestination,
+): boolean {
+  switch (destination) {
+    case 'community-logo':
+    case 'technology-logo':
+      return canWriteReferenceData(permissions)
+  }
 }

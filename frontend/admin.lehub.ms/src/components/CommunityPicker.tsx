@@ -19,7 +19,7 @@ import { communityPath, type CommunitySection } from '@/lib/navigation'
 export function CommunityPicker({ collapsed }: { collapsed: boolean }): ReactNode {
   const { state: communities, selectCommunity } = useCommunitiesValue()
   const shown = useActiveCommunity()
-  const { communityId } = useParams()
+  const { communitySlug } = useParams()
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
@@ -38,7 +38,7 @@ export function CommunityPicker({ collapsed }: { collapsed: boolean }): ReactNod
     // Sur un écran d'administration générale, on ne navigue pas : ces référentiels
     // n'appartiennent à aucune communauté, et la story demande que le sélecteur n'y pilote
     // pas le contenu. Il pilote la barre, ce qui n'est pas la même chose.
-    if (!communityId) return
+    if (!communitySlug) return
 
     // La section, jamais le reste du chemin : basculer de communauté en gardant
     // « /evenements/<id> » emmènerait sur l'évènement d'une autre communauté.
@@ -47,7 +47,7 @@ export function CommunityPicker({ collapsed }: { collapsed: boolean }): ReactNod
     // du backoffice, la canonisation de la casse — remplacent, elles, parce qu'elles ne sont
     // pas des gestes de l'utilisateur.
     const section = pathname.split('/')[3] as CommunitySection | undefined
-    void navigate(communityPath(next.id, section ?? 'evenements'))
+    void navigate(communityPath(next.slug, section ?? 'evenements'))
   }
 
   const face = (

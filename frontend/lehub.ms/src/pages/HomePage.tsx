@@ -1,11 +1,11 @@
 import { ArrowRight, CalendarDays, CalendarX } from 'lucide-react'
 import { CalendarCard } from '@/components/CalendarCard'
 import { CommunitiesCarousel } from '@/components/CommunitiesCarousel'
-import { EmptyState } from '@/components/EmptyState'
-import { ErrorState } from '@/components/ErrorState'
+import { EmptyState } from '@lehub/shared/components/EmptyState'
+import { ErrorState } from '@lehub/shared/components/ErrorState'
 import { EventCard } from '@/components/events/EventCard'
 import { EventCardSkeleton } from '@/components/events/EventCardSkeleton'
-import { LinkButton } from '@/components/LinkButton'
+import { LinkButton } from '@lehub/shared/components/LinkButton'
 import { useUpcomingEvents } from '@/hooks/useUpcomingEvents'
 import { PATHS } from '@/lib/navigation'
 
@@ -65,7 +65,7 @@ export function HomePage() {
           </div>
         )}
 
-        {upcoming.status === 'error' && <ErrorState error={upcoming.error} onRetry={upcoming.refetch} />}
+        {upcoming.status === 'error' && <ErrorState title="Impossible de charger les évènements" error={upcoming.error} onRetry={upcoming.refetch} />}
 
         {upcoming.status === 'success' &&
           (upcoming.events.length > 0 ? (

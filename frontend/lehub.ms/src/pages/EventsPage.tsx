@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CalendarX, SearchX } from 'lucide-react'
-import { EmptyState } from '@/components/EmptyState'
-import { ErrorState } from '@/components/ErrorState'
+import { EmptyState } from '@lehub/shared/components/EmptyState'
+import { ErrorState } from '@lehub/shared/components/ErrorState'
 import { EventCard } from '@/components/events/EventCard'
 import { EventCardSkeleton } from '@/components/events/EventCardSkeleton'
 import { EventFilterDrawer } from '@/components/events/EventFilterDrawer'
@@ -81,7 +81,7 @@ export function EventsPage() {
             </div>
           )}
 
-          {upcoming.status === 'error' && <ErrorState error={upcoming.error} onRetry={upcoming.refetch} />}
+          {upcoming.status === 'error' && <ErrorState title="Impossible de charger les évènements" error={upcoming.error} onRetry={upcoming.refetch} />}
 
           {upcoming.status === 'success' &&
             (events.length === 0 ? (

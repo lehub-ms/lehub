@@ -22,27 +22,27 @@ describe('EntityAvatar', () => {
     const { container } = render(<EntityAvatar entity={entity} kind="community" />)
 
     expect(logo(container)?.getAttribute('src')).toBe(LOGO)
-    expect(screen.queryByText('C')).toBeNull()
+    expect(screen.queryByText('C1')).toBeNull()
   })
 
-  it('falls back to the initial when the logo fails to load, with no broken-image glyph', () => {
+  it('falls back to the initials when the logo fails to load, with no broken-image glyph', () => {
     const entity = buildNamedRef('community', 1, LOGO)
     const { container } = render(<EntityAvatar entity={entity} kind="community" />)
 
     fireEvent.error(logo(container)!)
 
     expect(logo(container)).toBeNull()
-    expect(screen.getByText('C')).not.toBeNull()
+    expect(screen.getByText('C1')).not.toBeNull()
   })
 
-  it('renders the initial directly when no logo is declared', () => {
+  it('renders the initials directly when no logo is declared', () => {
     const { container } = render(<EntityAvatar entity={buildNamedRef('technology', 1)} kind="technology" />)
 
     expect(logo(container)).toBeNull()
-    expect(screen.getByText('T')).not.toBeNull()
+    expect(screen.getByText('T1')).not.toBeNull()
   })
 
-  it('keeps the same slot whether it shows a logo or an initial, so a mixed list stays aligned', () => {
+  it('keeps the same slot whether it shows a logo or its initials, so a mixed list stays aligned', () => {
     const { container } = render(
       <>
         <EntityAvatar entity={buildNamedRef('community', 1, LOGO)} kind="community" size={22} />

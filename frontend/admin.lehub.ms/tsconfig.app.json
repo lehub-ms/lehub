@@ -24,7 +24,18 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+
+      /* Le pendant, pour tsc, du `dedupe` de vite.config.ts. `@lehub/shared` déclare React,
+         lucide-react et react-router en peerDependencies : c'est l'application qui les fournit.
+         Mais le socle en installe ses propres copies pour se type-checker seul, et sans ces
+         chemins tsc voit deux `LucideIcon` et deux `Ref<SVGSVGElement>` sans rapport dès qu'un
+         composant partagé en expose un dans ses props. La règle est la même que pour le bundle —
+         une seule copie — écrite ici pour le compilateur. */
+      "react": ["./node_modules/@types/react", "./node_modules/react"],
+      "react-dom": ["./node_modules/@types/react-dom", "./node_modules/react-dom"],
+      "lucide-react": ["./node_modules/lucide-react"],
+      "react-router": ["./node_modules/react-router"]
     }
   },
   "include": ["src", "test"]

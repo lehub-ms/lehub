@@ -28,7 +28,14 @@ export default defineConfig(({ mode }) => {
       // installent un second React. `dedupe` force ces spécificateurs à se résoudre depuis
       // la racine de ce projet — c'est la garantie d'un seul React dans le bundle, et elle
       // survient maintenant que le socle est un paquet, pas malgré.
-      dedupe: ['react', 'react-dom', 'clsx', 'tailwind-merge', 'lucide-react'],
+      dedupe: [
+        'react',
+        'react-dom',
+        'clsx',
+        'tailwind-merge',
+        'lucide-react',
+        'react-router',
+      ],
     },
     server: {
       port: Number(env.VITE_DEV_PORT) || 5174,

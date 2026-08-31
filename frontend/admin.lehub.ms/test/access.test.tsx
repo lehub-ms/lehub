@@ -89,7 +89,7 @@ describe('accès au backoffice', () => {
     // L'entrée du backoffice n'est plus un écran depuis #141 : c'est une redirection vers
     // la section communauté, et un organisateur n'y atterrit que sur les siennes.
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.slug}/evenements`),
     )
     expect(await screen.findByRole('heading', { name: 'Évènements' })).toBeTruthy()
   })
@@ -101,7 +101,7 @@ describe('accès au backoffice', () => {
     // Un administrateur n'organise rien et voit pourtant toutes les communautés : il atterrit
     // sur la première, exactement comme un organisateur sur la sienne.
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.id}/evenements`),
+      expect(router.state.location.pathname).toBe(`/c/${COMMUNITIES[0]!.slug}/evenements`),
     )
   })
 
