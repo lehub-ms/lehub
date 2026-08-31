@@ -66,8 +66,14 @@ export function isValidSlug(value: string): boolean {
 /**
  * The slug of a community that has no transposable name — ideograms, symbols.
  *
- * Derived from the identifier so it is stable and unique without a lookup, and prefixed so it
- * reads as a fallback rather than as a mangled name.
+ * Prefixed so it reads as a fallback rather than as a mangled name, and derived from a
+ * hexadecimal seed so it is well formed and effectively unique without a lookup.
+ *
+ * On the *backfill* that seed is the row's own identifier, which the migration already has. On a
+ * *creation* it cannot be: `Id` is assigned by `NEWSEQUENTIALID()` inside the INSERT, so the
+ * route passes a fresh UUID instead and the two are unrelated. That is harmless — uniqueness is
+ * the index's job either way, and the route retries on a collision — but the seed is not a
+ * promise about the row.
  */
 export function fallbackSlug(id: string): string {
   return `communaute-${id.toLowerCase().replace(/-/g, '').slice(0, 8)}`

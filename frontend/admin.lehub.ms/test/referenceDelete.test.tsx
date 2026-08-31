@@ -128,6 +128,31 @@ describe('refus de supprimer une entrée référencée', () => {
     expect(within(confirmation()).getByText(/2 évènements/)).not.toBeNull()
   })
 
+  it('montre l’échec au lieu de le taire', async () => {
+    // Avalé, un 500 laissait la modale strictement inchangée : on recliquait indéfiniment en
+    // croyant l'entrée supprimée.
+    await openPanelFor(FREE.name, {
+      [`/api/manage/communities/${FREE.id}`]: () => jsonResponse({ code: 'BOOM' }, 500),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    fireEvent.click(within(confirmation()).getByRole('button', { name: 'Supprimer' }))
+
+    expect(await within(confirmation()).findByRole('alert')).not.toBeNull()
+    expect(screen.getByRole('alertdialog')).not.toBeNull()
+  })
+
+  it('nomme la perte d’habilitation pour ce qu’elle est', async () => {
+    await openPanelFor(FREE.name, {
+      [`/api/manage/communities/${FREE.id}`]: () => jsonResponse({ code: 'FORBIDDEN' }, 403),
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))
+    fireEvent.click(within(confirmation()).getByRole('button', { name: 'Supprimer' }))
+
+    expect(await within(confirmation()).findByText(/plus autorisé/)).not.toBeNull()
+  })
+
   it('ne se referme pas sur un clic à côté', async () => {
     await openPanelFor(FREE.name)
     fireEvent.click(screen.getByRole('button', { name: 'Supprimer' }))

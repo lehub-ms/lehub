@@ -82,20 +82,22 @@ export function CommunitiesPage(): ReactNode {
   const trigger = useRef<HTMLElement | null>(null)
 
   async function save(draft: ReferenceDraft): Promise<void> {
+    // Énuméré plutôt que `...draft` étalé : le brouillon porte aussi `logoUrl`, qui est
+    // l'aperçu et non un champ du contrat, et que `strictObject` refuserait côté serveur.
+    // `slug` en fait partie — l'oublier ici rendait tout le formulaire de #166 inerte, sans
+    // qu'aucun test ne le voie, puisque aucun n'assertait le corps envoyé.
+    const input = {
+      name: draft.name,
+      slug: draft.slug,
+      description: draft.description,
+      logoPath: draft.logoPath,
+      status: draft.status,
+    }
+
     if (panel.mode === 'edit') {
-      await updateCommunity(panel.entry.id, {
-        name: draft.name,
-        description: draft.description,
-        logoPath: draft.logoPath,
-        status: draft.status,
-      })
+      await updateCommunity(panel.entry.id, input)
     } else {
-      await createCommunity({
-        name: draft.name,
-        description: draft.description,
-        logoPath: draft.logoPath,
-        status: draft.status,
-      })
+      await createCommunity(input)
     }
     // Relire plutôt que rapiécer la liste en mémoire : les compteurs viennent du serveur, et une
     // ligne recomposée à la main finirait par diverger de ce que la table affiche.

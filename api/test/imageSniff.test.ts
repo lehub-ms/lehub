@@ -93,6 +93,28 @@ describe('SVG', () => {
     expect(sniffImage(encoded)).toBeNull()
   })
 
+  it('refuse une référence externe même sans guillemets', () => {
+    // `href=https://…` est du balisage qu'un navigateur analyse très bien. Un motif qui exigeait
+    // les guillemets laissait passer exactement cela en prétendant l'interdire.
+    expect(sniffImage(svg('<image href=https://ailleurs.example/x.png />'))).toBeNull()
+    expect(sniffImage(svg('<image xlink:href=http://ailleurs.example/x />'))).toBeNull()
+  })
+
+  it('laisse passer les deux références légitimes, quelle que soit la citation', () => {
+    // La contrepartie du test ci-dessus : en resserrant, on a d'abord refusé « #icon », ce que le
+    // commentaire du code promettait d'accepter.
+    expect(sniffImage(svg('<use href=\'#icon\'/>'))?.kind).toBe('svg')
+    expect(sniffImage(svg('<image href=\'data:image/png;base64,AAA\'/>'))?.kind).toBe('svg')
+    expect(sniffImage(svg('<a href="">x</a>'))?.kind).toBe('svg')
+  })
+
+  it('ne casse pas sur une entité numérique hors de l’espace Unicode', () => {
+    // `String.fromCodePoint` lève au-dessus de U+10FFFF, et les chiffres viennent d'un fichier
+    // téléversé : non gardé, `&#999999999;` faisait tomber la route en 500 au lieu du 415 dû.
+    expect(() => sniffImage(new TextEncoder().encode('<svg>&#999999999;</svg>'))).not.toThrow()
+    expect(() => sniffImage(new TextEncoder().encode('<svg>&#x110000;</svg>'))).not.toThrow()
+  })
+
   it('refuse du binaire qui commence par des caractères imprimables', () => {
     const binary = new Uint8Array([...new TextEncoder().encode('<svg '), 0x00, 0xff])
     expect(sniffImage(binary)).toBeNull()

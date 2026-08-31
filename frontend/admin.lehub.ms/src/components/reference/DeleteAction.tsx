@@ -39,11 +39,13 @@ export function DeleteAction({
   const [pending, setPending] = useState(false)
   // Rechargé depuis le refus du serveur quand la course a eu lieu.
   const [referenced, setReferenced] = useState(eventCount)
+  const [error, setError] = useState<string | null>(null)
 
   const blocked = referenced > 0
 
   async function run(action: () => Promise<void>): Promise<void> {
     setPending(true)
+    setError(null)
     try {
       await action()
       setOpen(false)
@@ -53,6 +55,15 @@ export function DeleteAction({
         // nombre vient du corps du 409, pas d'une supposition.
         const count = cause.body?.['eventCount']
         setReferenced(typeof count === 'number' ? count : 1)
+      } else {
+        // Tout le reste — 500, coupure réseau, habilitation perdue en cours de session — doit se
+        // voir. Avalé, l'échec laissait la modale inchangée : on recliquait sans rien apprendre,
+        // en croyant l'entrée supprimée.
+        setError(
+          cause instanceof ApiError && cause.status === 403
+            ? 'Vous n’êtes plus autorisé à faire cela. Reconnectez-vous.'
+            : 'L’opération a échoué. Réessayez.',
+        )
       }
     } finally {
       setPending(false)
@@ -65,6 +76,7 @@ export function DeleteAction({
         type="button"
         onClick={() => {
           setReferenced(eventCount)
+          setError(null)
           setOpen(true)
         }}
         className="min-h-11 rounded-lg px-3 text-[0.9375rem] font-semibold text-[#b91c1c] transition-colors hover:bg-[#b91c1c]/8"
@@ -81,28 +93,35 @@ export function DeleteAction({
         pending={pending}
         onConfirm={() => void run(blocked ? onArchive : onDelete)}
         description={
-          blocked ? (
+          <>
+            {error ? (
+              <p role="alert" className="mb-3 font-semibold text-[#b91c1c]">
+                {error}
+              </p>
+            ) : null}
+            {blocked ? (
             <>
               <strong className="text-ink">{name}</strong> est rattachée à{' '}
               {referenced === 1 ? 'un évènement' : `${String(referenced)} évènements`}. La
               suppression définitive n’est possible que pour une entrée qu’aucun évènement ne
               référence. Vous pouvez l’archiver : elle disparaîtra des propositions sans rompre
-              les rattachements existants.
-            </>
-          ) : (
+                les rattachements existants.
+              </>
+            ) : (
             <>
               <strong className="text-ink">{name}</strong> sera définitivement retirée du
               référentiel. Cette action est irréversible.
-              {organizerCount !== undefined && organizerCount > 0 ? (
-                <>
-                  {' '}
-                  {organizerCount === 1
-                    ? 'Une désignation d’organisateur sera également supprimée.'
-                    : `${String(organizerCount)} désignations d’organisateur seront également supprimées.`}
-                </>
-              ) : null}
-            </>
-          )
+                {organizerCount !== undefined && organizerCount > 0 ? (
+                  <>
+                    {' '}
+                    {organizerCount === 1
+                      ? 'Une désignation d’organisateur sera également supprimée.'
+                      : `${String(organizerCount)} désignations d’organisateur seront également supprimées.`}
+                  </>
+                ) : null}
+              </>
+            )}
+          </>
         }
       />
     </>

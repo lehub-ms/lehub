@@ -27,6 +27,19 @@ function panel(): HTMLElement {
   return screen.getByRole('dialog')
 }
 
+/** Les corps réellement envoyés : la seule assertion qui prouve que le champ n'est pas inerte. */
+function bodiesFor(method: string, fragment: string): Record<string, unknown>[] {
+  const fetchMock = globalThis.fetch as unknown as {
+    mock: { calls: [string, RequestInit | undefined][] }
+  }
+  return fetchMock.mock.calls
+    .filter(([url, init]) => url.includes(fragment) && init?.method === method)
+    .map(([, init]) => {
+      const body = init?.body
+      return typeof body === 'string' ? (JSON.parse(body) as Record<string, unknown>) : {}
+    })
+}
+
 beforeEach(() => {
   window.localStorage.clear()
 })
@@ -97,6 +110,23 @@ describe('slug dans le panneau', () => {
     expect(within(panel()).getByText(/minuscules non accentuées/)).not.toBeNull()
   })
 
+  it('envoie le slug proposé à la création', async () => {
+    await openPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Nouvelle communauté' }))
+
+    fireEvent.change(within(panel()).getByLabelText(/Nom/), {
+      target: { value: 'Communauté Azuré de Lyon' },
+    })
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
+
+    await waitFor(() => {
+      expect(bodiesFor('POST', '/api/manage/communities')).toHaveLength(1)
+    })
+    expect(bodiesFor('POST', '/api/manage/communities')[0]).toMatchObject({
+      slug: 'communaute-azure-de-lyon',
+    })
+  })
+
   it('n’en propose pas pour une technologie, qui n’en porte pas', async () => {
     stubSignedIn(GLOBAL_ADMIN)
     renderAt(PATHS.technologies)
@@ -119,6 +149,28 @@ describe('changement de slug', () => {
     const confirmation = await screen.findByRole('alertdialog')
     expect(within(confirmation).getByText(/cesseront de fonctionner/)).not.toBeNull()
     expect(within(confirmation).getByText('/c/aug-france')).not.toBeNull()
+  })
+
+  it('envoie vraiment le nouveau slug une fois la confirmation acceptée', async () => {
+    // Le test qui manquait : la boîte de confirmation s'affichait, se fermait, et le PATCH
+    // partait sans `slug`. Assertion sur le corps, pas sur l'écran.
+    await openPanel()
+    fireEvent.click(screen.getByRole('button', { name: `Modifier ${ADMIN_FIRST.name}` }))
+
+    fireEvent.change(within(panel()).getByLabelText(/Adresse/), { target: { value: 'aug-france' } })
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Enregistrer' }))
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Changer l’adresse',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(bodiesFor('PATCH', `/api/manage/communities/${ADMIN_FIRST.id}`)).toHaveLength(1)
+    })
+    expect(bodiesFor('PATCH', `/api/manage/communities/${ADMIN_FIRST.id}`)[0]).toMatchObject({
+      slug: 'aug-france',
+    })
   })
 
   it('n’avertit pas quand le slug n’a pas bougé', async () => {

@@ -70,6 +70,8 @@ describe('panneau de création', () => {
     expect(bodiesFor('POST', '/api/manage/communities')[0]).toEqual({
       // Rogné avant l'envoi : trois espaces ne sont pas un nom.
       name: 'Cloud Native Nantes',
+      // Proposé depuis le nom, et bel et bien transmis — voir communitySlug.test.tsx.
+      slug: 'cloud-native-nantes',
       description: null,
       logoPath: null,
       status: 'active',

@@ -72,11 +72,40 @@ const SVG_REFUSALS: readonly RegExp[] = [
   /\son\w+\s*=/i, // onload=, onerror=, …
   /javascript\s*:/i,
   /@import/i,
-  // An external reference pulls bytes from somewhere we do not control every time the logo is
-  // displayed. A same-document fragment (`#id`) and an inline data image are the two legitimate
-  // uses, so they are the two allowed.
-  /\b(?:xlink:)?href\s*=\s*["'](?!#|data:image\/)/i,
 ]
+
+/**
+ * Every `href` an SVG carries, quoted or not.
+ *
+ * Extracted and checked one by one rather than refused by a clever pattern: a single regex with
+ * an optional quote backtracks — when the lookahead fails past the quote it retries without it
+ * and matches anyway, refusing the very `href="#icon"` it was meant to allow. Reading the value
+ * out and testing it says what it means.
+ */
+const HREF = /\b(?:xlink:)?href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+
+/**
+ * An external reference pulls bytes from somewhere we do not control, every time the logo is
+ * displayed. A same-document fragment and an inline data image are the two legitimate uses, so
+ * they are the two allowed — and an unquoted `href=https://…` is markup a browser parses, so it
+ * is checked like any other.
+ */
+function referencesOnlyItself(svg: string): boolean {
+  for (const match of svg.matchAll(HREF)) {
+    const value = (match[1] ?? match[2] ?? match[3] ?? '').trim()
+    if (value === '') continue
+    if (value.startsWith('#')) continue
+    if (/^data:image\//i.test(value)) continue
+    return false
+  }
+  return true
+}
+
+/** The character an entity denotes, or the entity itself when it denotes none. */
+function codePoint(value: number, literal: string): string {
+  if (!Number.isInteger(value) || value < 0 || value > 0x10ffff) return literal
+  return String.fromCodePoint(value)
+}
 
 function looksLikeSvg(bytes: Uint8Array): boolean {
   // A NUL byte means this is binary that happens to start with printable characters, not text.
@@ -91,11 +120,17 @@ function looksLikeSvg(bytes: Uint8Array): boolean {
 
   // Numeric entities are collapsed before scanning, so `&#x3c;script` cannot slip past a
   // literal `<script` test.
-  const scanned = text.replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
-    String.fromCodePoint(Number.parseInt(hex, 16)),
-  ).replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+  //
+  // The code point is checked before it is built: `String.fromCodePoint` throws a RangeError
+  // above U+10FFFF, and the digits come straight off an uploaded file. Unchecked, `&#999999999;`
+  // in any text file crashed the handler into a 500 instead of the 415 it deserves. An
+  // out-of-range entity is left as written — it is not a character, so it cannot spell one.
+  const scanned = text
+    .replace(/&#x([0-9a-f]+);/gi, (whole, hex: string) => codePoint(Number.parseInt(hex, 16), whole))
+    .replace(/&#(\d+);/g, (whole, dec: string) => codePoint(Number(dec), whole))
 
   if (SVG_REFUSALS.some((pattern) => pattern.test(scanned))) return false
+  if (!referencesOnlyItself(scanned)) return false
 
   // The first element has to be the root `<svg`: a prolog and comments may precede it, nothing
   // else may.
