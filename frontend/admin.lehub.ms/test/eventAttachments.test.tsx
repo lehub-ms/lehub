@@ -246,6 +246,18 @@ describe('règles de retrait, en isolation', () => {
     )
   }
 
+  it('reconnaît une pastille cochée quelle que soit la casse de son identifiant', async () => {
+    // Le référentiel et l'évènement sont deux lectures distinctes ; rien n'oblige leurs
+    // identifiants à s'accorder sur la casse. Comparés brutalement, la pastille s'afficherait
+    // décochée et un clic empilerait un doublon au lieu de la retirer.
+    const attached = { ...OWN, communities: [{ id: AZUG.id.toLowerCase(), name: AZUG.name, logoUrl: null, archived: false }] }
+    stubSignedIn(ORGANIZER, { '/api/manage/events/': () => jsonResponse(attached) })
+    await open(eventPath(AZUG.slug, OWN.id))
+
+    // `/api/communities` rend l'identifiant en majuscules, l'évènement en minuscules.
+    expect(pressed('Communautés', COMMUNITY_NAMES)).toEqual([AZUG.name])
+  })
+
   it('ne verrouille rien sur une communauté non cochée', () => {
     expect(
       reasons({ offered: [azug, ppf], attached: [azug], selected: [azug.id], permissions: ORGANIZER }),

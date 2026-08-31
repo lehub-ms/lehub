@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@lehub/shared/lib/cn'
 import type { NamedRef } from '@/lib/api'
+import { sameId } from '@/lib/eventAttachments'
 
 /** Une entrée proposée au rattachement, avec ce que l'écran a besoin d'en dire. */
 export interface ChipEntry extends NamedRef {
@@ -53,13 +54,13 @@ export function ChipPicker({
   emptyLabel,
   confirm = window.confirm.bind(window),
 }: ChipPickerProps): ReactNode {
-  const isSelected = (id: string): boolean => selected.some((current) => current === id)
+  const isSelected = (id: string): boolean => selected.some((current) => sameId(current, id))
 
   function toggle(entry: ChipEntry): void {
     if (isSelected(entry.id)) {
       if (entry.lockedReason) return
       if (entry.confirmRemoval && !confirm(entry.confirmRemoval)) return
-      onChange(selected.filter((id) => id !== entry.id))
+      onChange(selected.filter((id) => !sameId(id, entry.id)))
       return
     }
     onChange([...selected, entry.id])

@@ -412,6 +412,17 @@ describe('rattachement et retrait des communautés', () => {
     expect((await response).status).toBe(200)
   })
 
+  it("permet de remplacer l'unique communauté par une autre", async () => {
+    // L'échange : l'évènement passe de A à B, et il en porte toujours une au bout du compte.
+    // La règle « on ne laisse pas l'évènement orphelin » porte sur le **résultat**, pas sur ce
+    // qui restait avant ; l'évaluer sur l'ensemble stocké refusait cet échange à tort.
+    const both: SessionPermissions = { isGlobalAdmin: false, organizedCommunityIds: [MINE, THEIRS] }
+    const { response, written } = patchWith(carrying(MINE), both, [THEIRS])
+
+    expect((await response).status).toBe(200)
+    expect(written).toHaveLength(1)
+  })
+
   it("n'est déjoué ni par la casse ni par l'ordre", async () => {
     // Les identifiants arrivent d'un corps de requête : aucun client n'est tenu de rendre la
     // casse qu'on lui a donnée. Comparés brutalement, ces deux-là passeraient pour un retrait

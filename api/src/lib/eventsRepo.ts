@@ -379,6 +379,15 @@ export interface CreateEventInput {
  * into the statement. `DISTINCT` because the composite primary keys would refuse a repeated
  * pair, and a caller that sent the same community twice has made a harmless mistake, not a
  * request to refuse.
+ *
+ * `SET XACT_ABORT` is a **connection** setting, not a batch one, and these run on a pooled
+ * connection — left on, it would follow that connection into every later request that borrows
+ * it. So it is closed again after the commit. A batch that aborts never reaches that line and
+ * does leave it on; that residue is accepted rather than papered over, because `ON` is the
+ * conservative direction — it aborts a batch on error instead of carrying on — and no query in
+ * this repository depends on `OFF`. Closing it properly on both paths would mean a driver-managed
+ * transaction (`pool.transaction()`) rather than a hand-rolled one, which is a change worth
+ * making against a real database and not blind.
  */
 export const CREATE_EVENT_QUERY = `
 SET XACT_ABORT ON;
@@ -399,6 +408,7 @@ INSERT INTO dbo.EventTechnology (EventId, TechnologyId)
 SELECT DISTINCT @id, value FROM OPENJSON(@technologyIds) WITH (value UNIQUEIDENTIFIER '$');
 
 COMMIT TRANSACTION;
+SET XACT_ABORT OFF;
 ${SELECT_ADMIN_EVENT}
 `
 
@@ -586,6 +596,7 @@ ${update}
 ${replaceLinks('EventCommunity', 'CommunityId', 'communityIds')}
 ${replaceLinks('EventTechnology', 'TechnologyId', 'technologyIds')}
 COMMIT TRANSACTION;
+SET XACT_ABORT OFF;
 ${SELECT_ADMIN_EVENT}
 `
 

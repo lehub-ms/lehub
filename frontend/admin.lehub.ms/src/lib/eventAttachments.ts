@@ -27,8 +27,16 @@ export const LOCKED_LAST =
 export const CONFIRM_HANDOVER =
   'Vous retirez la dernière communauté que vous organisez sur cet évènement. Vous en perdrez l’accès. Continuer ?'
 
-/** Insensible à la casse, comme partout : ces identifiants viennent d'une réponse d'API. */
-function sameId(a: string, b: string): boolean {
+/**
+ * Insensible à la casse, comme partout : ces identifiants viennent d'une réponse d'API, et rien
+ * n'oblige les deux lectures qui les portent — le référentiel et l'évènement — à s'accorder
+ * dessus. C'est la même précaution que `sameId` côté serveur, et pour la même raison.
+ *
+ * Exporté parce que `ChipPicker` compare les mêmes identifiants : une pastille calculée ici
+ * comme rattachée et lue là-bas comme absente s'afficherait décochée, et un clic empilerait un
+ * doublon au lieu de la retirer.
+ */
+export function sameId(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase()
 }
 

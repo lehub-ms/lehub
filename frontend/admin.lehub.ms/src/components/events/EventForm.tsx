@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { Button } from '@lehub/shared/components/Button'
 import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { TechnologyAvatar } from '@lehub/shared/components/entities/TechnologyAvatar'
@@ -119,6 +119,30 @@ export function EventForm({
   const described = (key: FieldKey): string | undefined =>
     errors[key] ? errorId(field(key)) : undefined
 
+  /**
+   * Les flèches déplacent la sélection dans le groupe de format, et l'enroulent aux extrémités.
+   *
+   * Les quatre directions, parce qu'un groupe rendu en ligne se parcourt naturellement à gauche
+   * et à droite, mais qu'un lecteur d'écran en mode formulaire peut l'annoncer verticalement.
+   * Les pratiques ARIA les traitent d'ailleurs comme équivalentes dans un `radiogroup`.
+   *
+   * Le focus suit la sélection, comme le veut un radiogroup : choisir *est* se déplacer.
+   */
+  function moveWithinGroup(event: KeyboardEvent<HTMLDivElement>): void {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key]
+    if (!step) return
+
+    event.preventDefault()
+    const current = options.modes.findIndex((option) => option.id === draft.eventModeId)
+    // Rien de coché : la première flèche coche la première option plutôt que de ne rien faire.
+    const next = current === -1 ? 0 : (current + step + options.modes.length) % options.modes.length
+    const target = options.modes[next]
+    if (!target) return
+
+    set('eventModeId', target.id)
+    event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
+  }
+
   return (
     <form ref={form} noValidate onSubmit={submit} className="pb-28">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -233,14 +257,24 @@ export function EventForm({
               label={`${FORMAT_LABEL} *`}
               error={errors.eventModeId ?? null}
             >
-              {/* Un vrai `radiogroup` : trois options exclusives, atteignables au clavier et
-                  annoncées comme un choix unique. `htmlFor` pointe le groupe, dont le premier
-                  bouton porte l'identifiant — c'est lui que le focus vise. */}
+              {/* Un vrai `radiogroup`, avec ce qu'un radiogroup doit à son clavier.
+
+                  **Un seul de ses boutons est dans l'ordre de tabulation** — celui qui est
+                  coché, ou le premier tant que rien ne l'est — et les flèches déplacent la
+                  sélection à l'intérieur. C'est le « roving tabindex » que les pratiques ARIA
+                  décrivent, et c'est ce à quoi quelqu'un s'attend en atteignant un groupe de
+                  boutons radio : Tab entre dans le groupe et en ressort, les flèches choisissent.
+                  Sans lui, `role="radio"` annonce un choix unique et se manipule comme trois
+                  boutons indépendants — l'annonce serait juste et l'interaction fausse.
+
+                  `htmlFor` pointe le premier bouton, qui porte l'identifiant : c'est lui que le
+                  focus vise quand la validation désigne ce champ. */}
               <div
                 role="radiogroup"
                 aria-label={FORMAT_LABEL}
                 aria-invalid={Boolean(errors.eventModeId)}
                 aria-describedby={described('eventModeId')}
+                onKeyDown={moveWithinGroup}
                 className="flex w-full overflow-hidden rounded-[10px] border-[1.5px] border-[#e2e8f0] bg-white"
               >
                 {options.modes.map((option, index) => {
@@ -252,6 +286,9 @@ export function EventForm({
                       type="button"
                       role="radio"
                       aria-checked={selected}
+                      // Rien de coché : le premier accueille le focus, sans quoi le groupe
+                      // sortirait entièrement du parcours de tabulation.
+                      tabIndex={selected || (!draft.eventModeId && index === 0) ? 0 : -1}
                       onClick={() => {
                         set('eventModeId', option.id)
                       }}

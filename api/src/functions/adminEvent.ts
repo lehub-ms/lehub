@@ -125,16 +125,24 @@ async function erase(
  * an administrator, and #147 makes the openness explicit rather than incidental. So this
  * computes the difference and asks a question about each *departure*, never about an arrival.
  *
- * Two rules, and they are not the same rule twice. `canDetachCommunity` answers per community:
- * an organiser may only remove one they organise themselves, because removing someone else's is
- * evicting a co-organiser. The emptiness check answers about the **result**: with `[A, B]` and an
- * organiser of both, each single removal passes on its own — the other still stands in the stored
- * set — and yet removing both at once would leave an orphan event that only an administrator
- * could ever reopen. Per-item checks against the original set cannot see that, which is exactly
- * why the second check exists.
+ * `canDetachCommunity` is asked about **the set as it would be with this one still in it** —
+ * `[...submitted, id]` — never about the set as it is stored. That distinction is the whole
+ * subtlety here, and getting it wrong is a bug this route shipped once: the predicate's last
+ * clause asks "does another community remain", and answered against the *stored* set it refused
+ * a straight swap, where the only community is replaced by another one. The event carries
+ * exactly one community either way; nothing was ever about to be orphaned. Asked about the
+ * result, the same clause says what it means — and it keeps catching the removal of two
+ * communities at once, which each per-item check would wave through on its own.
+ *
+ * Its other clause still does its work: an organiser may only remove a community they organise
+ * themselves, because removing someone else's is evicting a co-organiser.
+ *
+ * The emptiness check that follows is not that clause repeated. It catches the one case the loop
+ * cannot see — a body submitting `[]` against an event that already carried no community, where
+ * nothing is removed and yet nothing remains.
  *
  * Handing the event over is deliberately still allowed: removing one's own last community while
- * another remains passes both rules. The screen warns that access goes with it.
+ * another remains passes every rule. The screen warns that access goes with it.
  */
 function refuseDetachment(
   request: HttpRequest,
@@ -156,7 +164,11 @@ function refuseDetachment(
     })
 
   for (const id of removed) {
-    if (!canDetachCommunity(session.permissions, current, id)) return refuse('detach:community')
+    // `id` n'est pas dans `submitted` — c'est la définition d'un retrait — donc la concaténation
+    // ne crée pas de doublon, et décrit exactement l'ensemble d'où on l'enlève.
+    if (!canDetachCommunity(session.permissions, [...submitted, id], id)) {
+      return refuse('detach:community')
+    }
   }
 
   if (submitted.length === 0 && !session.permissions.isGlobalAdmin) {

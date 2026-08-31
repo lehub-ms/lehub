@@ -127,6 +127,44 @@ describe('création d’un évènement', () => {
     expect(document.activeElement).toBe(screen.getAllByRole('radio')[0])
   })
 
+  it('déplace le format aux flèches, et l’enroule aux extrémités', async () => {
+    stubSignedIn(ORGANIZER)
+    await openForm()
+
+    const radios = screen.getAllByRole('radio')
+    const group = screen.getByRole('radiogroup')
+
+    // Un seul bouton dans l'ordre de tabulation tant que rien n'est coché : le premier.
+    expect(radios.map((radio) => radio.getAttribute('tabindex'))).toEqual(['0', '-1', '-1'])
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true')
+
+    fireEvent.keyDown(group, { key: 'ArrowRight' })
+    expect(radios[1]!.getAttribute('aria-checked')).toBe('true')
+    // Le focus suit la sélection : dans un radiogroup, choisir *est* se déplacer.
+    expect(document.activeElement).toBe(radios[1])
+    expect(screen.getAllByRole('radio').map((radio) => radio.getAttribute('tabindex'))).toEqual([
+      '-1',
+      '0',
+      '-1',
+    ])
+
+    // Enroulement : depuis la première, la flèche gauche va à la dernière.
+    fireEvent.keyDown(group, { key: 'ArrowLeft' })
+    fireEvent.keyDown(group, { key: 'ArrowLeft' })
+    expect(screen.getAllByRole('radio')[2]!.getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('ignore les touches qui ne déplacent rien', async () => {
+    stubSignedIn(ORGANIZER)
+    await openForm()
+
+    fireEvent.keyDown(screen.getByRole('radiogroup'), { key: 'a' })
+
+    expect(screen.getAllByRole('radio').every((radio) => radio.getAttribute('aria-checked') === 'false')).toBe(true)
+  })
+
   it('refuse une date de fin antérieure au début', async () => {
     stubSignedIn(ORGANIZER)
     await openForm()

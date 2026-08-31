@@ -225,10 +225,15 @@ export function getEvent(eventId: string): Promise<AdminEvent> {
 /**
  * Un champ absent est un champ inchangé ; `null` efface. Voir la route PATCH.
  *
- * Les rattachements n’y figurent pas : les remplacer est la seule écriture que l’API borne de
- * façon asymétrique (#147), et le champ n’existe qu’avec ses règles.
+ * Les rattachements **en font partie** depuis #147 : présents, ils remplacent l’ensemble ;
+ * absents, ils sont laissés tels quels. Ils ont un temps été exclus de ce type, alors que le
+ * formulaire les envoyait déjà — ce que le compilateur ne voyait pas, un objet passé par
+ * variable n’étant pas soumis au contrôle des propriétés excédentaires. Un type qui décrit
+ * moins que ce qui part sur le fil n’est pas une garantie, c’est un piège : le premier
+ * appelant qui aurait construit sa charge utile en littéral aurait perdu les rattachements
+ * sans une erreur nulle part.
  */
-export type EventPatch = Partial<Omit<EventInput, 'communityIds' | 'technologyIds'>>
+export type EventPatch = Partial<EventInput>
 
 export function updateEvent(eventId: string, patch: EventPatch): Promise<AdminEvent> {
   return apiFetch<AdminEvent>(`/api/manage/events/${encodeURIComponent(eventId)}`, {
