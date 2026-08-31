@@ -1,0 +1,301 @@
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
+import { CalendarDays, Pencil, Plus, SearchX, Trash2 } from 'lucide-react'
+import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
+import { EmptyState } from '@lehub/shared/components/EmptyState'
+import { ErrorState } from '@lehub/shared/components/ErrorState'
+import { LinkButton } from '@lehub/shared/components/LinkButton'
+import { DataTable, type Column } from '@/components/data/DataTable'
+import { ResultCount } from '@/components/data/ResultCount'
+import { SearchField } from '@/components/data/SearchField'
+import { DeleteEventDialog } from '@/components/events/DeleteEventDialog'
+import { EventThumb } from '@/components/events/EventThumb'
+import { useSelectedCommunity } from '@/community/useSelectedCommunity'
+import { useGroupedTable } from '@/hooks/useGroupedTable'
+import { useReferenceList } from '@/hooks/useReferenceList'
+import { listCommunityEvents, type AdminEvent } from '@/lib/api'
+import { eventDateParts, eventTimestamp, isPastEvent } from '@/lib/eventDates'
+import { eventPath, newEventPath } from '@/lib/navigation'
+import type { Comparable } from '@/lib/referenceFilters'
+import { quantify } from '@/lib/words'
+
+type ColumnKey = 'title' | 'startDate' | 'endDate' | 'mode'
+
+const NOUN = { one: 'évènement', many: 'évènements' }
+/** Masculin, contrairement à « archivée » des référentiels : l'accord vient du nom. */
+const PAST_WORD = { one: 'passé', many: 'passés' }
+
+/**
+ * Ce sur quoi la recherche porte : le titre et la description (#144).
+ *
+ * Au niveau du module, comme dans les écrans de référentiel : la fonction entre dans les
+ * dépendances d'un `useMemo`, et une lambda définie au rendu le relancerait à chaque passe.
+ */
+function searchableOf(event: AdminEvent): readonly (string | null)[] {
+  return [event.title, event.description]
+}
+
+/**
+ * La valeur triable d'une colonne.
+ *
+ * Les deux dates rendent un nombre et non leur chaîne ISO : `referenceFilters` compare les
+ * chaînes avec `localeCompare`, dont l'ordre sur des dates ne coïncide avec celui du temps que
+ * par accident de format.
+ */
+function valueOf(event: AdminEvent, key: ColumnKey): Comparable {
+  if (key === 'startDate') return eventTimestamp(event.startDate)
+  if (key === 'endDate') return eventTimestamp(event.endDate)
+  return event[key]
+}
+
+/** Une cellule de date : le jour en évidence, le jour de la semaine et l'heure en dessous. */
+function DateCell({ iso }: { iso: string }): ReactNode {
+  const parts = eventDateParts(iso)
+  if (!parts) return <span className="text-ink-muted">—</span>
+
+  return (
+    <span className="flex flex-col leading-[1.35]">
+      {/* `<time>` porte la valeur lisible par une machine ; le texte reste celui du fuseau
+          Europe/Paris, que l'attribut n'a pas à répéter. */}
+      <time dateTime={iso} className="font-heading text-[0.9375rem] font-semibold whitespace-nowrap text-ink">
+        {parts.day}
+      </time>
+      <span className="text-[0.8125rem] whitespace-nowrap text-ink-muted">{parts.detail}</span>
+    </span>
+  )
+}
+
+export function EventsPage(): ReactNode {
+  const community = useSelectedCommunity()
+  const communityId = community?.id ?? null
+
+  /* La lecture dépend de la communauté, donc `useCallback` sur elle : changer de communauté dans
+     la barre latérale change l'identité de `load`, ce que `useReferenceList` observe pour
+     recharger. « Changer de communauté recharge la liste » (#144) tombe de là, sans effet écrit
+     à la main. */
+  const load = useCallback(
+    () => (communityId ? listCommunityEvents(communityId) : Promise.resolve<AdminEvent[]>([])),
+    [communityId],
+  )
+  const state = useReferenceList(load)
+
+  /* L'évènement dont la suppression attend confirmation. Un seul à la fois, et l'objet lui-même
+     plutôt qu'un identifiant : la confirmation doit le **nommer** (#149). */
+  const [pendingDelete, setPendingDelete] = useState<AdminEvent | null>(null)
+
+  const entries = state.status === 'success' ? state.entries : null
+
+  /* La frontière passé/à-venir est figée **au montage** : un évènement qui se termine pendant
+     que la page est ouverte n'a pas à changer de groupe tout seul (#174). Un initialiseur, pas
+     un appel au rendu, qui en ferait une valeur nouvelle à chaque passe. */
+  const [now] = useState(() => Date.now())
+  const isPast = useCallback((event: AdminEvent) => isPastEvent(event.endDate, now), [now])
+
+  /* Recherche, tri, partition et repli : la même mécanique que les référentiels (#173), donc le
+     même hook. Ce n'est pas « archivé » ici mais « passé », et c'est tout ce qui change. */
+  // Les paramètres de type sont explicites : sans eux, `K` s'infère à `'startDate'` seul et les
+  // trois autres colonnes cessent d'être triables aux yeux du compilateur.
+  const table = useGroupedTable<AdminEvent, ColumnKey>({
+    entries,
+    defaultSortKey: 'startDate',
+    valueOf,
+    searchableOf,
+    isGrouped: isPast,
+    preferenceScope: 'events',
+  })
+  const { query, setQuery, searching, expanded } = table
+  const upcoming = table.visible
+  const past = table.grouped
+
+  const newPath = community ? newEventPath(community.slug) : null
+
+  const columns: readonly Column<AdminEvent, ColumnKey>[] = useMemo(
+    () => [
+      {
+        key: 'title',
+        header: 'Évènement',
+        sortable: true,
+        render: (event) => (
+          <Link
+            to={community ? eventPath(community.slug, event.id) : '.'}
+            className="flex min-w-0 items-center gap-3 text-ink hover:text-primary"
+          >
+            <EventThumb bannerImageUrl={event.bannerImageUrl} />
+            <span className="truncate font-semibold">{event.title}</span>
+          </Link>
+        ),
+      },
+      { key: 'startDate', header: 'Début', sortable: true, width: '11rem', render: (event) => <DateCell iso={event.startDate} /> },
+      { key: 'endDate', header: 'Fin', sortable: true, width: '11rem', render: (event) => <DateCell iso={event.endDate} /> },
+      {
+        key: 'mode',
+        header: 'Format',
+        sortable: true,
+        width: '9rem',
+        // `mode` et non `format` : le contrat nomme `mode` ce que l'écran appelle « Format ».
+        // Voir `AdminEvent` dans lib/api.
+        render: (event) => (
+          <span className="inline-flex items-center rounded-full bg-primary-xs px-2.5 py-1 text-[0.8125rem] font-semibold text-primary">
+            {event.mode}
+          </span>
+        ),
+      },
+    ],
+    [community],
+  )
+
+  return (
+    <>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl font-bold">Évènements</h1>
+            {community ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/12 bg-white py-[3px] pr-3 pl-1.5 font-heading text-lg font-semibold text-primary">
+                <CommunityAvatar community={community} size={24} hidden className="rounded-full" />
+                {community.name}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-[0.9375rem] text-ink-muted">
+            Créez et gérez les évènements publiés sur lehub.ms.
+          </p>
+        </div>
+        {newPath ? (
+          <LinkButton to={newPath}>
+            <Plus aria-hidden="true" className="size-[18px]" />
+            Nouvel évènement
+          </LinkButton>
+        ) : null}
+      </header>
+
+      {state.status === 'loading' ? (
+        <p role="status" className="mt-8 text-[0.9375rem] text-ink-muted">
+          Chargement…
+        </p>
+      ) : null}
+
+      {state.status === 'error' ? (
+        <div className="mt-8">
+          <ErrorState
+            title="Impossible de charger les évènements"
+            error={state.error}
+            onRetry={state.refetch}
+          />
+        </div>
+      ) : null}
+
+      {entries ? (
+        entries.length === 0 ? (
+          // Communauté sans évènement : distinct d'une recherche infructueuse, parce que ce
+          // n'est pas le même problème et que la sortie n'est pas la même (#144).
+          <div className="mt-8">
+            <EmptyState
+              icon={CalendarDays}
+              title="Aucun évènement pour cette communauté"
+              description="Créez-en un : il apparaîtra sur lehub.ms sans passer par un déploiement."
+              {...(newPath ? { action: { label: 'Nouvel évènement', to: newPath } } : {})}
+            />
+          </div>
+        ) : (
+          <section className="glass mt-8 rounded-2xl p-4 sm:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <SearchField
+                label="Rechercher un évènement…"
+                placeholder="Rechercher un évènement…"
+                value={query}
+                onChange={setQuery}
+              />
+              {/* Séparément, comme #174 le demande : un total ne correspondrait à aucune des
+                  deux listes visibles, le passé étant derrière un repli. */}
+              <ResultCount
+                activeCount={upcoming.length}
+                archivedCount={past.length}
+                noun={NOUN}
+                activeWord={{ one: 'à venir', many: 'à venir' }}
+                archivedWord={{ one: 'passé', many: 'passés' }}
+              />
+            </div>
+
+            {upcoming.length === 0 && past.length === 0 ? (
+              <EmptyState
+                icon={SearchX}
+                title={`Aucun résultat pour « ${query} »`}
+                description="Vérifiez l’orthographe, ou effacez la recherche pour retrouver la liste complète."
+                action={{
+                  label: 'Afficher tous les évènements',
+                  onClick: () => {
+                    setQuery('')
+                  },
+                }}
+              />
+            ) : (
+              <DataTable
+                caption="Évènements de la communauté"
+                columns={columns}
+                entries={upcoming}
+                getRowId={(event) => event.id}
+                sort={table.sort}
+                onSortChange={table.onSortChange}
+                // Tous passés, ou une recherche qui ne ramène que du passé : la place du groupe
+                // à venir porte un état vide explicite plutôt que de disparaître (#174).
+                emptyRow={
+                  searching
+                    ? 'Aucun évènement à venir ne correspond à cette recherche.'
+                    : 'Aucun évènement à venir.'
+                }
+                group={
+                  past.length > 0
+                    ? {
+                        label: quantify(past.length, NOUN, PAST_WORD),
+                        entries: past,
+                        expanded,
+                        onToggle: table.toggleGroup,
+                      }
+                    : undefined
+                }
+                rowActions={(event) => (
+                  <>
+                    {community ? (
+                      <Link
+                        to={eventPath(community.slug, event.id)}
+                        // 34 px sur écran pointé comme la maquette, 44 px sur mobile : le
+                        // plancher tactile des non-négociables l'emporte là où la maquette
+                        // passe dessous.
+                        className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary sm:size-[34px]"
+                        aria-label={`Modifier ${event.title}`}
+                      >
+                        <Pencil aria-hidden="true" className="size-4" />
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={`Supprimer ${event.title}`}
+                      onClick={() => {
+                        setPendingDelete(event)
+                      }}
+                      className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-[#fef2f2] hover:text-[#b91c1c] sm:size-[34px]"
+                    >
+                      <Trash2 aria-hidden="true" className="size-4" />
+                    </button>
+                  </>
+                )}
+              />
+            )}
+          </section>
+        )
+      ) : null}
+
+      {/* Depuis la liste, la suppression laisse en place : on relit, on ne change pas d'écran. */}
+      <DeleteEventDialog
+        event={pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+        onDeleted={() => {
+          state.refetch()
+        }}
+      />
+    </>
+  )
+}

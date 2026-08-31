@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Pencil, Plus, SearchX } from 'lucide-react'
 import { Button } from '@lehub/shared/components/Button'
@@ -7,16 +7,10 @@ import { ErrorState } from '@lehub/shared/components/ErrorState'
 import { DataTable, type Column } from '@/components/data/DataTable'
 import { ResultCount } from '@/components/data/ResultCount'
 import { SearchField } from '@/components/data/SearchField'
+import { useGroupedTable } from '@/hooks/useGroupedTable'
 import type { ReferenceListState } from '@/hooks/useReferenceList'
-import {
-  nextSort,
-  partition,
-  searchEntries,
-  sortEntries,
-  type Comparable,
-  type SortState,
-} from '@/lib/referenceFilters'
-import { readArchivedExpanded, writeArchivedExpanded, type ReferenceScope } from '@/lib/preferences'
+import type { Comparable } from '@/lib/referenceFilters'
+import { type GroupScope } from '@/lib/preferences'
 import { quantify, type Word } from '@/lib/words'
 
 interface ReferenceScreenProps<T, K extends string> {
@@ -42,7 +36,7 @@ interface ReferenceScreenProps<T, K extends string> {
   /** Ce qui range une entrée dans le groupe replié (#173). */
   isArchived: (entry: T) => boolean
   /** Sous quelle clé la préférence de repli est retenue, par référentiel. */
-  preferenceScope: ReferenceScope
+  preferenceScope: GroupScope
   emptyTitle: string
   emptyDescription: string
   errorTitle: string
@@ -95,55 +89,22 @@ export function ReferenceScreen<T, K extends string>({
   onEdit,
   panel,
 }: ReferenceScreenProps<T, K>): ReactNode {
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<SortState<K>>({
-    key: defaultSortKey,
-    direction: 'ascending',
-  })
-
-  /* Lue au premier rendu, comme la barre latérale : un écran qui s'afficherait déplié puis se
-     replierait sous les yeux serait pire que pas de préférence du tout. Un initialiseur, jamais
-     un effet — `react-hooks/set-state-in-effect` l'interdit, et il a raison. */
-  const [preferred, setPreferred] = useState(() => readArchivedExpanded(preferenceScope))
-
-  /* Le repli **pendant** une recherche est un état à part, réarmé à chaque frappe. C'est ce qui
-     fait qu'effacer la recherche revient à la préférence sans avoir à la restaurer : il n'y a
-     rien à restaurer, la préférence n'a jamais bougé. L'ajustement se fait au rendu, le patron
-     que React documente pour dériver un état d'une valeur qui change — voir `AdminLayout`. */
-  const [expandedWhileSearching, setExpandedWhileSearching] = useState(true)
-  const [seenQuery, setSeenQuery] = useState(query)
-  if (seenQuery !== query) {
-    setSeenQuery(query)
-    setExpandedWhileSearching(true)
-  }
-
-  const searching = query.trim().length > 0
-  const expanded = searching ? expandedWhileSearching : preferred
-
   const entries = state.status === 'success' ? state.entries : null
 
-  /* Recherche, puis tri, puis **partition en dernier**. Trier avant de jeter serait du travail
-     perdu ; partitionner avant de trier donnerait deux tris, un par groupe, ce que #173 refuse
-     nommément. Les deux moitiés sont des sous-suites d'une liste triée une seule fois. */
-  const { active, archived } = useMemo(() => {
-    if (!entries) return { active: [], archived: [] }
-    const visible = sortEntries(searchEntries(entries, query, searchableOf), sort, valueOf)
-    const split = partition(visible, isArchived)
-    return { active: split.rest, archived: split.matched }
-  }, [entries, query, sort, searchableOf, valueOf, isArchived])
-
-  function toggleArchived(): void {
-    /* Pendant une recherche, le repli est réel mais éphémère : il n'est pas retenu, et la frappe
-       suivante rouvre le groupe. Le contrôle reste donc vivant et son `aria-expanded` reste vrai
-       dans tous les cas — un bouton désactivé sortirait du parcours clavier, et un bouton qui
-       n'aurait aucun effet visible annoncerait un état qu'il n'a pas. */
-    if (searching) {
-      setExpandedWhileSearching(!expanded)
-      return
-    }
-    setPreferred(!expanded)
-    writeArchivedExpanded(preferenceScope, !expanded)
-  }
+  /* Recherche, tri, partition et repli : la même mécanique que la liste des évènements (#174),
+     et donc le même hook. Ce qui reste ici est ce qui distingue un référentiel — ses colonnes,
+     son tiroir, son vocabulaire. */
+  const table = useGroupedTable({
+    entries,
+    defaultSortKey,
+    valueOf,
+    searchableOf,
+    isGrouped: isArchived,
+    preferenceScope,
+  })
+  const { query, setQuery, searching, expanded } = table
+  const active = table.visible
+  const archived = table.grouped
 
   return (
     <>
@@ -230,10 +191,8 @@ export function ReferenceScreen<T, K extends string>({
                 columns={columns}
                 entries={active}
                 getRowId={getRowId}
-                sort={sort}
-                onSortChange={(key) => {
-                  setSort((current) => nextSort(current, key))
-                }}
+                sort={table.sort}
+                onSortChange={table.onSortChange}
                 // « Entrée » et non le nom du référentiel : « Aucune communauté active » contre
                 // « Aucun évènement actif » demanderait d'accorder aussi l'article, là où
                 // « entrée » est féminin, générique et vrai partout.
@@ -248,7 +207,7 @@ export function ReferenceScreen<T, K extends string>({
                         label: quantify(archived.length, noun, archivedWord),
                         entries: archived,
                         expanded,
-                        onToggle: toggleArchived,
+                        onToggle: table.toggleGroup,
                       }
                     : undefined
                 }

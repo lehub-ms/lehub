@@ -33,8 +33,13 @@ import { type UploadDestination } from './uploadSchemas'
  * server (#135) — and no client is under any obligation to echo back the casing it was
  * given. A case-sensitive miss here fails closed: a legitimate organiser gets a 403 on their
  * own community, and it reads as a permissions bug rather than a casing one.
+ *
+ * Exported since #147: the route that replaces an event's communities has to work out which ones
+ * were *removed*, by comparing the stored set against the submitted one — the same comparison,
+ * with the same trap. A second spelling of it over there is precisely what this comment warns
+ * against.
  */
-function sameId(a: string, b: string): boolean {
+export function sameId(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase()
 }
 
@@ -49,6 +54,27 @@ export function organizes(permissions: SessionPermissions, communityId: string):
  */
 export function canWriteReferenceData(permissions: SessionPermissions): boolean {
   return permissions.isGlobalAdmin
+}
+
+/**
+ * Reading the administration view of one community's events (#144).
+ *
+ * The second arbitrated *read* in this API, and it is arbitrated for the same reason as the
+ * first: it is not the event catalogue, which is public and stays public, it is the view an
+ * organiser works in. It carries what the public contract withholds — events already past, the
+ * banner's stored path, every attachment of every event — and it is scoped to a community
+ * rather than to the world. See the header above, and `canWriteReferenceData`'s note.
+ *
+ * Deliberately *not* `canWriteEvent` composed over the listing: the question here is asked
+ * before any event is read, about a community rather than about a row. An organiser sees their
+ * communities' events, an administrator sees any community's — and the events themselves each
+ * answer their own write question afterwards.
+ */
+export function canManageCommunityEvents(
+  permissions: SessionPermissions,
+  communityId: string,
+): boolean {
+  return permissions.isGlobalAdmin || organizes(permissions, communityId)
 }
 
 /**
@@ -163,5 +189,37 @@ export function canUploadTo(
     case 'community-logo':
     case 'technology-logo':
       return canWriteReferenceData(permissions)
+    // An event banner is not answerable from the destination alone — see the function below.
+    // Returning `false` here rather than omitting the case keeps the switch exhaustive, so a
+    // future destination still breaks the build instead of falling through to a silent refusal.
+    case 'event-banner':
+      return false
   }
+}
+
+/**
+ * Uploading an event banner (#148).
+ *
+ * The only destination whose permission is not a property of the *destination*: it depends on
+ * the event the image is for, so it takes the event's communities and cannot live in the table
+ * above. That is why `canUploadTo` answers `false` for it and this exists instead — the shape of
+ * the pair is the statement that a banner is arbitrated differently.
+ *
+ * `null` is the creation case, and it is the interesting one: the form uploads before the event
+ * exists, because it previews the real URL. There is nothing to check against, so the question
+ * becomes "may this account create events at all" — an administrator, or an organiser of at
+ * least one community. An ordinary account is refused, which is what stops the media container
+ * from being a free upload endpoint for anyone with a session.
+ *
+ * What it deliberately does not do is guarantee that the blob ends up on an event the caller may
+ * write: they could upload with no `eventId` and then attach the path to an event they do not
+ * manage. That attempt fails at the PATCH, where `canWriteEvent` decides — and all they will
+ * have achieved is an orphan blob, which `mediaUpload` already accepts and explains.
+ */
+export function canUploadEventBanner(
+  permissions: SessionPermissions,
+  eventCommunityIds: readonly string[] | null,
+): boolean {
+  if (eventCommunityIds) return canWriteEvent(permissions, eventCommunityIds)
+  return permissions.isGlobalAdmin || permissions.organizedCommunityIds.length > 0
 }

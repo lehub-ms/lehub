@@ -140,6 +140,23 @@ export function invalidBody(
 }
 
 /**
+ * Refuses a query string that does not match its schema.
+ *
+ * Named apart from `INVALID_BODY` for the reason `INVALID_ROUTE_PARAMETER` is: a bad query
+ * string is a broken link or a hand-edited address, not a bad form submission, and a client
+ * branches on it differently. Same discipline as the body refusal — the paths and codes go to
+ * the log, the caller gets a constant message that echoes nothing back.
+ */
+export function invalidQuery(
+  context: InvocationContext,
+  request: HttpRequest,
+  issues: readonly ValidationIssue[],
+): HttpResponseInit {
+  context.error('Query validation refused', { route: routeLabel(request), issues })
+  return errorResponse(400, 'INVALID_QUERY', 'The query string does not match the expected shape.')
+}
+
+/**
  * Refuses a route parameter that is not in the expected form, before anything reaches the
  * database.
  *

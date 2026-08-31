@@ -46,6 +46,30 @@ export function communityPath(communitySlug: string, section: CommunitySection):
 }
 
 /**
+ * Le segment de route du formulaire de création. Un mot et non un identifiant : l'adresse d'une
+ * création ne désigne rien qui existe, et `nouveau` ne peut pas être confondu avec un GUID —
+ * `EventFormPage` distingue les deux sur ce seul segment.
+ */
+export const NEW_EVENT_SEGMENT = 'nouveau'
+
+/** Le formulaire d'un nouvel évènement de la communauté. */
+export function newEventPath(communitySlug: string): string {
+  return `${communityPath(communitySlug, 'evenements')}/${NEW_EVENT_SEGMENT}`
+}
+
+/**
+ * Le formulaire d'un évènement existant.
+ *
+ * L'identifiant est dans l'adresse et non dans un état d'écran : « une adresse d'évènement se
+ * partage, se met en favori et se recharge » (#143). Le slug reste celui de la communauté depuis
+ * laquelle on y arrive — un évènement co-organisé s'atteint donc par deux adresses, et c'est
+ * voulu : chacune ramène à la liste dont on est parti.
+ */
+export function eventPath(communitySlug: string, eventId: string): string {
+  return `${communityPath(communitySlug, 'evenements')}/${eventId}`
+}
+
+/**
  * L'entrée de navigation correspondant à l'écran courant, routes enfants comprises : le
  * formulaire d'un évènement laisse « Évènements » actif.
  *

@@ -44,9 +44,11 @@ async function upload(parts: {
   filename?: string
   declaredType?: string
   destination?: string
+  eventId?: string
 }): Promise<HttpRequest> {
   const form = new FormData()
   if (parts.destination !== undefined) form.set('destination', parts.destination)
+  if (parts.eventId !== undefined) form.set('eventId', parts.eventId)
   if (parts.bytes) {
     form.set(
       'file',
@@ -266,5 +268,112 @@ describe('refus', () => {
     // « {} » et la trace ne dirait plus rien.
     expect(ctx.errors[0]?.[2]).toBeInstanceOf(Error)
     expect((ctx.errors[0]?.[2] as Error).message).toBe('conteneur indisponible')
+  })
+})
+
+
+/**
+ * La bannière d'un évènement (#148) : la seule destination dont l'habilitation ne se lit pas
+ * dans la destination elle-même.
+ */
+describe('bannière d’un évènement', () => {
+  const MINE = 'C1C1C1C1-0000-0000-0000-000000000001'
+  const THEIRS = 'C2C2C2C2-0000-0000-0000-000000000002'
+  const EVENT = 'E1E1E1E1-0000-0000-0000-000000000001'
+
+  /** Le lecteur des communautés d'un évènement, injecté — aucune base ici. */
+  function carrying(communityIds: readonly string[] | null) {
+    return () => Promise.resolve(communityIds)
+  }
+
+  it('accepte le dépôt sans évènement, pour la création', async () => {
+    // Le formulaire téléverse avant que l'évènement n'existe, parce qu'il en affiche l'aperçu
+    // réel. Il n'y a alors rien à quoi confronter la demande.
+    const response = await uploadImage(writer, carrying(null))(
+      await upload({ bytes: PNG, destination: 'event-banner' }),
+      context(),
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(201)
+    expect(written[0]?.blobName.startsWith('events/')).toBe(true)
+  })
+
+  it('refuse le dépôt sans évènement à un compte sans aucune désignation', async () => {
+    // Sans cela, le conteneur média serait un point de dépôt libre pour quiconque a une session.
+    const ordinary: SessionPermissions = { isGlobalAdmin: false, organizedCommunityIds: [] }
+    const response = await uploadImage(writer, carrying(null))(
+      await upload({ bytes: PNG, destination: 'event-banner' }),
+      context(),
+      session(ordinary),
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it("refuse le dépôt sur un évènement qu'on n'est pas habilité à modifier", async () => {
+    const ctx = context()
+    const response = await uploadImage(writer, carrying([THEIRS]))(
+      await upload({ bytes: PNG, destination: 'event-banner', eventId: EVENT }),
+      ctx,
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(403)
+    expect(JSON.stringify(ctx.errors)).toContain('upload:event-banner')
+  })
+
+  it("accepte le dépôt sur un évènement d'une communauté qu'on organise", async () => {
+    const response = await uploadImage(writer, carrying([THEIRS, MINE]))(
+      await upload({ bytes: PNG, destination: 'event-banner', eventId: EVENT }),
+      context(),
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(201)
+  })
+
+  it('refuse un évènement introuvable plutôt que de retomber sur le cas de la création', async () => {
+    // Sinon un identifiant inventé ferait passer la demande pour une création, et l'ouvrirait.
+    const response = await uploadImage(writer, carrying(null))(
+      await upload({ bytes: PNG, destination: 'event-banner', eventId: EVENT }),
+      context(),
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it("refuse un identifiant d'évènement malformé avant toute lecture", async () => {
+    let read = false
+    const response = await uploadImage(writer, () => {
+      read = true
+      return Promise.resolve(null)
+    })(
+      await upload({ bytes: PNG, destination: 'event-banner', eventId: 'pas-un-guid' }),
+      context(),
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(400)
+    expect(read).toBe(false)
+  })
+
+  it('refuse un SVG en bannière, sur ses octets et non sur son extension', async () => {
+    // Une bannière est une photographie : #148 n'accepte que JPG, PNG et WebP. Le même fichier
+    // reste accepté en logo, où le vectoriel a du sens.
+    const banner = await uploadImage(writer, carrying(null))(
+      await upload({ bytes: SVG, destination: 'event-banner', filename: 'banner.png' }),
+      context(),
+      session(ADMIN),
+    )
+    expect(banner.status).toBe(415)
+
+    const logo = await uploadImage(writer)(
+      await upload({ bytes: SVG, destination: 'community-logo' }),
+      context(),
+      session(ADMIN),
+    )
+    expect(logo.status).toBe(201)
   })
 })

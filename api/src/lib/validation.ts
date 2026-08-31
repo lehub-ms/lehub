@@ -1,6 +1,11 @@
 import { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { z } from 'zod'
-import { invalidBody, invalidRouteParameter, type ValidationIssue } from './httpErrors'
+import {
+  invalidBody,
+  invalidQuery,
+  invalidRouteParameter,
+  type ValidationIssue,
+} from './httpErrors'
 
 /**
  * How a request body becomes a value this API is willing to act on.
@@ -75,6 +80,34 @@ export async function parseBody<S extends z.ZodType>(
   const result = schema.safeParse(body)
   if (!result.success) {
     return { ok: false, response: invalidBody(context, request, describeIssues(result.error)) }
+  }
+
+  return { ok: true, value: result.data as z.infer<S> }
+}
+
+/**
+ * Reads and validates a query string, or produces the refusal to return as-is.
+ *
+ * Against a schema and not parameter by parameter, for the reason the header of this file
+ * gives: a hand-written check validates but describes nothing, and #170 has to be able to say
+ * what `GET /api/manage/events` accepts without reading the handler. A query string that is
+ * part of a route's contract is part of what gets documented.
+ *
+ * `searchParams` is flattened with `Object.fromEntries`, so a parameter repeated in the URL
+ * keeps its last occurrence. None of these schemas takes a list, and a `strictObject` would
+ * refuse an array anyway — this only decides *which* single value is examined, and the last one
+ * is what every server-side framework already picks.
+ */
+export function parseQuery<S extends z.ZodType>(
+  request: HttpRequest,
+  context: InvocationContext,
+  schema: S,
+): Parsed<z.infer<S>> {
+  const query = Object.fromEntries(new URL(request.url).searchParams)
+
+  const result = schema.safeParse(query)
+  if (!result.success) {
+    return { ok: false, response: invalidQuery(context, request, describeIssues(result.error)) }
   }
 
   return { ok: true, value: result.data as z.infer<S> }

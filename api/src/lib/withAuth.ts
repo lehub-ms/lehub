@@ -10,9 +10,14 @@ import { bearerToken, verifyAccessToken, type AuthenticatedIdentity } from './to
  * Which routes are anonymous is a decision, so it is written down rather than left to
  * whoever forgets the wrapper. Anonymous, and deliberately so:
  *
- *   - `health`      — the deployment probe, polled before anyone has a token
- *   - `events`      — the public agenda, the whole point of the site
- *   - `communities` — likewise
+ *   - `health`        — the deployment probe, polled before anyone has a token
+ *   - `events`        — the public agenda, the whole point of the site
+ *   - `communities`   — likewise
+ *   - `technologies`  — likewise, and #147 needs it: attaching a technology to an event is an
+ *     organiser's job, while `manage/technologies` is closed to anyone who is not a global
+ *     administrator. The public half of the referential is what an organiser reads.
+ *   - `event-options` — the two closed vocabularies an event is qualified by. Same reason, and
+ *     there is nothing to withhold in the word "Meetup".
  *   - `auth/signup`, `auth/signin`, `auth/reset`, `auth/token` — a visitor creating an
  *     account, or one who has lost their password, has nothing to present
  *

@@ -4,7 +4,9 @@
  * parlent à la même Function App, en cross-origin, et rien de ce fichier n'est une décision
  * de confiance. L'API arbitre (#109).
  */
-import { apiFetch } from '@lehub/shared/lib/api'
+// `NamedRef` est aussi ré-exporté plus bas : un `export … from` republie le nom sans l'amener
+// dans la portée du module, et `AdminEvent` s'en sert.
+import { apiFetch, type NamedRef } from '@lehub/shared/lib/api'
 
 export {
   ApiError,
@@ -119,8 +121,148 @@ export function updateTechnology(
   })
 }
 
+/**
+ * Un évènement tel que le backoffice le voit — évènements passés compris, et avec de quoi
+ * remplir le formulaire.
+ *
+ * Deux paires de champs méritent leur redondance apparente. Le **chemin** de la bannière voyage
+ * avec son URL, pour la raison qui vaut déjà pour `logoPath` : le formulaire renvoie le chemin
+ * tel quel à l’enregistrement. Et les **identifiants** du type et du format voyagent avec leurs
+ * libellés, sans quoi le formulaire présélectionnerait ses listes en comparant des chaînes
+ * traduites.
+ *
+ * Attention au vocabulaire, il diverge et c’est délibéré : `format` porte `dbo.FormatType`
+ * (Conférence, Meetup, Webinaire…) que l’écran appelle « Type », et `mode` porte `dbo.EventMode`
+ * (Présentiel, En ligne, Hybride) que l’écran appelle « Format ». Le fil garde les noms que le
+ * contrat public a déjà publiés ; la traduction vit dans `lib/eventVocabulary.ts`, et là
+ * seulement.
+ */
+export interface AdminEvent {
+  id: string
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  bannerImagePath: string | null
+  bannerImageUrl: string | null
+  formatTypeId: string
+  format: string
+  eventModeId: string
+  mode: string
+  communities: NamedRef[]
+  technologies: NamedRef[]
+}
+
+/**
+ * Les évènements d’une communauté, du plus proche au plus lointain.
+ *
+ * La communauté est obligatoire : le backoffice regarde toujours celle que la barre latérale
+ * désigne. L’API refuse en 403 une communauté que la session n’organise pas (#109), que cet
+ * écran ait été atteignable ou non.
+ */
+export function listCommunityEvents(communityId: string): Promise<AdminEvent[]> {
+  return apiFetch<AdminEvent[]>(
+    `/api/manage/events?communityId=${encodeURIComponent(communityId)}`,
+  )
+}
+
+/**
+ * Les technologies actives, pour le rattachement d’un évènement (#147).
+ *
+ * Anonyme, comme `listCommunities` : `listAdminTechnologies` est réservée aux administrateurs
+ * globaux, et un organisateur doit pouvoir étiqueter son évènement. La vue d’administration
+ * n’est pas la même chose que le référentiel.
+ */
+export function listTechnologies(): Promise<NamedRef[]> {
+  return apiFetch<NamedRef[]>('/api/technologies')
+}
+
+/** Une entrée d’un vocabulaire fermé : un identifiant à renvoyer, un libellé à afficher. */
+export interface EventOption {
+  id: string
+  name: string
+}
+
+/**
+ * Les deux vocabulaires que le formulaire propose.
+ *
+ * `formats` porte `dbo.FormatType`, que l’écran appelle « Type » ; `modes` porte
+ * `dbo.EventMode`, que l’écran appelle « Format ». Voir `lib/eventVocabulary.ts`.
+ */
+export interface EventOptions {
+  formats: EventOption[]
+  modes: EventOption[]
+}
+
+/** Anonyme, comme `listCommunities` : un organisateur non administrateur en a besoin. */
+export function listEventOptions(): Promise<EventOptions> {
+  return apiFetch<EventOptions>('/api/event-options')
+}
+
+/**
+ * Le corps accepté à la création. Le serveur fait foi — voir `api/src/lib/eventSchemas.ts`.
+ *
+ * Les deux dates sont des instants ISO : le formulaire saisit une heure murale de Paris et la
+ * convertit avant d’envoyer (`lib/eventDates.ts`). La date de fin est obligatoire.
+ */
+export interface EventInput {
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  formatTypeId: string
+  eventModeId: string
+  bannerImagePath: string | null
+  communityIds: string[]
+  technologyIds: string[]
+}
+
+/** Un évènement, pour le préremplissage du formulaire. Refusé en 403 hors habilitation (#109). */
+export function getEvent(eventId: string): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>(`/api/manage/events/${encodeURIComponent(eventId)}`)
+}
+
+/**
+ * Un champ absent est un champ inchangé ; `null` efface. Voir la route PATCH.
+ *
+ * Les rattachements **en font partie** depuis #147 : présents, ils remplacent l’ensemble ;
+ * absents, ils sont laissés tels quels. Ils ont un temps été exclus de ce type, alors que le
+ * formulaire les envoyait déjà — ce que le compilateur ne voyait pas, un objet passé par
+ * variable n’étant pas soumis au contrôle des propriétés excédentaires. Un type qui décrit
+ * moins que ce qui part sur le fil n’est pas une garantie, c’est un piège : le premier
+ * appelant qui aurait construit sa charge utile en littéral aurait perdu les rattachements
+ * sans une erreur nulle part.
+ */
+export type EventPatch = Partial<EventInput>
+
+export function updateEvent(eventId: string, patch: EventPatch): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>(`/api/manage/events/${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+}
+
+/**
+ * Supprime l’évènement et ses rattachements — les clés étrangères cascadent (migration 0001).
+ *
+ * Ni le référentiel ni les comptes ne sont touchés, et la bannière reste dans le conteneur :
+ * le devenir du blob est arrêté côté serveur, voir `DELETE_EVENT_QUERY`.
+ */
+export function deleteEvent(eventId: string): Promise<void> {
+  return apiFetch<void>(`/api/manage/events/${encodeURIComponent(eventId)}`, { method: 'DELETE' })
+}
+
+export function createEvent(input: EventInput): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>('/api/manage/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
 /** Les destinations que la route de téléversement accepte aujourd’hui. */
-export type UploadDestination = 'community-logo' | 'technology-logo'
+export type UploadDestination = 'community-logo' | 'technology-logo' | 'event-banner'
 
 export interface UploadedImage {
   /** Le chemin relatif à enregistrer sur l’entité. */
@@ -134,9 +276,20 @@ export interface UploadedImage {
  * `FormData`, avec la frontière multipart qu’il vient de tirer. En poser un le priverait de
  * cette frontière et le corps deviendrait illisible côté serveur.
  */
-export function uploadImage(file: File, destination: UploadDestination): Promise<UploadedImage> {
+export function uploadImage(
+  file: File,
+  destination: UploadDestination,
+  /**
+   * L’évènement auquel la bannière se rattache, quand il existe déjà.
+   *
+   * Absent en création : le formulaire téléverse avant d’enregistrer, parce qu’il affiche
+   * l’aperçu réel. L’API arbitre différemment dans les deux cas — voir `canUploadEventBanner`.
+   */
+  eventId?: string,
+): Promise<UploadedImage> {
   const form = new FormData()
   form.set('destination', destination)
+  if (eventId) form.set('eventId', eventId)
   form.set('file', file)
 
   return apiFetch<UploadedImage>('/api/media/uploads', { method: 'POST', body: form })

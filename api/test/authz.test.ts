@@ -4,6 +4,7 @@ import {
   canCreateEvent,
   canDesignateOrganizer,
   canDetachCommunity,
+  canManageCommunityEvents,
   canManageGlobalAdmins,
   canWriteEvent,
   canWriteReferenceData,
@@ -72,6 +73,35 @@ describe('canWriteReferenceData', () => {
     expect(canWriteReferenceData(ADMIN_ORGANIZER)).toBe(true)
     expect(canWriteReferenceData(ORGANIZER)).toBe(false)
     expect(canWriteReferenceData(ANONYMOUS_USER)).toBe(false)
+  })
+})
+
+describe('canManageCommunityEvents', () => {
+  it("réserve la liste d'une communauté à ses organisateurs et aux administrateurs", () => {
+    expect(canManageCommunityEvents(ORGANIZER, 'c1')).toBe(true)
+    expect(canManageCommunityEvents(ORGANIZER, 'c2')).toBe(false)
+    expect(canManageCommunityEvents(ADMIN, 'c9')).toBe(true)
+    expect(canManageCommunityEvents(ANONYMOUS_USER, 'c1')).toBe(false)
+  })
+
+  it("n'est pas la même question que l'écriture sur un évènement", () => {
+    // Celle-ci porte sur une communauté et se pose avant qu'aucun évènement ne soit lu ;
+    // `canWriteEvent` porte sur les communautés que porte une ligne. Les deux se répondent
+    // différemment sur un évènement co-organisé, et les confondre reviendrait à ouvrir la
+    // liste d'une communauté à qui n'organise que l'autre.
+    expect(canManageCommunityEvents(ORGANIZER, 'c9')).toBe(false)
+    expect(canWriteEvent(ORGANIZER, ['c1', 'c9'])).toBe(true)
+  })
+
+  it('compare les identifiants sans égard à la casse', () => {
+    const upper: SessionPermissions = {
+      isGlobalAdmin: false,
+      organizedCommunityIds: ['C1C1C1C1-0000-0000-0000-000000000001'],
+    }
+
+    // L'identifiant arrive ici d'une chaîne de requête, donc d'un client qui n'a aucune
+    // obligation de recopier la casse qu'on lui a donnée.
+    expect(canManageCommunityEvents(upper, 'c1c1c1c1-0000-0000-0000-000000000001')).toBe(true)
   })
 })
 

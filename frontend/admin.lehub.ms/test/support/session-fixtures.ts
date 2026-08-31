@@ -1,6 +1,6 @@
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
-import type { CommunitySummary } from '@lehub/shared/lib/api'
-import type { AdminCommunity, AdminTechnology } from '@/lib/api'
+import type { CommunitySummary, NamedRef } from '@lehub/shared/lib/api'
+import type { AdminCommunity, AdminEvent, AdminTechnology, EventOptions } from '@/lib/api'
 
 /** La réponse de `POST /api/me/session`, en un seul endroit — comme côté site public. */
 export const MIRROR = {
@@ -119,6 +119,141 @@ export const ADMIN_TECHNOLOGIES: AdminTechnology[] = [
     eventCount: 0,
   },
 ]
+
+const AZUG = COMMUNITIES[0] as CommunitySummary
+const PPF = COMMUNITIES[1] as CommunitySummary
+
+/** Un rattachement tel qu'un évènement le porte : nom, marque, et son statut au référentiel. */
+function ref(community: CommunitySummary, archived = false) {
+  return { id: community.id, name: community.name, logoUrl: null, archived }
+}
+
+/**
+ * Ce que rend `GET /api/manage/events`, toutes communautés confondues — `eventsFor` en extrait
+ * la part d'une communauté, comme le fait la route.
+ *
+ * Choisies pour couvrir ce que #144 demande et non pour être jolies : un évènement avec bannière
+ * et un sans, un évènement **co-organisé** par les deux communautés (il ne doit apparaître qu'une
+ * fois, et rien ne doit le distinguer), un évènement déjà passé, et un qui n'appartient qu'à
+ * l'autre communauté — celui-là ne doit jamais paraître dans la liste de la première.
+ *
+ * Les identifiants sont en majuscules, comme SQL Server rend ses `UNIQUEIDENTIFIER`.
+ */
+export const ADMIN_EVENTS: AdminEvent[] = [
+  {
+    id: 'E1E1E1E1-0000-0000-0000-000000000001',
+    title: 'Azure Deep Dive : réseau et sécurité',
+    description: 'Hub-and-spoke, Firewall, Private Link et segmentation.',
+    startDate: '2026-09-10T16:30:00.000Z',
+    endDate: '2026-09-10T19:00:00.000Z',
+    bannerImagePath: 'events/azure-deep-dive.webp',
+    bannerImageUrl: 'https://media.example/media/events/azure-deep-dive.webp',
+    formatTypeId: 'F2F2F2F2-0000-0000-0000-000000000002',
+    format: 'Meetup',
+    eventModeId: 'D1D1D1D1-0000-0000-0000-000000000001',
+    mode: 'Présentiel',
+    communities: [ref(AZUG)],
+    technologies: [],
+  },
+  {
+    // Co-organisé. Sans bannière, donc c'est lui qui exerce le repli de la vignette.
+    id: 'E2E2E2E2-0000-0000-0000-000000000002',
+    title: 'Soirée commune Azure × Power Platform',
+    description: 'Trois démos, puis discussions autour d’un verre.',
+    startDate: '2026-10-02T17:00:00.000Z',
+    endDate: '2026-10-02T20:30:00.000Z',
+    bannerImagePath: null,
+    bannerImageUrl: null,
+    formatTypeId: 'F1F1F1F1-0000-0000-0000-000000000001',
+    format: 'Conférence',
+    eventModeId: 'D3D3D3D3-0000-0000-0000-000000000003',
+    mode: 'Hybride',
+    communities: [ref(AZUG), ref(PPF)],
+    technologies: [],
+  },
+  {
+    // Déjà passé : #144 le liste comme les autres, #174 le repliera.
+    id: 'E3E3E3E3-0000-0000-0000-000000000003',
+    title: 'Rétrospective Build 2026',
+    description: 'Les annonces qui comptent, commentées.',
+    startDate: '2026-06-11T16:00:00.000Z',
+    endDate: '2026-06-11T19:00:00.000Z',
+    bannerImagePath: null,
+    bannerImageUrl: null,
+    formatTypeId: 'F2F2F2F2-0000-0000-0000-000000000002',
+    format: 'Meetup',
+    eventModeId: 'D2D2D2D2-0000-0000-0000-000000000002',
+    mode: 'En ligne',
+    communities: [ref(AZUG)],
+    technologies: [],
+  },
+  {
+    // N'appartient qu'à la seconde communauté.
+    id: 'E4E4E4E4-0000-0000-0000-000000000004',
+    title: 'Power Platform Apéro #12',
+    description: 'Format court et convivial.',
+    startDate: '2026-09-25T17:00:00.000Z',
+    endDate: '2026-09-25T20:00:00.000Z',
+    bannerImagePath: null,
+    bannerImageUrl: null,
+    formatTypeId: 'F2F2F2F2-0000-0000-0000-000000000002',
+    format: 'Meetup',
+    eventModeId: 'D1D1D1D1-0000-0000-0000-000000000001',
+    mode: 'Présentiel',
+    communities: [ref(PPF)],
+    technologies: [],
+  },
+]
+
+/**
+ * Ce que rend `GET /api/technologies` : les technologies **actives** seulement.
+ *
+ * Volontairement disjointe d'`ADMIN_TECHNOLOGIES` sur un point : « Silverlight » y est archivée
+ * et n'apparaît donc pas ici, alors qu'un évènement de la fixture la porte. C'est ce qui rend
+ * éprouvable « une entrée archivée déjà rattachée reste visible et retirable, mais ne peut plus
+ * être ajoutée » (#147).
+ */
+export const TECHNOLOGIES: NamedRef[] = [
+  { id: 'B1B1B1B1-0000-0000-0000-000000000001', name: 'Azure', logoUrl: null },
+  { id: 'B2B2B2B2-0000-0000-0000-000000000002', name: '.NET', logoUrl: null },
+]
+
+/**
+ * Ce que rend `GET /api/event-options` : les deux vocabulaires fermés.
+ *
+ * Dans l'ordre alphabétique que la requête impose, « Autre » compris — la fixture reproduit ce
+ * que la route rend, pas ce qu'on aimerait qu'elle rende.
+ */
+export const EVENT_OPTIONS: EventOptions = {
+  formats: [
+    { id: 'F5F5F5F5-0000-0000-0000-000000000005', name: 'Atelier' },
+    { id: 'F6F6F6F6-0000-0000-0000-000000000006', name: 'Autre' },
+    { id: 'F1F1F1F1-0000-0000-0000-000000000001', name: 'Conférence' },
+    { id: 'F4F4F4F4-0000-0000-0000-000000000004', name: 'Hackathon' },
+    { id: 'F2F2F2F2-0000-0000-0000-000000000002', name: 'Meetup' },
+    { id: 'F3F3F3F3-0000-0000-0000-000000000003', name: 'Webinaire' },
+  ],
+  modes: [
+    { id: 'D2D2D2D2-0000-0000-0000-000000000002', name: 'En ligne' },
+    { id: 'D3D3D3D3-0000-0000-0000-000000000003', name: 'Hybride' },
+    { id: 'D1D1D1D1-0000-0000-0000-000000000001', name: 'Présentiel' },
+  ],
+}
+
+/**
+ * Le filtre que la route applique, rejoué ici.
+ *
+ * La substitution de `fetch` s'en sert plutôt que de rendre la liste entière : « la liste ne
+ * contient que les évènements rattachés à la communauté sélectionnée » est un critère de #144,
+ * et un bouchon qui rendrait tout le laisserait passer même si l'écran oubliait la communauté.
+ * Insensible à la casse, comme le serveur.
+ */
+export function eventsFor(communityId: string): AdminEvent[] {
+  const wanted = communityId.toLowerCase()
+  return ADMIN_EVENTS.filter((event) =>
+    event.communities.some((community) => community.id.toLowerCase() === wanted),
+  )
+}
 
 /** Les trois profils qui décident de l'accès au backoffice. */
 export const ORDINARY_USER: SessionPermissions = { isGlobalAdmin: false, organizedCommunityIds: [] }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ImageKind } from './imageSniff'
 
 /**
  * Where an uploaded image is going, and therefore under which prefix it is filed and who is
@@ -8,11 +9,11 @@ import { z } from 'zod'
  * of reachable prefixes is finite and a `../` can never arrive. That is what "rangé sous un
  * préfixe déterminé par sa destination" means once written down.
  *
- * `event-banner` is not here yet. Story #149 adds it, with `canWriteEvent` over the event's
- * communities — the route is named `media/uploads` rather than anything referential-specific
- * precisely so that addition is a line in this file and a line in `authz`.
+ * `event-banner` joined them with Story #148, and the addition really was what this comment
+ * promised: a line here, a line in `authz`, and nothing in the route's shape. The route is named
+ * `media/uploads` rather than anything referential-specific for exactly that reason.
  */
-export const UPLOAD_DESTINATIONS = ['community-logo', 'technology-logo'] as const
+export const UPLOAD_DESTINATIONS = ['community-logo', 'technology-logo', 'event-banner'] as const
 
 export type UploadDestination = (typeof UPLOAD_DESTINATIONS)[number]
 
@@ -20,6 +21,23 @@ export type UploadDestination = (typeof UPLOAD_DESTINATIONS)[number]
 export const DESTINATION_PREFIXES: Record<UploadDestination, string> = {
   'community-logo': 'communities',
   'technology-logo': 'technologies',
+  'event-banner': 'events',
+}
+
+/**
+ * Which image formats each destination accepts, decided from the bytes and never from what the
+ * caller declares.
+ *
+ * A logo is often a vector, so SVG belongs there. **A banner is a photograph**, 1600 × 900, and
+ * #148 lists JPG, PNG and WebP — an SVG banner is either a mistake or an attempt, and neither
+ * deserves the `Content-Disposition: attachment` dance that logos need. Story #148 asks for the
+ * check to be server-side "et pas seulement par l'attribut du champ", and a table is what makes
+ * that true per destination rather than globally.
+ */
+export const DESTINATION_KINDS: Record<UploadDestination, readonly ImageKind[]> = {
+  'community-logo': ['png', 'jpeg', 'webp', 'svg'],
+  'technology-logo': ['png', 'jpeg', 'webp', 'svg'],
+  'event-banner': ['png', 'jpeg', 'webp'],
 }
 
 export const UPLOAD_DESTINATION = z.enum(UPLOAD_DESTINATIONS).meta({

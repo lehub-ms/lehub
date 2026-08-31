@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import * as designationSchemas from '../src/lib/designationSchemas'
+import * as eventSchemas from '../src/lib/eventSchemas'
 import * as referenceSchemas from '../src/lib/referenceSchemas'
 import { ALL_REQUEST_SCHEMAS } from '../src/lib/requestSchemas'
 import * as uploadSchemas from '../src/lib/uploadSchemas'
@@ -29,6 +30,7 @@ const SCHEMA_MODULES: Record<string, Record<string, unknown>> = {
   referenceSchemas,
   uploadSchemas,
   designationSchemas,
+  eventSchemas,
 }
 
 describe('dérivation OpenAPI des schémas de requête', () => {
@@ -45,8 +47,7 @@ describe('dérivation OpenAPI des schémas de requête', () => {
 
     expect(exported.filter((entry) => !registered.has(entry.value)).map((e) => e.name)).toEqual([])
     // Et l'inverse : le registre ne contient rien d'autre que ces exports.
-    expect(ALL_REQUEST_SCHEMAS).toHaveLength(exported.length)
-  })
+    expect(ALL_REQUEST_SCHEMAS).toHaveLength(exported.length)  })
 
   it('donne un identifiant distinct à chaque schéma', () => {
     // Deux `$defs` de même nom s'écraseraient l'un l'autre dans le document, silencieusement.

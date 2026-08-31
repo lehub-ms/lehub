@@ -35,22 +35,33 @@ export function writeSidebarCollapsed(collapsed: boolean): void {
   write(COLLAPSED_KEY, String(collapsed))
 }
 
-/** Les référentiels qui portent la préférence ci-dessous. Une chaîne libre s'y perdrait. */
-export type ReferenceScope = 'communities' | 'technologies'
+/**
+ * Les écrans qui portent la préférence ci-dessous. Une chaîne libre s'y perdrait.
+ *
+ * `events` a rejoint les deux référentiels avec #174 : le groupe replié n'y contient pas des
+ * entrées archivées mais des évènements passés. C'est le même geste, la même préférence, et donc
+ * le même mécanisme — d'où le renommage depuis `ReferenceScope`.
+ */
+export type GroupScope = 'communities' | 'technologies' | 'events'
 
 /**
- * Le groupe des entrées archivées d'un référentiel, déplié ou replié d'une visite à l'autre.
+ * Le groupe replié d'un écran — entrées archivées (#173), évènements passés (#174) — déplié ou
+ * replié d'une visite à l'autre.
  *
- * Une clé par référentiel plutôt qu'un objet JSON : rien à analyser, rien à corrompre à moitié,
- * et le défaut tombe tout seul du bon côté — clé absente, stockage refusé, valeur douteuse, tout
- * ce qui n'est pas exactement « true » se lit comme replié. C'est ce que demande le dernier edge
- * case de #173, et le `read` gardé ci-dessus le donne sans rien ajouter.
+ * Une clé par écran plutôt qu'un objet JSON : rien à analyser, rien à corrompre à moitié, et le
+ * défaut tombe tout seul du bon côté — clé absente, stockage refusé, valeur douteuse, tout ce qui
+ * n'est pas exactement « true » se lit comme replié. C'est ce que demandent le dernier edge case
+ * de #173 et le critère « son absence n'empêche pas l'écran de s'afficher replié » de #174, et le
+ * `read` gardé ci-dessus le donne sans rien ajouter.
+ *
+ * **Le préfixe de clé ne change pas** malgré le renommage : une préférence déjà posée dans un
+ * navigateur y survit, et rien ne justifie de la perdre pour un nom de fonction.
  */
-export function readArchivedExpanded(scope: ReferenceScope): boolean {
+export function readGroupExpanded(scope: GroupScope): boolean {
   return read(ARCHIVED_PREFIX + scope) === 'true'
 }
 
-export function writeArchivedExpanded(scope: ReferenceScope, expanded: boolean): void {
+export function writeGroupExpanded(scope: GroupScope, expanded: boolean): void {
   write(ARCHIVED_PREFIX + scope, String(expanded))
 }
 
