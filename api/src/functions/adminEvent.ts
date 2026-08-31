@@ -1,7 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { canDetachCommunity, canWriteEvent, sameId } from '../lib/authz'
 import { eventWriteRefusal } from '../lib/eventResponses'
-import { getAdminEvent, updateEvent, type AdminEvent } from '../lib/eventsRepo'
+import { deleteEvent, getAdminEvent, updateEvent, type AdminEvent } from '../lib/eventsRepo'
 import { UPDATE_EVENT } from '../lib/eventSchemas'
 import { errorResponse, forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
 import { guidParam, parseBody } from '../lib/validation'
@@ -32,7 +32,7 @@ import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthori
  * hardest to reach; the defaults are the real repository, and no caller in `src/` passes
  * anything else.
  */
-export function eventHandler(read = getAdminEvent, write = updateEvent) {
+export function eventHandler(read = getAdminEvent, write = updateEvent, remove = deleteEvent) {
   return async function adminEvent(
     request: HttpRequest,
     context: InvocationContext,
@@ -59,19 +59,62 @@ export function eventHandler(read = getAdminEvent, write = updateEvent) {
     if (!canWriteEvent(session.permissions, event.communities.map((community) => community.id))) {
       return forbidden(context, {
         route: routeLabel(request),
-        action: request.method === 'GET' ? 'read:event' : 'update:event',
+        action: ACTIONS[request.method] ?? 'update:event',
         objectId: session.identity.objectId,
       })
     }
 
     if (request.method === 'GET') return { status: 200, jsonBody: event }
+    if (request.method === 'DELETE') return erase(context, event.id, remove)
 
     return modify(request, context, session, event, write)
   }
 }
 
+/** L'action journalisée avec le refus, par méthode. Un refus non nommé ne se cherche pas. */
+const ACTIONS: Record<string, string> = {
+  GET: 'read:event',
+  PATCH: 'update:event',
+  DELETE: 'delete:event',
+}
+
 function notFound(): HttpResponseInit {
   return errorResponse(404, 'EVENT_NOT_FOUND', 'No event carries this identifier.')
+}
+
+/**
+ * Deletes the event, definitively.
+ *
+ * The same permission as a modification, and deliberately not a stricter one: #149 says so
+ * explicitly — "elle obéit à la même règle que toute écriture sur un évènement". The event has
+ * already been read and arbitrated by the caller; this only has to carry out the deletion and
+ * answer the race.
+ *
+ * `204` and no body, like the referential deletions. A row that vanished between the read and
+ * the delete answers 404 rather than pretending to have removed something, which is the edge
+ * case of an event already deleted from another tab.
+ */
+async function erase(
+  context: InvocationContext,
+  eventId: string,
+  remove: typeof deleteEvent,
+): Promise<HttpResponseInit> {
+  let result
+  try {
+    result = await remove(eventId)
+  } catch (error) {
+    return listFetchError(
+      context,
+      'Failed to delete an event',
+      error,
+      'EVENT_WRITE_ERROR',
+      'Unable to delete the event.',
+    )
+  }
+
+  if (!result.ok) return notFound()
+
+  return { status: 204 }
 }
 
 /**
@@ -174,7 +217,7 @@ async function modify(
 }
 
 app.http('adminEvent', {
-  methods: ['GET', 'PATCH'],
+  methods: ['GET', 'PATCH', 'DELETE'],
   authLevel: 'anonymous',
   // `manage/` and not `admin/`: the Functions host reserves `/admin`. See adminCommunities.
   route: 'manage/events/{eventId}',

@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { CalendarX } from 'lucide-react'
+import { CalendarX, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 import { useAuth } from '@lehub/shared/auth/useAuth'
+import { Button } from '@lehub/shared/components/Button'
 import { EmptyState } from '@lehub/shared/components/EmptyState'
 import { ErrorState } from '@lehub/shared/components/ErrorState'
+import { DeleteEventDialog } from '@/components/events/DeleteEventDialog'
 import { EventForm } from '@/components/events/EventForm'
 import { EMPTY_DRAFT, type EventDraft, type EventFormValues } from '@/lib/eventDraft'
 import { useSelectedCommunity } from '@/community/useSelectedCommunity'
@@ -150,6 +152,7 @@ export function EventFormPage(): ReactNode {
   const [dirty, setDirty] = useState(false)
   const [pending, setPending] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const listPath = community ? communityPath(community.slug, 'evenements') : '..'
   const releaseGuard = useUnsavedChanges(dirty, LEAVE_MESSAGE)
@@ -263,6 +266,22 @@ export function EventFormPage(): ReactNode {
           communityChips={chips.communities}
           technologyChips={chips.technologies}
           eventId={stored?.id}
+          destructiveAction={
+            // Présente en modification, absente en création (#146) : il n'y a rien à supprimer
+            // d'un évènement qui n'existe pas encore.
+            stored ? (
+              <Button
+                variant="ghost"
+                className="text-[#b91c1c] hover:bg-[#fef2f2] hover:text-[#b91c1c]"
+                onClick={() => {
+                  setConfirmingDelete(true)
+                }}
+              >
+                <Trash2 aria-hidden="true" className="size-[18px]" />
+                Supprimer
+              </Button>
+            ) : undefined
+          }
           submitError={submitError}
           pending={pending}
           submitLabel="Enregistrer"
@@ -274,6 +293,18 @@ export function EventFormPage(): ReactNode {
           }}
         />
       ) : null}
+
+      {/* Depuis le formulaire, la suppression ramène à la liste (#149). La garde de sortie est
+          désarmée d'abord : supprimer n'est pas abandonner une saisie. */}
+      <DeleteEventDialog
+        event={confirmingDelete && stored ? stored : null}
+        onOpenChange={setConfirmingDelete}
+        onDeleted={() => {
+          setDirty(false)
+          releaseGuard()
+          void navigate(listPath)
+        }}
+      />
     </>
   )
 }

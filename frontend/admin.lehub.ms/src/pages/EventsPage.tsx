@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { CalendarDays, Pencil, Plus, SearchX } from 'lucide-react'
+import { CalendarDays, Pencil, Plus, SearchX, Trash2 } from 'lucide-react'
 import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { EmptyState } from '@lehub/shared/components/EmptyState'
 import { ErrorState } from '@lehub/shared/components/ErrorState'
@@ -8,6 +8,7 @@ import { LinkButton } from '@lehub/shared/components/LinkButton'
 import { DataTable, type Column } from '@/components/data/DataTable'
 import { ResultCount } from '@/components/data/ResultCount'
 import { SearchField } from '@/components/data/SearchField'
+import { DeleteEventDialog } from '@/components/events/DeleteEventDialog'
 import { EventThumb } from '@/components/events/EventThumb'
 import { useSelectedCommunity } from '@/community/useSelectedCommunity'
 import { useReferenceList } from '@/hooks/useReferenceList'
@@ -79,6 +80,10 @@ export function EventsPage(): ReactNode {
     [communityId],
   )
   const state = useReferenceList(load)
+
+  /* L'évènement dont la suppression attend confirmation. Un seul à la fois, et l'objet lui-même
+     plutôt qu'un identifiant : la confirmation doit le **nommer** (#149). */
+  const [pendingDelete, setPendingDelete] = useState<AdminEvent | null>(null)
 
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortState<ColumnKey>>({
@@ -223,24 +228,48 @@ export function EventsPage(): ReactNode {
                 onSortChange={(key) => {
                   setSort((current) => nextSort(current, key))
                 }}
-                rowActions={(event) =>
-                  community ? (
-                    <Link
-                      to={eventPath(community.slug, event.id)}
-                      // 34 px sur écran pointé comme la maquette, 44 px sur mobile : le plancher
-                      // tactile des non-négociables l'emporte là où la maquette passe dessous.
-                      className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary sm:size-[34px]"
-                      aria-label={`Modifier ${event.title}`}
+                rowActions={(event) => (
+                  <>
+                    {community ? (
+                      <Link
+                        to={eventPath(community.slug, event.id)}
+                        // 34 px sur écran pointé comme la maquette, 44 px sur mobile : le
+                        // plancher tactile des non-négociables l'emporte là où la maquette
+                        // passe dessous.
+                        className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary sm:size-[34px]"
+                        aria-label={`Modifier ${event.title}`}
+                      >
+                        <Pencil aria-hidden="true" className="size-4" />
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={`Supprimer ${event.title}`}
+                      onClick={() => {
+                        setPendingDelete(event)
+                      }}
+                      className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-[#fef2f2] hover:text-[#b91c1c] sm:size-[34px]"
                     >
-                      <Pencil aria-hidden="true" className="size-4" />
-                    </Link>
-                  ) : null
-                }
+                      <Trash2 aria-hidden="true" className="size-4" />
+                    </button>
+                  </>
+                )}
               />
             )}
           </section>
         )
       ) : null}
+
+      {/* Depuis la liste, la suppression laisse en place : on relit, on ne change pas d'écran. */}
+      <DeleteEventDialog
+        event={pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+        onDeleted={() => {
+          state.refetch()
+        }}
+      />
     </>
   )
 }

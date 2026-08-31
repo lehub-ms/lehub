@@ -2,7 +2,7 @@ import { HttpRequest, InvocationContext } from '@azure/functions'
 import { describe, expect, it } from 'vitest'
 import { eventHandler } from '../src/functions/adminEvent'
 import { adminEvents } from '../src/functions/adminEvents'
-import { CREATE_EVENT_QUERY, mapEventOptions } from '../src/lib/eventsRepo'
+import { CREATE_EVENT_QUERY, DELETE_EVENT_QUERY, mapEventOptions } from '../src/lib/eventsRepo'
 import { CREATE_EVENT } from '../src/lib/eventSchemas'
 import { type SessionPermissions } from '../src/lib/permissionsRepo'
 import { type AuthenticatedIdentity } from '../src/lib/tokenValidation'
@@ -93,7 +93,11 @@ function handler(stored: typeof STORED | null = STORED) {
   return { route, written }
 }
 
-function request(method: 'GET' | 'PATCH', payload?: unknown, eventId = STORED.id): HttpRequest {
+function request(
+  method: 'GET' | 'PATCH' | 'DELETE',
+  payload?: unknown,
+  eventId = STORED.id,
+): HttpRequest {
   return new HttpRequest({
     method,
     url: `https://api.example.com/api/manage/events/${eventId}`,
@@ -469,5 +473,67 @@ describe('vocabulaires fermés', () => {
 
   it('rend deux listes vides plutôt que de lever quand rien ne revient', () => {
     expect(mapEventOptions([])).toEqual({ formats: [], modes: [] })
+  })
+})
+
+
+describe("suppression d'un évènement", () => {
+  /** Le suppresseur est injecté, comme le lecteur : aucune base ici. */
+  function handlerWith(stored: typeof STORED | null, removed: () => Promise<{ ok: boolean }>) {
+    const calls: string[] = []
+    const route = eventHandler(
+      () => Promise.resolve(stored),
+      () => Promise.resolve({ ok: true, event: STORED }),
+      (id) => {
+        calls.push(id)
+        return removed() as ReturnType<typeof import('../src/lib/eventsRepo').deleteEvent>
+      },
+    )
+    return { route, calls }
+  }
+
+  it('répond 204 et sans corps', async () => {
+    const { route, calls } = handlerWith(STORED, () => Promise.resolve({ ok: true }))
+    const response = await route(request('DELETE'), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(204)
+    expect(response.jsonBody).toBeUndefined()
+    expect(calls).toEqual([STORED.id])
+  })
+
+  it("obéit à la même règle que toute écriture sur l'évènement", async () => {
+    // #149 le dit ainsi : pas de règle plus stricte pour la suppression que pour la
+    // modification. Un organisateur étranger à ses communautés est refusé, et journalisé.
+    const ctx = context()
+    const { route, calls } = handlerWith(STORED, () => Promise.resolve({ ok: true }))
+    const response = await route(
+      request('DELETE'),
+      ctx,
+      session({ isGlobalAdmin: false, organizedCommunityIds: [THEIRS] }),
+    )
+
+    expect(response.status).toBe(403)
+    expect(JSON.stringify(ctx.errors)).toContain('delete:event')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('répond 404 sur un évènement déjà disparu, plutôt que de feindre la suppression', async () => {
+    // La course de l'edge case de #149 : supprimé depuis un autre onglet entre la lecture et
+    // la confirmation.
+    const { route } = handlerWith(STORED, () => Promise.resolve({ ok: false, error: 'not-found' } as { ok: boolean }))
+    const response = await route(request('DELETE'), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(404)
+    expect(code(response)).toBe('EVENT_NOT_FOUND')
+  })
+
+  it('laisse les rattachements à la base, qui les emporte en cascade', () => {
+    // `FK_EventCommunity_Event` et `FK_EventTechnology_Event` cascadent depuis la migration
+    // 0001 : rien à supprimer à la main, et les référentiels ne sont pas touchés.
+    expect(DELETE_EVENT_QUERY).toContain('DELETE FROM dbo.Event')
+    expect(DELETE_EVENT_QUERY).not.toContain('dbo.EventCommunity')
+    expect(DELETE_EVENT_QUERY).not.toContain('dbo.Community')
+    // `@@ROWCOUNT` distingue « supprimé » de « n'était pas là ».
+    expect(DELETE_EVENT_QUERY).toContain('@@ROWCOUNT')
   })
 })

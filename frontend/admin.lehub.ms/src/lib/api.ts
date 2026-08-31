@@ -238,6 +238,16 @@ export function updateEvent(eventId: string, patch: EventPatch): Promise<AdminEv
   })
 }
 
+/**
+ * Supprime l’évènement et ses rattachements — les clés étrangères cascadent (migration 0001).
+ *
+ * Ni le référentiel ni les comptes ne sont touchés, et la bannière reste dans le conteneur :
+ * le devenir du blob est arrêté côté serveur, voir `DELETE_EVENT_QUERY`.
+ */
+export function deleteEvent(eventId: string): Promise<void> {
+  return apiFetch<void>(`/api/manage/events/${encodeURIComponent(eventId)}`, { method: 'DELETE' })
+}
+
 export function createEvent(input: EventInput): Promise<AdminEvent> {
   return apiFetch<AdminEvent>('/api/manage/events', {
     method: 'POST',

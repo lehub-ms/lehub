@@ -436,6 +436,40 @@ export async function createEvent(input: CreateEventInput): Promise<EventWriteRe
 }
 
 /**
+ * Deletes an event and, with it, its attachments.
+ *
+ * Nothing cascades by hand: `FK_EventCommunity_Event` and `FK_EventTechnology_Event` both carry
+ * `ON DELETE CASCADE` since migration 0001, so the links go with the row and the referentials are
+ * untouched — which is exactly what #149 asks for, and what the schema was already shaped to do.
+ *
+ * **The banner blob stays.** It is the same decision `mediaUpload` documents for orphans and for
+ * the same reasons: a stray blob costs fractions of a cent a month against the 25 €/month design
+ * cap, the account keeps seven days of soft delete, and the container is `publicAccess: 'Blob'`
+ * so an unreferenced blob is unreachable without its exact generated name and is listed to
+ * nobody. Deleting it here would also be wrong in one real case — two events sharing a path,
+ * which nothing forbids. A sweep is a background job with an inventory, not a line in a DELETE.
+ *
+ * `@@ROWCOUNT` distinguishes "deleted" from "was not there", which is what lets the screen answer
+ * an event already removed from another tab with a sentence rather than with silence.
+ */
+export const DELETE_EVENT_QUERY = `
+DELETE FROM dbo.Event WHERE Id = @id;
+SELECT @@ROWCOUNT AS DeletedRows;
+`
+
+export type DeleteEventResult = { ok: true } | { ok: false; error: 'not-found' }
+
+export async function deleteEvent(id: string): Promise<DeleteEventResult> {
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('id', sql.UniqueIdentifier, id)
+    .query<{ DeletedRows: number }>(DELETE_EVENT_QUERY)
+
+  return (result.recordset[0]?.DeletedRows ?? 0) > 0 ? { ok: true } : { ok: false, error: 'not-found' }
+}
+
+/**
  * A PATCH: a key that is absent is a field left alone, which is not the same as one explicitly
  * set to null.
  *

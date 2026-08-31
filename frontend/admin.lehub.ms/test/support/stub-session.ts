@@ -76,6 +76,7 @@ export function stubSignedIn(
           const wanted = decodeURIComponent(eventId).toLowerCase()
           const found = ADMIN_EVENTS.find((event) => event.id.toLowerCase() === wanted)
           if (!found) return Promise.resolve(jsonResponse({ code: 'EVENT_NOT_FOUND' }, 404))
+          if (init?.method === 'DELETE') return Promise.resolve(noContent())
           if (init?.method === 'PATCH') {
             const patch = JSON.parse(init.body as string) as Record<string, unknown>
             return Promise.resolve(jsonResponse({ ...found, ...patch }))
