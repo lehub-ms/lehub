@@ -1,7 +1,9 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { canWriteReferenceData } from '../lib/authz'
-import { listAdminCommunities } from '../lib/communitiesRepo'
-import { forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
+import { createCommunity, listAdminCommunities } from '../lib/communitiesRepo'
+import { errorResponse, forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
+import { CREATE_COMMUNITY } from '../lib/referenceSchemas'
+import { parseBody } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
 /**
@@ -26,10 +28,12 @@ export async function adminCommunities(
   if (!canWriteReferenceData(session.permissions)) {
     return forbidden(context, {
       route: routeLabel(request),
-      action: 'read:admin-communities',
+      action: request.method === 'POST' ? 'create:community' : 'read:admin-communities',
       objectId: session.identity.objectId,
     })
   }
+
+  if (request.method === 'POST') return create(request, context)
 
   try {
     return { status: 200, jsonBody: await listAdminCommunities() }
@@ -44,8 +48,42 @@ export async function adminCommunities(
   }
 }
 
+/**
+ * Authorise first, validate second. Someone who may not write must receive the same 403 whether
+ * their body was well-formed or not — validating first would let them tell "my payload was
+ * wrong" from "I am not allowed", which is an enumeration channel. See lib/validation.
+ */
+async function create(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  const body = await parseBody(request, context, CREATE_COMMUNITY)
+  if (!body.ok) return body.response
+
+  let result
+  try {
+    result = await createCommunity(body.value)
+  } catch (error) {
+    return listFetchError(
+      context,
+      'Failed to create a community',
+      error,
+      'COMMUNITY_WRITE_ERROR',
+      'Unable to create the community.',
+    )
+  }
+
+  if (!result.ok) {
+    // 409 and not 400: the body is perfectly well formed, another row simply holds that name.
+    // The French sentence is the front-end's, as httpErrors' header explains.
+    return errorResponse(409, 'COMMUNITY_NAME_TAKEN', 'Another community already has this name.')
+  }
+
+  return { status: 201, jsonBody: result.community }
+}
+
 app.http('adminCommunities', {
-  methods: ['GET'],
+  methods: ['GET', 'POST'],
   authLevel: 'anonymous',
   route: 'admin/communities',
   handler: withAuthorization(adminCommunities),

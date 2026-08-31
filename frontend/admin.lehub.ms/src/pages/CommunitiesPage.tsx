@@ -1,11 +1,21 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { Building2 } from 'lucide-react'
 import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
 import { ReferenceScreen } from '@/components/reference/ReferenceScreen'
+import {
+  ReferencePanel,
+  type PanelState,
+  type ReferenceDraft,
+} from '@/components/reference/ReferencePanel'
 import { StatusTag } from '@/components/reference/StatusTag'
 import type { Column } from '@/components/data/DataTable'
 import { useReferenceList } from '@/hooks/useReferenceList'
-import { listAdminCommunities, type AdminCommunity } from '@/lib/api'
+import {
+  createCommunity,
+  listAdminCommunities,
+  updateCommunity,
+  type AdminCommunity,
+} from '@/lib/api'
 import type { Comparable } from '@/lib/referenceFilters'
 
 type ColumnKey = 'name' | 'organizerCount' | 'status'
@@ -61,6 +71,34 @@ export function CommunitiesPage(): ReactNode {
   // lecture à chaque rendu.
   const load = useCallback(() => listAdminCommunities(), [])
   const state = useReferenceList(load)
+  const [panel, setPanel] = useState<PanelState<AdminCommunity>>({ mode: 'closed' })
+  // Incrémenté à chaque ouverture : c'est ce qui remonte le formulaire sans démonter le
+  // `Dialog`, dont le démontage est ce qui rend le focus au bouton d'origine.
+  const [session, setSession] = useState(0)
+  // Le bouton qui a ouvert le panneau : c'est à lui que le focus revient à la fermeture, sans
+  // quoi une personne au clavier repart du haut du document. Voir `SidePanel`.
+  const trigger = useRef<HTMLElement | null>(null)
+
+  async function save(draft: ReferenceDraft): Promise<void> {
+    if (panel.mode === 'edit') {
+      await updateCommunity(panel.entry.id, {
+        name: draft.name,
+        description: draft.description,
+        logoPath: draft.logoPath,
+        status: draft.status,
+      })
+    } else {
+      await createCommunity({
+        name: draft.name,
+        description: draft.description,
+        logoPath: draft.logoPath,
+        status: draft.status,
+      })
+    }
+    // Relire plutôt que rapiécer la liste en mémoire : les compteurs viennent du serveur, et une
+    // ligne recomposée à la main finirait par diverger de ce que la table affiche.
+    state.refetch()
+  }
 
   return (
     <ReferenceScreen
@@ -79,6 +117,31 @@ export function CommunitiesPage(): ReactNode {
       emptyTitle="Aucune communauté référencée"
       emptyDescription="Les communautés partenaires apparaîtront ici une fois ajoutées au référentiel."
       errorTitle="Impossible de charger les communautés"
+      labelOf={(community) => community.name}
+      createLabel="Nouvelle communauté"
+      onCreate={(from) => {
+        trigger.current = from
+        setSession((count) => count + 1)
+        setPanel({ mode: 'create' })
+      }}
+      onEdit={(community, from) => {
+        trigger.current = from
+        setSession((count) => count + 1)
+        setPanel({ mode: 'edit', entry: community })
+      }}
+      panel={
+        <ReferencePanel
+          kind="community"
+          entry={panel.mode === 'edit' ? panel.entry : null}
+          open={panel.mode !== 'closed'}
+          session={session}
+          onClose={() => {
+            setPanel({ mode: 'closed' })
+          }}
+          onSubmit={save}
+          restoreFocusTo={trigger}
+        />
+      }
     />
   )
 }

@@ -1,5 +1,6 @@
 import sql from 'mssql'
 import { getPool } from './sqlClient'
+import { isUniqueViolation } from './sqlErrors'
 
 /**
  * The mirror of an authenticated identity in LeHub's own database.
@@ -125,13 +126,11 @@ INNER JOIN dbo.[User] AS u ON u.Email = b.Email
 WHERE u.ExternalIdObjectId = @objectId AND b.AppliedAt IS NULL;
 `
 
-/** SQL Server's two codes for a unique constraint and a unique index violation. */
-const UNIQUE_VIOLATION = new Set([2601, 2627])
-
-export function isUniqueViolation(error: unknown): boolean {
-  const number = (error as { number?: unknown } | null)?.number
-  return typeof number === 'number' && UNIQUE_VIOLATION.has(number)
-}
+/**
+ * Re-exported rather than moved outright: `api/test/userRepo.test.ts` pins it here, and three
+ * repositories now need it. It lives in lib/sqlErrors.
+ */
+export { isUniqueViolation } from './sqlErrors'
 
 export async function mirrorUser(input: MirrorInput): Promise<MirrorResult> {
   const pool = await getPool()

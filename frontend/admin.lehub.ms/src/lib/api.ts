@@ -65,3 +65,75 @@ export function listAdminCommunities(): Promise<AdminCommunity[]> {
 export function listAdminTechnologies(): Promise<AdminTechnology[]> {
   return apiFetch<AdminTechnology[]>('/api/admin/technologies')
 }
+
+/** Le corps accepté à la création. Le serveur fait foi — voir `api/src/lib/referenceSchemas.ts`. */
+export interface CommunityInput {
+  name: string
+  description: string | null
+  logoPath: string | null
+  status: ReferenceStatus
+}
+
+export type TechnologyInput = Omit<CommunityInput, 'description'>
+
+export function createCommunity(input: CommunityInput): Promise<AdminCommunity> {
+  return apiFetch<AdminCommunity>('/api/admin/communities', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+/** Un champ absent est un champ inchangé ; `null` efface. Voir la route PATCH. */
+export function updateCommunity(
+  id: string,
+  patch: Partial<CommunityInput>,
+): Promise<AdminCommunity> {
+  return apiFetch<AdminCommunity>(`/api/admin/communities/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+}
+
+export function createTechnology(input: TechnologyInput): Promise<AdminTechnology> {
+  return apiFetch<AdminTechnology>('/api/admin/technologies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateTechnology(
+  id: string,
+  patch: Partial<TechnologyInput>,
+): Promise<AdminTechnology> {
+  return apiFetch<AdminTechnology>(`/api/admin/technologies/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+}
+
+/** Les destinations que la route de téléversement accepte aujourd’hui. */
+export type UploadDestination = 'community-logo' | 'technology-logo'
+
+export interface UploadedImage {
+  /** Le chemin relatif à enregistrer sur l’entité. */
+  path: string
+  /** L’URL absolue, pour l’aperçu — jamais recomposée ici. */
+  url: string | null
+}
+
+/**
+ * Pas d’en-tête `Content-Type` posé à la main : le navigateur le compose lui-même à partir du
+ * `FormData`, avec la frontière multipart qu’il vient de tirer. En poser un le priverait de
+ * cette frontière et le corps deviendrait illisible côté serveur.
+ */
+export function uploadImage(file: File, destination: UploadDestination): Promise<UploadedImage> {
+  const form = new FormData()
+  form.set('destination', destination)
+  form.set('file', file)
+
+  return apiFetch<UploadedImage>('/api/media/uploads', { method: 'POST', body: form })
+}

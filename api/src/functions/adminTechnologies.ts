@@ -1,7 +1,9 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { canWriteReferenceData } from '../lib/authz'
-import { listAdminTechnologies } from '../lib/technologiesRepo'
-import { forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
+import { createTechnology, listAdminTechnologies } from '../lib/technologiesRepo'
+import { errorResponse, forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
+import { CREATE_TECHNOLOGY } from '../lib/referenceSchemas'
+import { parseBody } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
 /**
@@ -24,10 +26,12 @@ export async function adminTechnologies(
   if (!canWriteReferenceData(session.permissions)) {
     return forbidden(context, {
       route: routeLabel(request),
-      action: 'read:admin-technologies',
+      action: request.method === 'POST' ? 'create:technology' : 'read:admin-technologies',
       objectId: session.identity.objectId,
     })
   }
+
+  if (request.method === 'POST') return create(request, context)
 
   try {
     return { status: 200, jsonBody: await listAdminTechnologies() }
@@ -42,8 +46,36 @@ export async function adminTechnologies(
   }
 }
 
+/** Authorise first, validate second — see the community collection for why. */
+async function create(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  const body = await parseBody(request, context, CREATE_TECHNOLOGY)
+  if (!body.ok) return body.response
+
+  let result
+  try {
+    result = await createTechnology(body.value)
+  } catch (error) {
+    return listFetchError(
+      context,
+      'Failed to create a technology',
+      error,
+      'TECHNOLOGY_WRITE_ERROR',
+      'Unable to create the technology.',
+    )
+  }
+
+  if (!result.ok) {
+    return errorResponse(409, 'TECHNOLOGY_NAME_TAKEN', 'Another technology already has this name.')
+  }
+
+  return { status: 201, jsonBody: result.technology }
+}
+
 app.http('adminTechnologies', {
-  methods: ['GET'],
+  methods: ['GET', 'POST'],
   authLevel: 'anonymous',
   route: 'admin/technologies',
   handler: withAuthorization(adminTechnologies),

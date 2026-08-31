@@ -1,5 +1,7 @@
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
+import sql from 'mssql'
 import { getPool } from './sqlClient'
+import { isUniqueViolation } from './sqlErrors'
 
 export interface CommunitySummary {
   id: string
@@ -113,4 +115,141 @@ export function mapAdminCommunity(media: MediaConfig) {
     organizerCount: row.OrganizerCount,
     eventCount: row.EventCount,
   })
+}
+
+/**
+ * What a write to the referential can answer.
+ *
+ * A duplicate name is a *refusal*, not an exception: it is a legitimate outcome the screen has
+ * something to say about. Same construction as `MirrorResult` in userRepo — a discriminated
+ * result, never a throw, so no caller can forget to handle it.
+ */
+export type CommunityWriteResult =
+  | { ok: true; community: AdminCommunity }
+  | { ok: false; error: 'name-taken' }
+  | { ok: false; error: 'not-found' }
+
+export interface CreateCommunityInput {
+  name: string
+  description: string | null
+  logoPath: string | null
+  status: ReferenceStatus
+}
+
+/**
+ * A PATCH: a key that is absent is a field left alone, which is not the same as one set to null.
+ *
+ * Spelled out rather than `Partial<>` because of `exactOptionalPropertyTypes`: under it,
+ * `Partial<T>` refuses an explicit `undefined`, which is exactly what the validated body hands
+ * over for a key the caller omitted.
+ */
+export type UpdateCommunityInput = {
+  [K in keyof CreateCommunityInput]?: CreateCommunityInput[K] | undefined
+}
+
+/**
+ * The admin projection of one community, by id. Appended to a write so the caller gets the row
+ * with its counts in the same round-trip rather than reading it back separately.
+ */
+const SELECT_ADMIN_COMMUNITY = `
+SELECT
+  c.Id,
+  c.Name,
+  c.LogoPath,
+  c.Description,
+  c.Status,
+  (SELECT COUNT(*) FROM dbo.CommunityOrganizer co WHERE co.CommunityId = c.Id) AS OrganizerCount,
+  (SELECT COUNT(*) FROM dbo.EventCommunity     ec WHERE ec.CommunityId = c.Id) AS EventCount
+FROM dbo.Community AS c
+WHERE c.Id = @id
+`
+
+export const CREATE_COMMUNITY_QUERY = `
+DECLARE @created TABLE (Id UNIQUEIDENTIFIER);
+
+INSERT INTO dbo.Community (Name, Description, LogoPath, Status)
+OUTPUT inserted.Id INTO @created
+VALUES (@name, @description, @logoPath, @status);
+
+DECLARE @id UNIQUEIDENTIFIER = (SELECT TOP 1 Id FROM @created);
+${SELECT_ADMIN_COMMUNITY}
+`
+
+export async function createCommunity(input: CreateCommunityInput): Promise<CommunityWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  let rows: AdminCommunityRow[]
+  try {
+    const result = await pool
+      .request()
+      .input('name', sql.NVarChar(200), input.name)
+      .input('description', sql.NVarChar(300), input.description)
+      .input('logoPath', sql.NVarChar(500), input.logoPath)
+      .input('status', sql.NVarChar(20), input.status)
+      .query<AdminCommunityRow>(CREATE_COMMUNITY_QUERY)
+    rows = result.recordset
+  } catch (error) {
+    // UX_Community_Name. Read-then-insert could always be overtaken between the two, so the
+    // index is what actually decides and this reads its verdict.
+    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    throw error
+  }
+
+  const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, community: mapAdminCommunity(media)(row) }
+}
+
+/**
+ * The columns a PATCH may touch, and the only place a request key becomes a column name.
+ *
+ * The SET clause is assembled from the keys actually present — `COALESCE` cannot serve here,
+ * because `null` is a meaningful value for a description or a logo and would be indistinguishable
+ * from "absent". Only keys of this record ever reach the statement, and every value stays a
+ * typed parameter, so nothing a caller sends is ever concatenated into SQL.
+ */
+const UPDATABLE_COLUMNS = {
+  name: { column: 'Name', type: sql.NVarChar(200) },
+  description: { column: 'Description', type: sql.NVarChar(300) },
+  logoPath: { column: 'LogoPath', type: sql.NVarChar(500) },
+  status: { column: 'Status', type: sql.NVarChar(20) },
+} as const
+
+export async function updateCommunity(
+  id: string,
+  patch: UpdateCommunityInput,
+): Promise<CommunityWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  const request = pool.request().input('id', sql.UniqueIdentifier, id)
+  const assignments: string[] = []
+
+  for (const [key, spec] of Object.entries(UPDATABLE_COLUMNS)) {
+    const value = patch[key as keyof UpdateCommunityInput]
+    if (value === undefined) continue
+    assignments.push(`${spec.column} = @${key}`)
+    request.input(key, spec.type, value)
+  }
+
+  // The schema already refuses an empty patch; this keeps the statement valid if that ever
+  // changes, and answers the read rather than a syntax error.
+  const update =
+    assignments.length > 0
+      ? `UPDATE dbo.Community SET ${assignments.join(', ')} WHERE Id = @id;`
+      : ''
+
+  let rows: AdminCommunityRow[]
+  try {
+    const result = await request.query<AdminCommunityRow>(`${update}${SELECT_ADMIN_COMMUNITY}`)
+    rows = result.recordset
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    throw error
+  }
+
+  const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, community: mapAdminCommunity(media)(row) }
 }

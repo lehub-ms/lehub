@@ -1,9 +1,11 @@
+import type { MouseEvent } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Button } from './Button'
 
 interface EmptyStateAction {
   label: string
-  onClick: () => void
+  /** Reçoit l'évènement, pour l'appelant qui a besoin du bouton lui-même — restitution du focus. */
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
 interface EmptyStateProps {

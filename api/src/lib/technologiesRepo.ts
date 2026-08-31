@@ -1,5 +1,7 @@
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
+import sql from 'mssql'
 import { getPool } from './sqlClient'
+import { isUniqueViolation } from './sqlErrors'
 import { type ReferenceStatus } from './communitiesRepo'
 
 /**
@@ -64,4 +66,110 @@ export function mapAdminTechnology(media: MediaConfig) {
     status: row.Status,
     eventCount: row.EventCount,
   })
+}
+
+/** Same construction as the community side: a refusal is a result, never a throw. */
+export type TechnologyWriteResult =
+  | { ok: true; technology: AdminTechnology }
+  | { ok: false; error: 'name-taken' }
+  | { ok: false; error: 'not-found' }
+
+export interface CreateTechnologyInput {
+  name: string
+  logoPath: string | null
+  status: ReferenceStatus
+}
+
+export type UpdateTechnologyInput = {
+  [K in keyof CreateTechnologyInput]?: CreateTechnologyInput[K] | undefined
+}
+
+const SELECT_ADMIN_TECHNOLOGY = `
+SELECT
+  t.Id,
+  t.Name,
+  t.LogoPath,
+  t.Status,
+  (SELECT COUNT(*) FROM dbo.EventTechnology et WHERE et.TechnologyId = t.Id) AS EventCount
+FROM dbo.Technology AS t
+WHERE t.Id = @id
+`
+
+export const CREATE_TECHNOLOGY_QUERY = `
+DECLARE @created TABLE (Id UNIQUEIDENTIFIER);
+
+INSERT INTO dbo.Technology (Name, LogoPath, Status)
+OUTPUT inserted.Id INTO @created
+VALUES (@name, @logoPath, @status);
+
+DECLARE @id UNIQUEIDENTIFIER = (SELECT TOP 1 Id FROM @created);
+${SELECT_ADMIN_TECHNOLOGY}
+`
+
+export async function createTechnology(
+  input: CreateTechnologyInput,
+): Promise<TechnologyWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  let rows: AdminTechnologyRow[]
+  try {
+    const result = await pool
+      .request()
+      .input('name', sql.NVarChar(200), input.name)
+      .input('logoPath', sql.NVarChar(500), input.logoPath)
+      .input('status', sql.NVarChar(20), input.status)
+      .query<AdminTechnologyRow>(CREATE_TECHNOLOGY_QUERY)
+    rows = result.recordset
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    throw error
+  }
+
+  const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, technology: mapAdminTechnology(media)(row) }
+}
+
+/** The only place a request key becomes a column name. See the community repository. */
+const UPDATABLE_COLUMNS = {
+  name: { column: 'Name', type: sql.NVarChar(200) },
+  logoPath: { column: 'LogoPath', type: sql.NVarChar(500) },
+  status: { column: 'Status', type: sql.NVarChar(20) },
+} as const
+
+export async function updateTechnology(
+  id: string,
+  patch: UpdateTechnologyInput,
+): Promise<TechnologyWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  const request = pool.request().input('id', sql.UniqueIdentifier, id)
+  const assignments: string[] = []
+
+  for (const [key, spec] of Object.entries(UPDATABLE_COLUMNS)) {
+    const value = patch[key as keyof UpdateTechnologyInput]
+    if (value === undefined) continue
+    assignments.push(`${spec.column} = @${key}`)
+    request.input(key, spec.type, value)
+  }
+
+  const update =
+    assignments.length > 0
+      ? `UPDATE dbo.Technology SET ${assignments.join(', ')} WHERE Id = @id;`
+      : ''
+
+  let rows: AdminTechnologyRow[]
+  try {
+    const result = await request.query<AdminTechnologyRow>(`${update}${SELECT_ADMIN_TECHNOLOGY}`)
+    rows = result.recordset
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    throw error
+  }
+
+  const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, technology: mapAdminTechnology(media)(row) }
 }

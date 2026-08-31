@@ -1,11 +1,21 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { Layers } from 'lucide-react'
 import { TechnologyAvatar } from '@lehub/shared/components/entities/TechnologyAvatar'
 import { ReferenceScreen } from '@/components/reference/ReferenceScreen'
+import {
+  ReferencePanel,
+  type PanelState,
+  type ReferenceDraft,
+} from '@/components/reference/ReferencePanel'
 import { StatusTag } from '@/components/reference/StatusTag'
 import type { Column } from '@/components/data/DataTable'
 import { useReferenceList } from '@/hooks/useReferenceList'
-import { listAdminTechnologies, type AdminTechnology } from '@/lib/api'
+import {
+  createTechnology,
+  listAdminTechnologies,
+  updateTechnology,
+  type AdminTechnology,
+} from '@/lib/api'
 import type { Comparable } from '@/lib/referenceFilters'
 
 type ColumnKey = 'name' | 'status'
@@ -43,6 +53,25 @@ function valueOf(technology: AdminTechnology, key: ColumnKey): Comparable {
 export function TechnologiesPage(): ReactNode {
   const load = useCallback(() => listAdminTechnologies(), [])
   const state = useReferenceList(load)
+  const [panel, setPanel] = useState<PanelState<AdminTechnology>>({ mode: 'closed' })
+  // Incrémenté à chaque ouverture : c'est ce qui remonte le formulaire sans démonter le
+  // `Dialog`, dont le démontage est ce qui rend le focus au bouton d'origine.
+  const [session, setSession] = useState(0)
+  // Le bouton qui a ouvert le panneau : c'est à lui que le focus revient à la fermeture, sans
+  // quoi une personne au clavier repart du haut du document. Voir `SidePanel`.
+  const trigger = useRef<HTMLElement | null>(null)
+
+  // Pas de description : une technologie étiquette, elle ne se raconte pas, et le panneau ne lui
+  // en propose pas de champ.
+  async function save(draft: ReferenceDraft): Promise<void> {
+    const input = { name: draft.name, logoPath: draft.logoPath, status: draft.status }
+    if (panel.mode === 'edit') {
+      await updateTechnology(panel.entry.id, input)
+    } else {
+      await createTechnology(input)
+    }
+    state.refetch()
+  }
 
   return (
     <ReferenceScreen
@@ -61,6 +90,31 @@ export function TechnologiesPage(): ReactNode {
       emptyTitle="Aucune technologie référencée"
       emptyDescription="Les technologies apparaîtront ici une fois ajoutées au référentiel."
       errorTitle="Impossible de charger les technologies"
+      labelOf={(technology) => technology.name}
+      createLabel="Nouvelle technologie"
+      onCreate={(from) => {
+        trigger.current = from
+        setSession((count) => count + 1)
+        setPanel({ mode: 'create' })
+      }}
+      onEdit={(technology, from) => {
+        trigger.current = from
+        setSession((count) => count + 1)
+        setPanel({ mode: 'edit', entry: technology })
+      }}
+      panel={
+        <ReferencePanel
+          kind="technology"
+          entry={panel.mode === 'edit' ? { ...panel.entry, description: null } : null}
+          open={panel.mode !== 'closed'}
+          session={session}
+          onClose={() => {
+            setPanel({ mode: 'closed' })
+          }}
+          onSubmit={save}
+          restoreFocusTo={trigger}
+        />
+      }
     />
   )
 }

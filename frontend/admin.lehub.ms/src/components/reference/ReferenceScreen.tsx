@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { SearchX } from 'lucide-react'
+import { Pencil, Plus, SearchX } from 'lucide-react'
+import { Button } from '@lehub/shared/components/Button'
 import { EmptyState } from '@lehub/shared/components/EmptyState'
 import { ErrorState } from '@lehub/shared/components/ErrorState'
 import { DataTable, type Column } from '@/components/data/DataTable'
@@ -22,6 +23,8 @@ interface ReferenceScreenProps<T, K extends string> {
   state: ReferenceListState<T> & { refetch: () => void }
   columns: readonly Column<T, K>[]
   getRowId: (entry: T) => string
+  /** Le libellé d'une entrée, pour nommer l'action de ligne : « Modifier Azure User Group ». */
+  labelOf: (entry: T) => string
   defaultSortKey: K
   valueOf: (entry: T, key: K) => Comparable
   /** Les champs sur lesquels la recherche porte — le nom seul, ou le nom et la description. */
@@ -32,6 +35,16 @@ interface ReferenceScreenProps<T, K extends string> {
   emptyTitle: string
   emptyDescription: string
   errorTitle: string
+  /** L'intitulé du bouton d'ajout — « Nouvelle communauté ». */
+  createLabel: string
+  /**
+   * Ouvrent le panneau. L'écran ne sait pas ce qu'il contient, seulement quand l'ouvrir — et il
+   * passe le bouton qui vient de le faire, à qui le panneau rendra le focus en se refermant.
+   */
+  onCreate: (trigger: HTMLElement) => void
+  onEdit: (entry: T, trigger: HTMLElement) => void
+  /** Le panneau lui-même, rendu par l'appelant. */
+  panel?: ReactNode
 }
 
 /**
@@ -53,6 +66,7 @@ export function ReferenceScreen<T, K extends string>({
   state,
   columns,
   getRowId,
+  labelOf,
   defaultSortKey,
   valueOf,
   searchableOf,
@@ -62,6 +76,10 @@ export function ReferenceScreen<T, K extends string>({
   emptyTitle,
   emptyDescription,
   errorTitle,
+  createLabel,
+  onCreate,
+  onEdit,
+  panel,
 }: ReferenceScreenProps<T, K>): ReactNode {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortState<K>>({
@@ -80,9 +98,19 @@ export function ReferenceScreen<T, K extends string>({
 
   return (
     <>
-      <header>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <p className="mt-2 text-[0.9375rem] text-ink-muted">{intro}</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{title}</h1>
+          <p className="mt-2 text-[0.9375rem] text-ink-muted">{intro}</p>
+        </div>
+        <Button
+          onClick={(event) => {
+            onCreate(event.currentTarget)
+          }}
+        >
+          <Plus aria-hidden="true" className="size-[18px]" />
+          {createLabel}
+        </Button>
       </header>
 
       {state.status === 'loading' ? (
@@ -102,7 +130,17 @@ export function ReferenceScreen<T, K extends string>({
           // Référentiel vide : distinct d'une recherche sans résultat, parce que ce n'est pas le
           // même problème et que la sortie n'est pas la même.
           <div className="mt-8">
-            <EmptyState icon={icon} title={emptyTitle} description={emptyDescription} />
+            <EmptyState
+              icon={icon}
+              title={emptyTitle}
+              description={emptyDescription}
+              action={{
+                label: createLabel,
+                onClick: (event) => {
+                  onCreate(event.currentTarget)
+                },
+              }}
+            />
           </div>
         ) : (
           <section className="glass mt-8 rounded-2xl p-4 sm:p-6">
@@ -141,11 +179,27 @@ export function ReferenceScreen<T, K extends string>({
                 onSortChange={(key) => {
                   setSort((current) => nextSort(current, key))
                 }}
+                rowActions={(entry) => (
+                  <button
+                    type="button"
+                    // 44px sans condition de point de rupture : une règle vaut mieux qu'une
+                    // exception, et la barre latérale applique déjà la même.
+                    className="flex size-11 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-primary-xs hover:text-primary"
+                    aria-label={`Modifier ${labelOf(entry)}`}
+                    onClick={(event) => {
+                      onEdit(entry, event.currentTarget)
+                    }}
+                  >
+                    <Pencil aria-hidden="true" className="size-4" />
+                  </button>
+                )}
               />
             )}
           </section>
         )
       ) : null}
+
+      {panel}
     </>
   )
 }

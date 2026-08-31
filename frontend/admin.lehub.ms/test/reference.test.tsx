@@ -22,12 +22,16 @@ async function enter(permissions: SessionPermissions, path: string): Promise<HTM
   return screen.findByRole('table')
 }
 
-function headerButton(table: HTMLElement, name: string): HTMLElement {
-  return within(table).getByRole('button', { name: new RegExp(name) })
-}
-
 function columnHeader(table: HTMLElement, name: string): HTMLElement {
   return within(table).getByRole('columnheader', { name: new RegExp(name) })
+}
+
+/**
+ * Cadré sur l'en-tête, jamais sur la table : les actions de ligne portent le nom de leur entrée
+ * (« Modifier Communauté Généraliste… »), et un motif large les attraperait aussi.
+ */
+function headerButton(table: HTMLElement, name: string): HTMLElement {
+  return within(columnHeader(table, name)).getByRole('button')
 }
 
 /** Les libellés de la première colonne, dans l'ordre où la table les rend. */
