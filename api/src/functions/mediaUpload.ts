@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import type { ContainerClient } from '@azure/storage-blob'
-import { canUploadTo } from '../lib/authz'
+import { z } from 'zod'
+import { canUploadEventBanner, canUploadTo } from '../lib/authz'
+import { getAdminEvent } from '../lib/eventsRepo'
 import { errorResponse, forbidden, routeLabel } from '../lib/httpErrors'
 import { sniffImage } from '../lib/imageSniff'
 import { getMediaContainer } from '../lib/mediaStorage'
 import { getMediaConfig, mediaUrl } from '../lib/mediaUrls'
 import {
+  DESTINATION_KINDS,
   DESTINATION_PREFIXES,
   MAX_UPLOAD_BYTES,
   UPLOAD_DESTINATION,
@@ -35,6 +38,9 @@ import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthori
  * would need an inventory of every referenced path across three tables plus a grace window for
  * uploads in flight — a background job, not part of this route.
  */
+/** Same choice as `lib/validation.ts`: this repository's identifiers are not all RFC 4122. */
+const GUID = z.guid()
+
 interface UploadResult {
   /** What the entity stores. */
   path: string
@@ -64,7 +70,20 @@ function containerWriter(container: ContainerClient): BlobWriter {
   }
 }
 
-export function uploadImage(write?: BlobWriter) {
+/**
+ * Resolves the communities of the event a banner is for, or `null` when there is no event yet.
+ *
+ * A parameter, like the writer, so the destination that needs a database can still be exercised
+ * without one.
+ */
+export type EventCommunitiesReader = (eventId: string) => Promise<readonly string[] | null>
+
+const readEventCommunities: EventCommunitiesReader = async (eventId) => {
+  const event = await getAdminEvent(eventId)
+  return event ? event.communities.map((community) => community.id) : null
+}
+
+export function uploadImage(write?: BlobWriter, readCommunities = readEventCommunities) {
   return async function mediaUpload(
     request: HttpRequest,
     context: InvocationContext,
@@ -93,7 +112,45 @@ export function uploadImage(write?: BlobWriter) {
 
     // Authorisation before the file is looked at, and the refusal names nothing: someone who may
     // not write must get the same 403 whether their file was valid or not.
-    if (!canUploadTo(session.permissions, destination.data)) {
+    let allowed: boolean
+    if (destination.data === 'event-banner') {
+      // The event is optional: the form uploads before the event exists, because it previews
+      // the real URL. Given one, the permission is the event's; given none, it is "may this
+      // account create events at all". See `canUploadEventBanner`.
+      const eventId = form.get('eventId')
+      const target = typeof eventId === 'string' && eventId.length > 0 ? eventId : null
+
+      if (target && !GUID.safeParse(target).success) {
+        context.error('Upload event identifier refused', { route })
+        return errorResponse(400, 'INVALID_EVENT_ID', 'The event identifier is not in the expected form.')
+      }
+
+      let communities: readonly string[] | null = null
+      if (target) {
+        try {
+          communities = await readCommunities(target)
+        } catch (error) {
+          context.error('Failed to read the event of a banner upload', { route }, error)
+          return errorResponse(500, 'EVENT_FETCH_ERROR', 'Unable to read the event.')
+        }
+        // An identifier that resolves to nothing is refused as a permission, not as a 404: the
+        // caller has no event to prove anything about, and `canUploadEventBanner` would happily
+        // fall back to the creation case and let them through.
+        if (!communities) {
+          return forbidden(context, {
+            route,
+            action: 'upload:event-banner',
+            objectId: session.identity.objectId,
+          })
+        }
+      }
+
+      allowed = canUploadEventBanner(session.permissions, communities)
+    } else {
+      allowed = canUploadTo(session.permissions, destination.data)
+    }
+
+    if (!allowed) {
       return forbidden(context, {
         route,
         action: `upload:${destination.data}`,
@@ -112,12 +169,18 @@ export function uploadImage(write?: BlobWriter) {
     if (bytes.byteLength > MAX_UPLOAD_BYTES) return tooLarge()
 
     const image = sniffImage(bytes)
-    if (!image) {
-      context.error('Upload refused on its content', { route, declared: file.type.slice(0, 60) })
+    // The bytes decide the format, and the **destination** decides which formats it takes: a
+    // banner is a photograph, so SVG is refused there (#148) while a logo still accepts it.
+    if (!image || !DESTINATION_KINDS[destination.data].includes(image.kind)) {
+      context.error('Upload refused on its content', {
+        route,
+        destination: destination.data,
+        declared: file.type.slice(0, 60),
+      })
       return errorResponse(
         415,
         'UNSUPPORTED_MEDIA_TYPE',
-        'Only PNG, JPEG, WebP and SVG images are accepted, decided from the file content.',
+        'The image format is not one this destination accepts, decided from the file content.',
       )
     }
 

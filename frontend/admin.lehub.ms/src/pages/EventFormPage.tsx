@@ -100,6 +100,8 @@ function draftFor(event: AdminEvent | null, defaultCommunityId: string | null): 
     eventModeId: event.eventModeId,
     communityIds: event.communities.map((community) => community.id),
     technologyIds: event.technologies.map((technology) => technology.id),
+    bannerImagePath: event.bannerImagePath,
+    bannerImageUrl: event.bannerImageUrl,
   }
 }
 
@@ -189,11 +191,9 @@ export function EventFormPage(): ReactNode {
     setSubmitError(null)
     try {
       if (stored) {
-        // La bannière n'est pas envoyée, donc pas touchée : elle appartient à #148 et ce
-        // formulaire ne la possède pas encore.
         await updateEvent(stored.id, values)
       } else {
-        await createEvent({ ...values, bannerImagePath: null })
+        await createEvent(values)
       }
       // Désarmée **avant** de naviguer. `setDirty(false)` seul ne suffit pas : la garde
       // interroge sa condition de façon synchrone, avant que l'état n'ait été propagé.
@@ -262,6 +262,7 @@ export function EventFormPage(): ReactNode {
           options={data.options}
           communityChips={chips.communities}
           technologyChips={chips.technologies}
+          eventId={stored?.id}
           submitError={submitError}
           pending={pending}
           submitLabel="Enregistrer"

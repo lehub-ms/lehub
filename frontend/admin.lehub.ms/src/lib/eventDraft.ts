@@ -20,6 +20,14 @@ export interface EventDraft {
   /** Les rattachements cochés. Remplacent l'ensemble à l'enregistrement, jamais s'y ajoutent. */
   communityIds: string[]
   technologyIds: string[]
+  /**
+   * La bannière : le **chemin** est ce qui s'enregistre, l'URL ce qui s'affiche.
+   *
+   * Les deux, comme le contrat les rend : recomposer l'une depuis l'autre mettrait `mediaUrls`
+   * dans le navigateur. Voir `AdminEvent`.
+   */
+  bannerImagePath: string | null
+  bannerImageUrl: string | null
 }
 
 export const EMPTY_DRAFT: EventDraft = {
@@ -31,6 +39,8 @@ export const EMPTY_DRAFT: EventDraft = {
   eventModeId: '',
   communityIds: [],
   technologyIds: [],
+  bannerImagePath: null,
+  bannerImageUrl: null,
 }
 
 /** Ce que l'enregistrement reçoit : les dates converties, la description normalisée. */
@@ -43,6 +53,7 @@ export interface EventFormValues {
   eventModeId: string
   communityIds: string[]
   technologyIds: string[]
+  bannerImagePath: string | null
 }
 
 export type FieldKey = 'title' | 'startLocal' | 'endLocal' | 'formatTypeId' | 'eventModeId'

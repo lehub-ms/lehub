@@ -6,6 +6,7 @@ import { Field } from '@lehub/shared/components/form/Field'
 import { cn } from '@lehub/shared/lib/cn'
 import { errorId } from '@lehub/shared/lib/fieldIds'
 import { INPUT_BASE } from '@lehub/shared/lib/form-styles'
+import { BannerField } from '@/components/events/BannerField'
 import { ChipPicker, type ChipEntry } from '@/components/events/ChipPicker'
 import type { EventOptions } from '@/lib/api'
 import { SHARING_NOTE } from '@/lib/eventAttachments'
@@ -32,6 +33,9 @@ interface EventFormProps {
   /** Les pastilles déjà arbitrées : ce qui se retire, et à quel prix. Voir `eventAttachments`. */
   communityChips: readonly ChipEntry[]
   technologyChips: readonly ChipEntry[]
+  /** L'évènement en cours de modification, absent en création : l'API en dépend pour arbitrer
+      le téléversement de la bannière (#148). */
+  eventId?: string | undefined
   /** L'action destructrice, absente en création (#146). */
   destructiveAction?: ReactNode
 }
@@ -55,6 +59,7 @@ export function EventForm({
   onCancel,
   communityChips,
   technologyChips,
+  eventId,
   destructiveAction,
 }: EventFormProps): ReactNode {
   const ids = useId()
@@ -107,6 +112,7 @@ export function EventForm({
       eventModeId: draft.eventModeId,
       communityIds: draft.communityIds,
       technologyIds: draft.technologyIds,
+      bannerImagePath: draft.bannerImagePath,
     })
   }
 
@@ -299,7 +305,27 @@ export function EventForm({
           </section>
         </div>
 
-        <div className="flex flex-col gap-6" />
+        <div className="flex flex-col gap-6">
+          <section className="glass rounded-2xl p-5 sm:p-6">
+            <header className="mb-5">
+              <h2 className="font-heading text-lg font-semibold text-ink">Image bannière</h2>
+              <p className="mt-1 text-[0.8125rem] text-ink-muted">
+                Format 16:9, affichée en tête de la page publique.
+              </p>
+            </header>
+
+            <BannerField
+              previewUrl={draft.bannerImageUrl}
+              eventId={eventId}
+              onUploaded={(image) => {
+                onDraftChange({ ...draft, bannerImagePath: image.path, bannerImageUrl: image.url })
+              }}
+              onCleared={() => {
+                onDraftChange({ ...draft, bannerImagePath: null, bannerImageUrl: null })
+              }}
+            />
+          </section>
+        </div>
       </div>
 
       {/* Barre d'action fixe : elle suit le défilement d'un formulaire long, pour qu'on n'ait

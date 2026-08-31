@@ -247,7 +247,7 @@ export function createEvent(input: EventInput): Promise<AdminEvent> {
 }
 
 /** Les destinations que la route de téléversement accepte aujourd’hui. */
-export type UploadDestination = 'community-logo' | 'technology-logo'
+export type UploadDestination = 'community-logo' | 'technology-logo' | 'event-banner'
 
 export interface UploadedImage {
   /** Le chemin relatif à enregistrer sur l’entité. */
@@ -261,9 +261,20 @@ export interface UploadedImage {
  * `FormData`, avec la frontière multipart qu’il vient de tirer. En poser un le priverait de
  * cette frontière et le corps deviendrait illisible côté serveur.
  */
-export function uploadImage(file: File, destination: UploadDestination): Promise<UploadedImage> {
+export function uploadImage(
+  file: File,
+  destination: UploadDestination,
+  /**
+   * L’évènement auquel la bannière se rattache, quand il existe déjà.
+   *
+   * Absent en création : le formulaire téléverse avant d’enregistrer, parce qu’il affiche
+   * l’aperçu réel. L’API arbitre différemment dans les deux cas — voir `canUploadEventBanner`.
+   */
+  eventId?: string,
+): Promise<UploadedImage> {
   const form = new FormData()
   form.set('destination', destination)
+  if (eventId) form.set('eventId', eventId)
   form.set('file', file)
 
   return apiFetch<UploadedImage>('/api/media/uploads', { method: 'POST', body: form })

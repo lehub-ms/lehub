@@ -116,13 +116,14 @@ describe('modification d’un évènement', () => {
     const sent = lastPatch()
     expect(sent.title).toBe('Azure Deep Dive — édition 2')
     expect(sent.startDate).toBe(EVENT.startDate)
-    // Les rattachements repartent **inchangés** plutôt qu'absents : le formulaire les possède
-    // depuis #147, et il renvoie l'ensemble qu'il affiche.
+    // Rattachements et bannière repartent **inchangés** plutôt qu'absents : le formulaire les
+    // possède depuis #147 et #148, et il renvoie l'état qu'il affiche.
     expect(sent.communityIds).toEqual(EVENT.communities.map((community) => community.id))
     expect(sent.technologyIds).toEqual([])
-    // La bannière, elle, n'est pas envoyée donc pas touchée : elle appartient à #148, et un
-    // PATCH qui la porterait l'écraserait avec une valeur que ce formulaire n'a jamais lue.
-    expect(sent).not.toHaveProperty('bannerImagePath')
+    expect(sent.bannerImagePath).toBe(EVENT.bannerImagePath)
+    // L'URL, en revanche, ne repart jamais : l'entité ne retient qu'un chemin relatif au
+    // conteneur média (migration 0003).
+    expect(sent).not.toHaveProperty('bannerImageUrl')
   })
 
   it('dit qu’un identifiant inconnu ne correspond à rien, et ramène à la liste', async () => {

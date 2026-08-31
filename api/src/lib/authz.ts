@@ -189,5 +189,37 @@ export function canUploadTo(
     case 'community-logo':
     case 'technology-logo':
       return canWriteReferenceData(permissions)
+    // An event banner is not answerable from the destination alone — see the function below.
+    // Returning `false` here rather than omitting the case keeps the switch exhaustive, so a
+    // future destination still breaks the build instead of falling through to a silent refusal.
+    case 'event-banner':
+      return false
   }
+}
+
+/**
+ * Uploading an event banner (#148).
+ *
+ * The only destination whose permission is not a property of the *destination*: it depends on
+ * the event the image is for, so it takes the event's communities and cannot live in the table
+ * above. That is why `canUploadTo` answers `false` for it and this exists instead — the shape of
+ * the pair is the statement that a banner is arbitrated differently.
+ *
+ * `null` is the creation case, and it is the interesting one: the form uploads before the event
+ * exists, because it previews the real URL. There is nothing to check against, so the question
+ * becomes "may this account create events at all" — an administrator, or an organiser of at
+ * least one community. An ordinary account is refused, which is what stops the media container
+ * from being a free upload endpoint for anyone with a session.
+ *
+ * What it deliberately does not do is guarantee that the blob ends up on an event the caller may
+ * write: they could upload with no `eventId` and then attach the path to an event they do not
+ * manage. That attempt fails at the PATCH, where `canWriteEvent` decides — and all they will
+ * have achieved is an orphan blob, which `mediaUpload` already accepts and explains.
+ */
+export function canUploadEventBanner(
+  permissions: SessionPermissions,
+  eventCommunityIds: readonly string[] | null,
+): boolean {
+  if (eventCommunityIds) return canWriteEvent(permissions, eventCommunityIds)
+  return permissions.isGlobalAdmin || permissions.organizedCommunityIds.length > 0
 }
