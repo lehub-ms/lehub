@@ -268,6 +268,24 @@ export async function listCommunityEvents(communityId: string): Promise<AdminEve
 }
 
 /**
+ * One event, in the administration projection, or `null`.
+ *
+ * `null` and not a throw: an identifier that matches nothing is a shared link to an event since
+ * deleted, which is an ordinary outcome the screen has a sentence for (#146), not a failure.
+ */
+export async function getAdminEvent(id: string): Promise<AdminEvent | null> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('id', sql.UniqueIdentifier, id)
+    .query<AdminEventRow>(SELECT_ADMIN_EVENT)
+
+  const row = result.recordset[0]
+  return row ? mapAdminEvent(media)(row) : null
+}
+
+/**
  * The two closed vocabularies an event is qualified by.
  *
  * They are lookup tables their owner edits in the database, not a referential the backoffice
@@ -413,6 +431,83 @@ export async function createEvent(input: CreateEventInput): Promise<EventWriteRe
   }
 
   const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, event: mapAdminEvent(media)(row) }
+}
+
+/**
+ * A PATCH: a key that is absent is a field left alone, which is not the same as one explicitly
+ * set to null.
+ *
+ * Spelled out rather than `Partial<>` because of `exactOptionalPropertyTypes`, which refuses an
+ * explicit `undefined` under `Partial<T>` — and an explicit `undefined` is exactly what a
+ * validated body hands over for a key the caller omitted. Same shape as `UpdateCommunityInput`.
+ */
+export type UpdateEventInput = {
+  [K in keyof Omit<CreateEventInput, 'communityIds' | 'technologyIds'>]?:
+    | CreateEventInput[K]
+    | undefined
+}
+
+/**
+ * The columns a PATCH may touch, and the only place a request key becomes a column name.
+ *
+ * The SET clause is assembled from the keys actually present. `COALESCE` cannot serve: `null` is
+ * a meaningful value for a description or a banner, and would be indistinguishable from
+ * "absent". Only keys of this record ever reach the statement, and every value stays a typed
+ * parameter, so nothing a caller sends is concatenated into SQL. Same construction as
+ * `UPDATABLE_COLUMNS` in `communitiesRepo`.
+ */
+const UPDATABLE_EVENT_COLUMNS = {
+  title: { column: 'Title', type: sql.NVarChar(300) },
+  description: { column: 'Description', type: sql.NVarChar(sql.MAX) },
+  startDate: { column: 'StartDate', type: sql.DateTime2 },
+  endDate: { column: 'EndDate', type: sql.DateTime2 },
+  formatTypeId: { column: 'FormatTypeId', type: sql.UniqueIdentifier },
+  eventModeId: { column: 'EventModeId', type: sql.UniqueIdentifier },
+  bannerImagePath: { column: 'BannerImagePath', type: sql.NVarChar(500) },
+} as const
+
+/** The two date columns take an instant, not the ISO string the wire carries. */
+function columnValue(key: string, value: string | null): string | Date | null {
+  if (value === null) return null
+  return key === 'startDate' || key === 'endDate' ? new Date(value) : value
+}
+
+export async function updateEvent(
+  id: string,
+  patch: UpdateEventInput,
+): Promise<EventWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  const request = pool.request().input('id', sql.UniqueIdentifier, id)
+  const assignments: string[] = []
+
+  for (const [key, spec] of Object.entries(UPDATABLE_EVENT_COLUMNS)) {
+    const value = patch[key as keyof UpdateEventInput]
+    if (value === undefined) continue
+    assignments.push(`${spec.column} = @${key}`)
+    request.input(key, spec.type, columnValue(key, value))
+  }
+
+  // The schema already refuses an empty patch; this keeps the statement valid if that ever
+  // changes, and answers the read rather than a syntax error.
+  const update =
+    assignments.length > 0 ? `UPDATE dbo.Event SET ${assignments.join(', ')} WHERE Id = @id;` : ''
+
+  let rows: AdminEventRow[]
+  try {
+    const result = await request.query<AdminEventRow>(`${update}${SELECT_ADMIN_EVENT}`)
+    rows = result.recordset
+  } catch (error) {
+    if (isForeignKeyViolation(error)) return { ok: false, error: 'unknown-reference' }
+    throw error
+  }
+
+  const row = rows[0]
+  // No row after the write means the event is gone — deleted from another tab while this one
+  // was editing it, which #146 asks be answered explicitly rather than by recreating it.
   if (!row) return { ok: false, error: 'not-found' }
   return { ok: true, event: mapAdminEvent(media)(row) }
 }

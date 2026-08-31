@@ -47,8 +47,7 @@ describe('dérivation OpenAPI des schémas de requête', () => {
 
     expect(exported.filter((entry) => !registered.has(entry.value)).map((e) => e.name)).toEqual([])
     // Et l'inverse : le registre ne contient rien d'autre que ces exports.
-    expect(ALL_REQUEST_SCHEMAS).toHaveLength(exported.length)
-  })
+    expect(ALL_REQUEST_SCHEMAS).toHaveLength(exported.length)  })
 
   it('donne un identifiant distinct à chaque schéma', () => {
     // Deux `$defs` de même nom s'écraseraient l'un l'autre dans le document, silencieusement.

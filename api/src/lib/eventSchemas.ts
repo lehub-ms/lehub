@@ -119,11 +119,48 @@ export const CREATE_EVENT = z
   })
 
 /**
+ * Modifying an event.
+ *
+ * PATCH and not PUT, for the reason `UPDATE_COMMUNITY` gives: an absent field is a field left
+ * alone, which is not the same as one explicitly set to `null` — clearing a description is a
+ * legitimate edit and says so with `null`.
+ *
+ * **The attachments are not here yet**, and their absence is deliberate rather than pending.
+ * Replacing `communityIds` is the one write this API bounds asymmetrically: attaching is open to
+ * anyone, detaching is not (#147), and a PATCH that accepted the field before those rules
+ * existed would let a forged request strip an event of its co-organisers. They arrive in the
+ * same change as `canDetachCommunity`, or not at all.
+ *
+ * The date ordering is **not** checked here. A patch may carry one date and not the other, and
+ * the one it omits is in the database — so the comparison needs the stored row and belongs to
+ * the route, which has already read it in order to arbitrate.
+ */
+export const UPDATE_EVENT = z
+  .strictObject({
+    title: title.optional(),
+    description: description.nullable().optional(),
+    startDate: instant.optional(),
+    endDate: instant.optional(),
+    formatTypeId: id.optional(),
+    eventModeId: id.optional(),
+    bannerImagePath: bannerImagePath.nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: 'At least one field must be supplied.',
+  })
+  .meta({
+    id: 'UpdateEvent',
+    title: 'Modification d’un évènement',
+    description: 'Le corps attendu par PATCH /api/manage/events/{eventId}.',
+  })
+
+/**
  * Enumerated so the derivation test covers every schema by construction. A schema added to this
  * module and forgotten here is the failure this guards against, so adding to this array is part
  * of adding a schema — exactly as `REFERENCE_SCHEMAS` states it.
  */
-export const EVENT_SCHEMAS = [EVENT_LIST_QUERY, CREATE_EVENT] as const
+export const EVENT_SCHEMAS = [EVENT_LIST_QUERY, CREATE_EVENT, UPDATE_EVENT] as const
 
 export type EventListQuery = z.infer<typeof EVENT_LIST_QUERY>
 export type CreateEventBody = z.infer<typeof CREATE_EVENT>
+export type UpdateEventBody = z.infer<typeof UPDATE_EVENT>

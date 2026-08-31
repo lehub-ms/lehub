@@ -89,6 +89,10 @@ export const routes: RouteObject[] = [
                     caseSensitive: true,
                     Component: EventFormPage,
                   },
+                  /* Le même écran, avec l'identifiant en paramètre. Le segment littéral
+                     ci-dessus l'emporte quoi qu'il arrive : React Router classe le statique
+                     avant le dynamique, l'ordre de ce tableau n'y change rien. */
+                  { path: 'evenements/:eventId', caseSensitive: true, Component: EventFormPage },
                   { path: 'organisateurs', caseSensitive: true, Component: OrganizersPage },
                   { path: '*', Component: NotFoundPage },
                 ],

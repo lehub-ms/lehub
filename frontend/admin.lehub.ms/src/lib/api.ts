@@ -206,6 +206,27 @@ export interface EventInput {
   technologyIds: string[]
 }
 
+/** Un évènement, pour le préremplissage du formulaire. Refusé en 403 hors habilitation (#109). */
+export function getEvent(eventId: string): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>(`/api/manage/events/${encodeURIComponent(eventId)}`)
+}
+
+/**
+ * Un champ absent est un champ inchangé ; `null` efface. Voir la route PATCH.
+ *
+ * Les rattachements n’y figurent pas : les remplacer est la seule écriture que l’API borne de
+ * façon asymétrique (#147), et le champ n’existe qu’avec ses règles.
+ */
+export type EventPatch = Partial<Omit<EventInput, 'communityIds' | 'technologyIds'>>
+
+export function updateEvent(eventId: string, patch: EventPatch): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>(`/api/manage/events/${encodeURIComponent(eventId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+}
+
 export function createEvent(input: EventInput): Promise<AdminEvent> {
   return apiFetch<AdminEvent>('/api/manage/events', {
     method: 'POST',

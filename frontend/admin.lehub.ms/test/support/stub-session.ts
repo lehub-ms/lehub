@@ -68,6 +68,19 @@ export function stubSignedIn(
       // Le filtre par communauté est rejoué, pas court-circuité : un bouchon qui rendrait la
       // liste entière laisserait passer un écran ayant oublié la communauté sélectionnée.
       if (url.includes('/api/manage/events')) {
+        // Un évènement précis : lecture pour le formulaire, ou écriture depuis lui. Le 404 est
+        // rejoué, sans quoi « cet évènement n'existe plus » ne serait jamais éprouvé.
+        const [, eventId] = new URL(url).pathname.split('/api/manage/events/')
+        if (eventId) {
+          const wanted = decodeURIComponent(eventId).toLowerCase()
+          const found = ADMIN_EVENTS.find((event) => event.id.toLowerCase() === wanted)
+          if (!found) return Promise.resolve(jsonResponse({ code: 'EVENT_NOT_FOUND' }, 404))
+          if (init?.method === 'PATCH') {
+            const patch = JSON.parse(init.body as string) as Record<string, unknown>
+            return Promise.resolve(jsonResponse({ ...found, ...patch }))
+          }
+          return Promise.resolve(jsonResponse(found))
+        }
         // Une création rend l'évènement créé, et non la liste : c'est ce que la route répond,
         // et un bouchon qui rendrait un tableau masquerait une lecture fautive de la réponse.
         if (init?.method === 'POST') return Promise.resolve(jsonResponse(ADMIN_EVENTS[0], 201))

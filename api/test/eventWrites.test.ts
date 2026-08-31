@@ -1,5 +1,6 @@
 import { HttpRequest, InvocationContext } from '@azure/functions'
 import { describe, expect, it } from 'vitest'
+import { eventHandler } from '../src/functions/adminEvent'
 import { adminEvents } from '../src/functions/adminEvents'
 import { CREATE_EVENT_QUERY, mapEventOptions } from '../src/lib/eventsRepo'
 import { CREATE_EVENT } from '../src/lib/eventSchemas'
@@ -222,6 +223,123 @@ describe("écriture d'un évènement et de ses rattachements", () => {
     // Les clés primaires composites refuseraient un doublon ; un formulaire qui envoie deux
     // fois la même communauté a fait une erreur sans conséquence, pas une requête à refuser.
     expect(CREATE_EVENT_QUERY).toContain('SELECT DISTINCT')
+  })
+})
+
+describe('lecture et modification d’un évènement', () => {
+  const STORED = {
+    id: 'E1E1E1E1-0000-0000-0000-000000000001',
+    title: 'Azure Deep Dive',
+    description: null,
+    startDate: '2026-09-10T16:30:00.000Z',
+    endDate: '2026-09-10T19:00:00.000Z',
+    bannerImagePath: null,
+    bannerImageUrl: null,
+    formatTypeId: FORMAT,
+    format: 'Meetup',
+    eventModeId: MODE,
+    mode: 'Présentiel',
+    // Porté par une seule communauté, celle que `ORGANIZER` organise.
+    communities: [{ id: MINE, name: 'AZUG', logoUrl: null, archived: false }],
+    technologies: [],
+  }
+
+  /** Le lecteur et l'écrivain sont des paramètres : la couche s'éprouve sans base. */
+  function handler(stored: typeof STORED | null = STORED) {
+    const written: unknown[] = []
+    const route = eventHandler(
+      () => Promise.resolve(stored),
+      (id, patch) => {
+        written.push({ id, patch })
+        return Promise.resolve({ ok: true, event: { ...STORED, ...patch } })
+      },
+    )
+    return { route, written }
+  }
+
+  function request(method: 'GET' | 'PATCH', payload?: unknown, eventId = STORED.id): HttpRequest {
+    return new HttpRequest({
+      method,
+      url: `https://api.example.com/api/manage/events/${eventId}`,
+      params: { eventId },
+      ...(payload === undefined
+        ? { headers: {} }
+        : { body: { string: JSON.stringify(payload) }, headers: { 'content-type': 'application/json' } }),
+    })
+  }
+
+  it("refuse la lecture à qui n'organise aucune de ses communautés", async () => {
+    const ctx = context()
+    const { route } = handler()
+    const response = await route(request('GET'), ctx, session({ isGlobalAdmin: false, organizedCommunityIds: [THEIRS] }))
+
+    expect(response.status).toBe(403)
+    expect(JSON.stringify(ctx.errors)).toContain('read:event')
+  })
+
+  it('ouvre la lecture à un organisateur de la communauté portée', async () => {
+    const { route } = handler()
+    const response = await route(request('GET'), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(200)
+    expect((response.jsonBody as { id: string }).id).toBe(STORED.id)
+  })
+
+  it('répond 404 sur un identifiant qui ne correspond à rien', async () => {
+    const { route } = handler(null)
+    const response = await route(request('GET'), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(404)
+    expect(code(response)).toBe('EVENT_NOT_FOUND')
+  })
+
+  it('répond 400 sur un identifiant malformé, sans toucher au pilote', async () => {
+    const { route } = handler()
+    const response = await route(request('GET', undefined, 'pas-un-guid'), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(400)
+    expect(code(response)).toBe('INVALID_ROUTE_PARAMETER')
+  })
+
+  it('refuse une fin ramenée avant le début **stocké**, pas seulement avant celui du corps', async () => {
+    // Le patch ne porte qu'une date ; l'autre est en base. Une vérification sur le seul corps
+    // laisserait passer ce cas à tous les coups.
+    const { route, written } = handler()
+    const response = await route(
+      request('PATCH', { endDate: '2026-09-10T15:00:00.000Z' }),
+      context(),
+      session(ORGANIZER),
+    )
+
+    expect(response.status).toBe(400)
+    expect(code(response)).toBe('INVALID_DATE_RANGE')
+    expect(written).toHaveLength(0)
+  })
+
+  it('accepte un patch qui ne porte qu’un titre', async () => {
+    const { route, written } = handler()
+    const response = await route(request('PATCH', { title: 'Nouveau titre' }), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(200)
+    expect(written).toEqual([{ id: STORED.id, patch: { title: 'Nouveau titre' } }])
+  })
+
+  it('refuse un patch vide', async () => {
+    const { route } = handler()
+    const response = await route(request('PATCH', {}), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(400)
+    expect(code(response)).toBe('INVALID_BODY')
+  })
+
+  it('refuse un patch portant des rattachements, tant que leurs règles n’existent pas', async () => {
+    // Accepter `communityIds` avant `canDetachCommunity` laisserait une requête forgée
+    // dépouiller un évènement de ses co-organisateurs (#147).
+    const { route, written } = handler()
+    const response = await route(request('PATCH', { communityIds: [THEIRS] }), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(400)
+    expect(written).toHaveLength(0)
   })
 })
 
