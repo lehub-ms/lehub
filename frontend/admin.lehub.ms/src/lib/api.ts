@@ -166,6 +166,54 @@ export function listCommunityEvents(communityId: string): Promise<AdminEvent[]> 
   )
 }
 
+/** Une entrée d’un vocabulaire fermé : un identifiant à renvoyer, un libellé à afficher. */
+export interface EventOption {
+  id: string
+  name: string
+}
+
+/**
+ * Les deux vocabulaires que le formulaire propose.
+ *
+ * `formats` porte `dbo.FormatType`, que l’écran appelle « Type » ; `modes` porte
+ * `dbo.EventMode`, que l’écran appelle « Format ». Voir `lib/eventVocabulary.ts`.
+ */
+export interface EventOptions {
+  formats: EventOption[]
+  modes: EventOption[]
+}
+
+/** Anonyme, comme `listCommunities` : un organisateur non administrateur en a besoin. */
+export function listEventOptions(): Promise<EventOptions> {
+  return apiFetch<EventOptions>('/api/event-options')
+}
+
+/**
+ * Le corps accepté à la création. Le serveur fait foi — voir `api/src/lib/eventSchemas.ts`.
+ *
+ * Les deux dates sont des instants ISO : le formulaire saisit une heure murale de Paris et la
+ * convertit avant d’envoyer (`lib/eventDates.ts`). La date de fin est obligatoire.
+ */
+export interface EventInput {
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  formatTypeId: string
+  eventModeId: string
+  bannerImagePath: string | null
+  communityIds: string[]
+  technologyIds: string[]
+}
+
+export function createEvent(input: EventInput): Promise<AdminEvent> {
+  return apiFetch<AdminEvent>('/api/manage/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
 /** Les destinations que la route de téléversement accepte aujourd’hui. */
 export type UploadDestination = 'community-logo' | 'technology-logo'
 

@@ -1,6 +1,7 @@
 import sql from 'mssql'
 import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import { getPool } from './sqlClient'
+import { isForeignKeyViolation } from './sqlErrors'
 
 export interface NamedRef {
   id: string
@@ -187,18 +188,12 @@ interface AdminEventRow extends EventRow {
 }
 
 /**
- * Every event carrying a given community, soonest first.
+ * The columns the backoffice reads of an event. Shared by the listing and the single-row read so
+ * the two projections cannot drift into answering different shapes for the same object.
  *
- * `EXISTS` rather than a join to `EventCommunity`: an event carried by that community *and* by
- * another one must appear once, and a join would emit it once per matching link row. It is an
- * index seek on `IX_EventCommunity_CommunityId` (migration 0001).
- *
- * No filter on `EndDate`, unlike the public listing. Past events belong in this list — #174
- * folds them behind a group row on the screen, which is a rendering decision and stays one:
- * filtering them out here would make « la recherche traverse le repli » impossible to honour.
+ * Names the events table `e`, which `ATTACHMENT_COLUMNS` correlates on.
  */
-export const LIST_COMMUNITY_EVENTS_QUERY = `
-SELECT
+const ADMIN_EVENT_COLUMNS = `
   e.Id,
   e.Title,
   e.Description,
@@ -213,9 +208,33 @@ ${ATTACHMENT_COLUMNS}
 FROM dbo.Event e
 JOIN dbo.FormatType ft ON ft.Id = e.FormatTypeId
 JOIN dbo.EventMode  em ON em.Id = e.EventModeId
+`
+
+/**
+ * Every event carrying a given community, soonest first.
+ *
+ * `EXISTS` rather than a join to `EventCommunity`: an event carried by that community *and* by
+ * another one must appear once, and a join would emit it once per matching link row. It is an
+ * index seek on `IX_EventCommunity_CommunityId` (migration 0001).
+ *
+ * No filter on `EndDate`, unlike the public listing. Past events belong in this list — #174
+ * folds them behind a group row on the screen, which is a rendering decision and stays one:
+ * filtering them out here would make « la recherche traverse le repli » impossible to honour.
+ */
+export const LIST_COMMUNITY_EVENTS_QUERY = `
+SELECT
+${ADMIN_EVENT_COLUMNS}
 WHERE EXISTS (SELECT 1 FROM dbo.EventCommunity ec
                WHERE ec.EventId = e.Id AND ec.CommunityId = @communityId)
 ORDER BY e.StartDate
+`
+
+/** The same projection, for one event. Appended to a write so the caller gets the row back in
+    the same round-trip rather than reading it again. */
+const SELECT_ADMIN_EVENT = `
+SELECT
+${ADMIN_EVENT_COLUMNS}
+WHERE e.Id = @id
 `
 
 /** Exported for its own sake: the mapping is the testable half, the query is not. */
@@ -246,4 +265,154 @@ export async function listCommunityEvents(communityId: string): Promise<AdminEve
     .query<AdminEventRow>(LIST_COMMUNITY_EVENTS_QUERY)
 
   return result.recordset.map(mapAdminEvent(media))
+}
+
+/**
+ * The two closed vocabularies an event is qualified by.
+ *
+ * They are lookup tables their owner edits in the database, not a referential the backoffice
+ * manages — #150 covers communities and technologies and deliberately stops there. So this is a
+ * read and nothing else, and it is anonymous for the same reason `communities` is: the form of
+ * an organiser who is not a global administrator needs them, and there is no secret in the word
+ * "Meetup".
+ *
+ * `ORDER BY Name`, which is deterministic and needs no schema change. It is not the curated
+ * order of the seed — alphabetically, « Autre » lands second among the six types rather than
+ * last — and a curated order would take a sort column on both tables, hence a migration. Noted
+ * rather than papered over with a hard-coded list of names in the query.
+ *
+ * Two result sets in one round-trip: they are always read together, by one screen.
+ */
+export const LIST_EVENT_OPTIONS_QUERY = `
+SELECT Id, Name FROM dbo.FormatType ORDER BY Name;
+SELECT Id, Name FROM dbo.EventMode  ORDER BY Name;
+`
+
+/** One entry of a closed vocabulary: an identifier to send back, a name to show. */
+export interface EventOption {
+  id: string
+  name: string
+}
+
+export interface EventOptions {
+  /** `dbo.FormatType` — the screen calls it « Type ». */
+  formats: EventOption[]
+  /** `dbo.EventMode` — the screen calls it « Format ». */
+  modes: EventOption[]
+}
+
+interface OptionRow {
+  Id: string
+  Name: string
+}
+
+/** Split out so the two-recordset shape can be exercised without a database. */
+export function mapEventOptions(recordsets: readonly (readonly OptionRow[])[]): EventOptions {
+  const asOptions = (rows: readonly OptionRow[] = []): EventOption[] =>
+    rows.map((row) => ({ id: row.Id, name: row.Name }))
+
+  return { formats: asOptions(recordsets[0]), modes: asOptions(recordsets[1]) }
+}
+
+export async function listEventOptions(): Promise<EventOptions> {
+  const pool = await getPool()
+  const result = await pool.request().query<OptionRow>(LIST_EVENT_OPTIONS_QUERY)
+
+  return mapEventOptions(result.recordsets as unknown as OptionRow[][])
+}
+
+/**
+ * What a write to an event can answer.
+ *
+ * A discriminated result and never a throw, like `CommunityWriteResult`: an unknown community in
+ * the body is a legitimate outcome the screen has something to say about, not an exception to
+ * work around.
+ *
+ * `unknown-reference` covers a format, a mode, a community or a technology the database does not
+ * hold — all four are foreign keys, all four produce error 547, and SQL Server does not make it
+ * worth telling them apart for a message the caller acts on identically: send something else.
+ */
+export type EventWriteResult =
+  | { ok: true; event: AdminEvent }
+  | { ok: false; error: 'unknown-reference' }
+  | { ok: false; error: 'not-found' }
+
+export interface CreateEventInput {
+  title: string
+  description: string | null
+  startDate: string
+  endDate: string
+  formatTypeId: string
+  eventModeId: string
+  bannerImagePath: string | null
+  communityIds: readonly string[]
+  technologyIds: readonly string[]
+}
+
+/**
+ * Creates the event and both sets of links, or nothing at all.
+ *
+ * `SET XACT_ABORT ON` with an explicit transaction, which is the one place in this repository
+ * that needs one: three tables have to move together, and an event that landed without its
+ * communities would be an event nobody but an administrator could reopen — precisely the state
+ * #147 forbids anyone from producing.
+ *
+ * The identifier lists travel as a **JSON parameter** read by `OPENJSON`, never concatenated
+ * into the statement. `DISTINCT` because the composite primary keys would refuse a repeated
+ * pair, and a caller that sent the same community twice has made a harmless mistake, not a
+ * request to refuse.
+ */
+export const CREATE_EVENT_QUERY = `
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+
+DECLARE @created TABLE (Id UNIQUEIDENTIFIER);
+
+INSERT INTO dbo.Event (Title, Description, StartDate, EndDate, FormatTypeId, EventModeId, BannerImagePath)
+OUTPUT inserted.Id INTO @created
+VALUES (@title, @description, @startDate, @endDate, @formatTypeId, @eventModeId, @bannerImagePath);
+
+DECLARE @id UNIQUEIDENTIFIER = (SELECT TOP 1 Id FROM @created);
+
+INSERT INTO dbo.EventCommunity (EventId, CommunityId)
+SELECT DISTINCT @id, value FROM OPENJSON(@communityIds) WITH (value UNIQUEIDENTIFIER '$');
+
+INSERT INTO dbo.EventTechnology (EventId, TechnologyId)
+SELECT DISTINCT @id, value FROM OPENJSON(@technologyIds) WITH (value UNIQUEIDENTIFIER '$');
+
+COMMIT TRANSACTION;
+${SELECT_ADMIN_EVENT}
+`
+
+export async function createEvent(input: CreateEventInput): Promise<EventWriteResult> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+
+  let rows: AdminEventRow[]
+  try {
+    const result = await pool
+      .request()
+      .input('title', sql.NVarChar(300), input.title)
+      .input('description', sql.NVarChar(sql.MAX), input.description)
+      // `DateTime2` and an ISO string with its offset: the driver parses it to the instant it
+      // denotes, so nothing here has to know about Europe/Paris.
+      .input('startDate', sql.DateTime2, new Date(input.startDate))
+      .input('endDate', sql.DateTime2, new Date(input.endDate))
+      .input('formatTypeId', sql.UniqueIdentifier, input.formatTypeId)
+      .input('eventModeId', sql.UniqueIdentifier, input.eventModeId)
+      .input('bannerImagePath', sql.NVarChar(500), input.bannerImagePath)
+      .input('communityIds', sql.NVarChar(sql.MAX), JSON.stringify(input.communityIds))
+      .input('technologyIds', sql.NVarChar(sql.MAX), JSON.stringify(input.technologyIds))
+      .query<AdminEventRow>(CREATE_EVENT_QUERY)
+    rows = result.recordset
+  } catch (error) {
+    // 547: one of the four foreign keys does not resolve. The row was never written — the
+    // transaction saw to that — so this is a refusal and not a partial state.
+    if (isForeignKeyViolation(error)) return { ok: false, error: 'unknown-reference' }
+    throw error
+  }
+
+  const row = rows[0]
+  if (!row) return { ok: false, error: 'not-found' }
+  return { ok: true, event: mapAdminEvent(media)(row) }
 }

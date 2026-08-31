@@ -43,11 +43,87 @@ export const EVENT_LIST_QUERY = z
     description: 'La chaîne de requête attendue par GET /api/manage/events.',
   })
 
+/** Trimmed before it is measured, like every other name in this API: spaces are not a title. */
+const title = z.string().trim().min(1).max(300)
+
+/**
+ * `Description NVARCHAR(MAX)`, so no bound — see the header. Trimmed, and an empty description
+ * collapses to `null` rather than to `''`: two ways of saying "none" would both reach the column
+ * and the screen would have to test for both for ever.
+ */
+const description = z
+  .string()
+  .trim()
+  .transform((value) => (value.length > 0 ? value : null))
+
+/** A blob path inside the media container, never a URL — see lib/mediaUrls. */
+const bannerImagePath = z.string().trim().min(1).max(500)
+
+/**
+ * An instant, always with its offset, always produced by `Date#toISOString`.
+ *
+ * The screen collects wall-clock time in `Europe/Paris` and converts before sending; the wire
+ * only ever carries instants. A naive `2026-09-10T18:30` would be ambiguous — the API has no way
+ * to know which zone a caller meant, and guessing UTC would silently shift every French event by
+ * two hours in summer.
+ */
+const instant = z.iso.datetime({ offset: true })
+
+/**
+ * A set of identifiers, in a body.
+ *
+ * Duplicates are tolerated here and removed by the repository rather than refused: the
+ * composite primary keys of `EventCommunity` and `EventTechnology` would reject the second row,
+ * and answering "your list has a repeat" to a form that simply sent one twice would be a
+ * refusal nobody can act on.
+ */
+const ids = z.array(id)
+
+/**
+ * Creating an event.
+ *
+ * **The end date is required**, like the start date. It was optional in the first draft of
+ * #145; making it mandatory is what lets #174 decide "past" from a single field, and what stops
+ * lehub.ms from announcing an event whose end nobody knows. `dbo.Event.EndDate` has been
+ * `NOT NULL` since migration 0001, so this is the schema catching up with the column rather
+ * than the other way round.
+ *
+ * `communityIds` may be empty, and that is not an oversight: an administrator creating an event
+ * with no community produces one only administrators can manage, which `canCreateEvent` allows
+ * and `canWriteEvent` then enforces. An organiser cannot — not because of this schema, but
+ * because `canCreateEvent` demands one of *their* communities.
+ *
+ * `format` and `mode` keep the wire's vocabulary: `formatTypeId` is `dbo.FormatType` (the screen
+ * calls it « Type ») and `eventModeId` is `dbo.EventMode` (the screen calls it « Format »).
+ */
+export const CREATE_EVENT = z
+  .strictObject({
+    title,
+    description: description.nullable().default(null),
+    startDate: instant,
+    endDate: instant,
+    formatTypeId: id,
+    eventModeId: id,
+    bannerImagePath: bannerImagePath.nullable().default(null),
+    communityIds: ids.default([]),
+    technologyIds: ids.default([]),
+  })
+  .refine((body) => Date.parse(body.endDate) >= Date.parse(body.startDate), {
+    message: 'The end date must not precede the start date.',
+    path: ['endDate'],
+  })
+  .meta({
+    id: 'CreateEvent',
+    title: 'Création d’un évènement',
+    description: 'Le corps attendu par POST /api/manage/events.',
+  })
+
 /**
  * Enumerated so the derivation test covers every schema by construction. A schema added to this
  * module and forgotten here is the failure this guards against, so adding to this array is part
  * of adding a schema — exactly as `REFERENCE_SCHEMAS` states it.
  */
-export const EVENT_SCHEMAS = [EVENT_LIST_QUERY] as const
+export const EVENT_SCHEMAS = [EVENT_LIST_QUERY, CREATE_EVENT] as const
 
 export type EventListQuery = z.infer<typeof EVENT_LIST_QUERY>
+export type CreateEventBody = z.infer<typeof CREATE_EVENT>

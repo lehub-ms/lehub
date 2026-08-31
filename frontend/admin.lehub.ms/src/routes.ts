@@ -5,7 +5,7 @@ import { RequireAccess } from '@/components/RequireAccess'
 import { RequireGlobalAdmin } from '@/components/RequireGlobalAdmin'
 import { RequireNoAccess } from '@/components/RequireNoAccess'
 import { RequireSession } from '@/components/RequireSession'
-import { PATHS } from '@/lib/navigation'
+import { NEW_EVENT_SEGMENT, PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
 import { NoAccessPage } from '@/pages/NoAccessPage'
 import { CommunityIndexRedirect } from '@/community/CommunityIndexRedirect'
@@ -13,6 +13,7 @@ import { CommunityScope } from '@/community/CommunityScope'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { AdministratorsPage } from '@/pages/AdministratorsPage'
 import { EventsPage } from '@/pages/EventsPage'
+import { EventFormPage } from '@/pages/EventFormPage'
 import { OrganizersPage } from '@/pages/OrganizersPage'
 import { CommunitiesPage } from '@/pages/CommunitiesPage'
 import { TechnologiesPage } from '@/pages/TechnologiesPage'
@@ -81,6 +82,13 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, Component: CommunityIndexRedirect },
                   { path: 'evenements', caseSensitive: true, Component: EventsPage },
+                  /* Le formulaire a sa propre route, sous celle de la liste : une adresse
+                     d'évènement se partage, se met en favori et se recharge (#143). */
+                  {
+                    path: `evenements/${NEW_EVENT_SEGMENT}`,
+                    caseSensitive: true,
+                    Component: EventFormPage,
+                  },
                   { path: 'organisateurs', caseSensitive: true, Component: OrganizersPage },
                   { path: '*', Component: NotFoundPage },
                 ],

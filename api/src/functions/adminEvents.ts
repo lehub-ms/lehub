@@ -1,9 +1,10 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
-import { canManageCommunityEvents } from '../lib/authz'
-import { listCommunityEvents } from '../lib/eventsRepo'
-import { EVENT_LIST_QUERY } from '../lib/eventSchemas'
+import { canCreateEvent, canManageCommunityEvents } from '../lib/authz'
+import { createEvent, listCommunityEvents } from '../lib/eventsRepo'
+import { eventWriteRefusal } from '../lib/eventResponses'
+import { CREATE_EVENT, EVENT_LIST_QUERY } from '../lib/eventSchemas'
 import { forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
-import { parseQuery } from '../lib/validation'
+import { parseBody, parseQuery } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
 /**
@@ -27,6 +28,8 @@ export async function adminEvents(
   context: InvocationContext,
   session: AuthenticatedSession,
 ): Promise<HttpResponseInit> {
+  if (request.method === 'POST') return create(request, context, session)
+
   const query = parseQuery(request, context, EVENT_LIST_QUERY)
   if (!query.ok) return query.response
 
@@ -51,8 +54,56 @@ export async function adminEvents(
   }
 }
 
+/**
+ * Creating an event.
+ *
+ * **Validate then authorise**, as on the listing above and for a sharper version of the same
+ * reason: the permission is computed from the body. `canCreateEvent` asks whether the caller
+ * organises at least one of the communities the event will carry, and there is no way to ask
+ * that of a body that has not been read. Nothing leaks — a malformed body names no community, so
+ * its 400 confirms nothing a 403 would have hidden.
+ *
+ * The rule `canCreateEvent` enforces is about **signature, not about restricting
+ * co-organisation**: an organiser may attach any active community they like, including ones they
+ * have nothing to do with (#147), but they may not publish an event carrying *only* other
+ * people's communities. Removals are what is bounded, and that is #147's business.
+ */
+async function create(
+  request: HttpRequest,
+  context: InvocationContext,
+  session: AuthenticatedSession,
+): Promise<HttpResponseInit> {
+  const body = await parseBody(request, context, CREATE_EVENT)
+  if (!body.ok) return body.response
+
+  if (!canCreateEvent(session.permissions, body.value.communityIds)) {
+    return forbidden(context, {
+      route: routeLabel(request),
+      action: 'create:event',
+      objectId: session.identity.objectId,
+    })
+  }
+
+  let result
+  try {
+    result = await createEvent(body.value)
+  } catch (error) {
+    return listFetchError(
+      context,
+      'Failed to create an event',
+      error,
+      'EVENT_WRITE_ERROR',
+      'Unable to create the event.',
+    )
+  }
+
+  if (!result.ok) return eventWriteRefusal(result)
+
+  return { status: 201, jsonBody: result.event }
+}
+
 app.http('adminEvents', {
-  methods: ['GET'],
+  methods: ['GET', 'POST'],
   authLevel: 'anonymous',
   // `manage/` and not `admin/`: the Functions host reserves `/admin` for its own management
   // API, and refuses to start any function whose route begins with it. See adminCommunities.

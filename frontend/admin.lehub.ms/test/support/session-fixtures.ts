@@ -1,6 +1,6 @@
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 import type { CommunitySummary } from '@lehub/shared/lib/api'
-import type { AdminCommunity, AdminEvent, AdminTechnology } from '@/lib/api'
+import type { AdminCommunity, AdminEvent, AdminTechnology, EventOptions } from '@/lib/api'
 
 /** La réponse de `POST /api/me/session`, en un seul endroit — comme côté site public. */
 export const MIRROR = {
@@ -204,6 +204,28 @@ export const ADMIN_EVENTS: AdminEvent[] = [
     technologies: [],
   },
 ]
+
+/**
+ * Ce que rend `GET /api/event-options` : les deux vocabulaires fermés.
+ *
+ * Dans l'ordre alphabétique que la requête impose, « Autre » compris — la fixture reproduit ce
+ * que la route rend, pas ce qu'on aimerait qu'elle rende.
+ */
+export const EVENT_OPTIONS: EventOptions = {
+  formats: [
+    { id: 'F5F5F5F5-0000-0000-0000-000000000005', name: 'Atelier' },
+    { id: 'F6F6F6F6-0000-0000-0000-000000000006', name: 'Autre' },
+    { id: 'F1F1F1F1-0000-0000-0000-000000000001', name: 'Conférence' },
+    { id: 'F4F4F4F4-0000-0000-0000-000000000004', name: 'Hackathon' },
+    { id: 'F2F2F2F2-0000-0000-0000-000000000002', name: 'Meetup' },
+    { id: 'F3F3F3F3-0000-0000-0000-000000000003', name: 'Webinaire' },
+  ],
+  modes: [
+    { id: 'D2D2D2D2-0000-0000-0000-000000000002', name: 'En ligne' },
+    { id: 'D3D3D3D3-0000-0000-0000-000000000003', name: 'Hybride' },
+    { id: 'D1D1D1D1-0000-0000-0000-000000000001', name: 'Présentiel' },
+  ],
+}
 
 /**
  * Le filtre que la route applique, rejoué ici.

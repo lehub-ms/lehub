@@ -2,8 +2,10 @@ import { vi } from 'vitest'
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
 import {
   ADMIN_COMMUNITIES,
+  ADMIN_EVENTS,
   ADMIN_TECHNOLOGIES,
   COMMUNITIES,
+  EVENT_OPTIONS,
   eventsFor,
   openedSession,
 } from './session-fixtures'
@@ -38,7 +40,7 @@ export function stubSignedIn(
   const attempts: Record<string, number> = {}
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation((url: string) => {
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       // Les substitutions passent avant tout le reste : un test qui veut voir une lecture
       // échouer ne doit pas avoir à redéclarer les branches qu'il ne change pas.
       for (const [fragment, respond] of Object.entries(overrides)) {
@@ -66,8 +68,14 @@ export function stubSignedIn(
       // Le filtre par communauté est rejoué, pas court-circuité : un bouchon qui rendrait la
       // liste entière laisserait passer un écran ayant oublié la communauté sélectionnée.
       if (url.includes('/api/manage/events')) {
+        // Une création rend l'évènement créé, et non la liste : c'est ce que la route répond,
+        // et un bouchon qui rendrait un tableau masquerait une lecture fautive de la réponse.
+        if (init?.method === 'POST') return Promise.resolve(jsonResponse(ADMIN_EVENTS[0], 201))
         const communityId = new URL(url).searchParams.get('communityId')
         return Promise.resolve(jsonResponse(communityId ? eventsFor(communityId) : []))
+      }
+      if (url.includes('/api/event-options')) {
+        return Promise.resolve(jsonResponse(EVENT_OPTIONS))
       }
       // La coquille lit la liste des communautés dès qu'elle se monte : sans elle, chaque
       // suite qui traverse une garde recevrait la session en guise de tableau.
