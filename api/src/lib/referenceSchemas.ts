@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isValidSlug, SLUG_COLUMN_LENGTH } from './slug'
 
 /**
  * The bodies the reference-data routes accept: communities and technologies.
@@ -29,6 +30,19 @@ const logoPath = z.string().trim().min(1).max(500)
 const status = z.enum(['active', 'archived'])
 
 /**
+ * Lowercase, unaccented letters, digits and hyphens, never empty (#166).
+ *
+ * Validated through `isValidSlug` so the shape lives in exactly one place — the same function
+ * the generator and the form obey. A value shaped like a GUID is refused there, which is what
+ * keeps address resolution from ever hesitating between the two forms.
+ */
+const slug = z
+  .string()
+  .trim()
+  .max(SLUG_COLUMN_LENGTH)
+  .refine(isValidSlug, { message: 'Not a valid slug.' })
+
+/**
  * Creation defaults to active, which is Story #152's and #153's "une entrée créée est active par
  * défaut" — expressed as the schema's default rather than as a line in each handler.
  *
@@ -39,6 +53,9 @@ const status = z.enum(['active', 'archived'])
 export const CREATE_COMMUNITY = z
   .strictObject({
     name,
+    // Optional: the form proposes one from the name, but a caller that sends none gets one
+    // derived server-side rather than a refusal. Never empty either way.
+    slug: slug.optional(),
     description: description.nullable().default(null),
     logoPath: logoPath.nullable().default(null),
     status: status.default('active'),
@@ -63,6 +80,7 @@ export const CREATE_COMMUNITY = z
 export const UPDATE_COMMUNITY = z
   .strictObject({
     name: name.optional(),
+    slug: slug.optional(),
     description: description.nullable().optional(),
     logoPath: logoPath.nullable().optional(),
     status: status.optional(),

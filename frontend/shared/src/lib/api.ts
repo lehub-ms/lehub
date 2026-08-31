@@ -167,6 +167,13 @@ export interface NamedRef {
 
 export interface CommunitySummary {
   id: string
+  /**
+   * L'adresse lisible de la communauté (#166).
+   *
+   * L'identifiant reste la clé — de la base comme du contrat d'API, qui n'accepte jamais autre
+   * chose. Le slug est une façon d'adresser un écran, pas une seconde identité.
+   */
+  slug: string
   name: string
   logoUrl: string | null
   description: string | null

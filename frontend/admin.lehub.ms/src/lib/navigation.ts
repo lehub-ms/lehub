@@ -12,11 +12,16 @@ export const PATHS = {
   noAccess: '/acces-refuse',
 
   /* Section communauté. La communauté choisie est un segment de route et non un état caché :
-     un lien vers un évènement est ainsi complet, et un rechargement retombe au bon endroit. */
+     un lien vers un évènement est ainsi complet, et un rechargement retombe au bon endroit.
+
+     Le segment porte le **slug** depuis #166, pas l'identifiant : une adresse partagée doit se
+     lire et se recopier. Une adresse portant encore un identifiant continue de fonctionner et
+     arrive sur la forme canonique — c'est `CommunityScope` qui s'en charge, avec le même
+     mécanisme qui ramenait déjà la casse. */
   /** La route parente de la section : tout ce qui vit sous une communauté en dépend. */
-  community: '/c/:communityId',
-  communityEvents: '/c/:communityId/evenements',
-  communityOrganizers: '/c/:communityId/organisateurs',
+  community: '/c/:communitySlug',
+  communityEvents: '/c/:communitySlug/evenements',
+  communityOrganizers: '/c/:communitySlug/organisateurs',
 
   /* Administration générale. Ces écrans ne portent pas de communauté — ils gèrent les
      référentiels partagés, qui n'appartiennent à aucune. */
@@ -30,9 +35,14 @@ export const COMMUNITY_SECTIONS = ['evenements', 'organisateurs'] as const
 
 export type CommunitySection = (typeof COMMUNITY_SECTIONS)[number]
 
-/** Le chemin d'une section pour une communauté donnée. Écrit ici, jamais concaténé ailleurs. */
-export function communityPath(communityId: string, section: CommunitySection): string {
-  return `/c/${communityId}/${section}`
+/**
+ * Le chemin d'une section pour une communauté donnée. Écrit ici, jamais concaténé ailleurs.
+ *
+ * Prend le slug. Passer un identifiant produit une adresse qui *fonctionne* — `CommunityScope`
+ * la résout puis la canonicalise — mais qui n'est pas celle qu'on veut partager.
+ */
+export function communityPath(communitySlug: string, section: CommunitySection): string {
+  return `/c/${communitySlug}/${section}`
 }
 
 /**

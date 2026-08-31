@@ -2,9 +2,18 @@ import { getMediaConfig, mediaUrl, type MediaConfig } from './mediaUrls'
 import sql from 'mssql'
 import { getPool } from './sqlClient'
 import { isForeignKeyViolation, isUniqueViolation } from './sqlErrors'
+import { SLUG_COLUMN_LENGTH } from './slug'
 
 export interface CommunitySummary {
   id: string
+  /**
+   * The readable address of the community (#166).
+   *
+   * Exposed wherever a community is rendered as itself, because the public community page (#127)
+   * will address itself by it. The identifier stays the key: this is how you *reach* a community,
+   * not what it *is*.
+   */
+  slug: string
   name: string
   logoUrl: string | null
   description: string | null
@@ -32,6 +41,7 @@ export type ReferenceStatus = 'active' | 'archived'
 
 interface CommunityRow {
   Id: string
+  Slug: string
   Name: string
   /** Blob path inside the media container, not a URL — see mediaUrls. */
   LogoPath: string | null
@@ -55,7 +65,7 @@ interface AdminCommunityRow extends CommunityRow {
  * past event keeps showing the community that ran it.
  */
 export const LIST_COMMUNITIES_QUERY = `
-SELECT Id, Name, LogoPath, Description
+SELECT Id, Slug, Name, LogoPath, Description
 FROM dbo.Community
 WHERE Status = 'active'
 ORDER BY Name
@@ -72,6 +82,7 @@ ORDER BY Name
 export const LIST_ADMIN_COMMUNITIES_QUERY = `
 SELECT
   c.Id,
+  c.Slug,
   c.Name,
   c.LogoPath,
   c.Description,
@@ -89,6 +100,7 @@ export async function listCommunities(): Promise<CommunitySummary[]> {
 
   return result.recordset.map((row) => ({
     id: row.Id,
+    slug: row.Slug,
     name: row.Name,
     logoUrl: mediaUrl(row.LogoPath, media),
     description: row.Description,
@@ -107,6 +119,7 @@ export async function listAdminCommunities(): Promise<AdminCommunity[]> {
 export function mapAdminCommunity(media: MediaConfig) {
   return (row: AdminCommunityRow): AdminCommunity => ({
     id: row.Id,
+    slug: row.Slug,
     name: row.Name,
     logoPath: row.LogoPath,
     logoUrl: mediaUrl(row.LogoPath, media),
@@ -127,10 +140,13 @@ export function mapAdminCommunity(media: MediaConfig) {
 export type CommunityWriteResult =
   | { ok: true; community: AdminCommunity }
   | { ok: false; error: 'name-taken' }
+  /** `holder` is the community already carrying the slug, which #166 asks the refusal to name. */
+  | { ok: false; error: 'slug-taken'; holder: string | null }
   | { ok: false; error: 'not-found' }
 
 export interface CreateCommunityInput {
   name: string
+  slug: string
   description: string | null
   logoPath: string | null
   status: ReferenceStatus
@@ -154,6 +170,7 @@ export type UpdateCommunityInput = {
 const SELECT_ADMIN_COMMUNITY = `
 SELECT
   c.Id,
+  c.Slug,
   c.Name,
   c.LogoPath,
   c.Description,
@@ -167,9 +184,9 @@ WHERE c.Id = @id
 export const CREATE_COMMUNITY_QUERY = `
 DECLARE @created TABLE (Id UNIQUEIDENTIFIER);
 
-INSERT INTO dbo.Community (Name, Description, LogoPath, Status)
+INSERT INTO dbo.Community (Name, Slug, Description, LogoPath, Status)
 OUTPUT inserted.Id INTO @created
-VALUES (@name, @description, @logoPath, @status);
+VALUES (@name, @slug, @description, @logoPath, @status);
 
 DECLARE @id UNIQUEIDENTIFIER = (SELECT TOP 1 Id FROM @created);
 ${SELECT_ADMIN_COMMUNITY}
@@ -184,6 +201,7 @@ export async function createCommunity(input: CreateCommunityInput): Promise<Comm
     const result = await pool
       .request()
       .input('name', sql.NVarChar(200), input.name)
+      .input('slug', sql.NVarChar(SLUG_COLUMN_LENGTH), input.slug)
       .input('description', sql.NVarChar(300), input.description)
       .input('logoPath', sql.NVarChar(500), input.logoPath)
       .input('status', sql.NVarChar(20), input.status)
@@ -192,13 +210,37 @@ export async function createCommunity(input: CreateCommunityInput): Promise<Comm
   } catch (error) {
     // UX_Community_Name. Read-then-insert could always be overtaken between the two, so the
     // index is what actually decides and this reads its verdict.
-    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    if (isUniqueViolation(error)) return refuseDuplicate(error, input.slug)
     throw error
   }
 
   const row = rows[0]
   if (!row) return { ok: false, error: 'not-found' }
   return { ok: true, community: mapAdminCommunity(media)(row) }
+}
+
+/**
+ * Two unique indexes guard this table, and the caller has a different sentence for each. SQL
+ * Server names the violated one in its message, which is the only place the distinction exists.
+ */
+async function refuseDuplicate(
+  error: unknown,
+  slug: string | undefined,
+): Promise<CommunityWriteResult> {
+  const message = (error as { message?: unknown } | null)?.message
+  const onSlug = typeof message === 'string' && message.includes('UX_Community_Slug')
+  if (!onSlug) return { ok: false, error: 'name-taken' }
+  return { ok: false, error: 'slug-taken', holder: slug ? await nameHoldingSlug(slug) : null }
+}
+
+/** Read back so the refusal can name the community, as #166's edge case requires. */
+async function nameHoldingSlug(slug: string): Promise<string | null> {
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('slug', sql.NVarChar(SLUG_COLUMN_LENGTH), slug)
+    .query<{ Name: string }>('SELECT Name FROM dbo.Community WHERE Slug = @slug')
+  return result.recordset[0]?.Name ?? null
 }
 
 /**
@@ -211,6 +253,7 @@ export async function createCommunity(input: CreateCommunityInput): Promise<Comm
  */
 const UPDATABLE_COLUMNS = {
   name: { column: 'Name', type: sql.NVarChar(200) },
+  slug: { column: 'Slug', type: sql.NVarChar(SLUG_COLUMN_LENGTH) },
   description: { column: 'Description', type: sql.NVarChar(300) },
   logoPath: { column: 'LogoPath', type: sql.NVarChar(500) },
   status: { column: 'Status', type: sql.NVarChar(20) },
@@ -245,7 +288,7 @@ export async function updateCommunity(
     const result = await request.query<AdminCommunityRow>(`${update}${SELECT_ADMIN_COMMUNITY}`)
     rows = result.recordset
   } catch (error) {
-    if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }
+    if (isUniqueViolation(error)) return refuseDuplicate(error, patch.slug)
     throw error
   }
 

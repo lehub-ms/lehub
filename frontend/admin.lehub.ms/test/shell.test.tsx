@@ -2,10 +2,11 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isSectionActive, PATHS } from '@/lib/navigation'
 import { renderAt } from './support/render-route'
-import { GLOBAL_ADMIN } from './support/session-fixtures'
+import { COMMUNITIES, GLOBAL_ADMIN } from './support/session-fixtures'
 import { stubSignedIn } from './support/stub-session'
 
-const COMMUNITY = 'C1C1C1C1-0000-0000-0000-000000000001'
+/** Le slug, qui est la forme canonique de l'adresse d'une communauté depuis #166. */
+const COMMUNITY = COMMUNITIES[0]!.slug
 const EVENTS = `/c/${COMMUNITY}/evenements`
 
 /**
@@ -215,7 +216,7 @@ describe('constats de la revue', () => {
   })
 
   it('mène aux évènements quand une adresse de communauté est tronquée', async () => {
-    // `/c/<id>` n'a pas de section : sans route d'index, le joker ne capture pas un reste vide
+    // `/c/<slug>` n'a pas de section : sans route d'index, le joker ne capture pas un reste vide
     // et la zone de contenu restait blanche — pas même l'écran introuvable.
     const { router } = await renderShell(`/c/${COMMUNITY}`)
 

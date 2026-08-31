@@ -159,7 +159,7 @@ describe('requêtes d’écriture', () => {
   it('nomme les colonnes explicitement à l’insertion, statut compris', () => {
     // Sans Status dans la liste, une entrée créée depuis le backoffice prendrait le défaut de la
     // colonne — ce qui marcherait, mais rendrait le panneau incapable d'en créer une archivée.
-    expect(CREATE_COMMUNITY_QUERY).toContain('(Name, Description, LogoPath, Status)')
+    expect(CREATE_COMMUNITY_QUERY).toContain('(Name, Slug, Description, LogoPath, Status)')
     expect(CREATE_TECHNOLOGY_QUERY).toContain('(Name, LogoPath, Status)')
   })
 

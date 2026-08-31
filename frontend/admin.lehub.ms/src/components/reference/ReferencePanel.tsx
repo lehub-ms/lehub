@@ -11,6 +11,8 @@ import { SidePanel } from '@/components/overlays/SidePanel'
 import { LogoField } from '@/components/reference/LogoField'
 import { StatusField } from '@/components/reference/StatusField'
 import { ApiError, type ReferenceStatus, type UploadDestination } from '@/lib/api'
+import { isValidSlug, slugify, SLUG_MAX_LENGTH } from '@/lib/slug'
+import { ConfirmDialog } from '@/components/overlays/ConfirmDialog'
 
 /**
  * L'état d'ouverture du panneau : fermé, en création, ou en modification d'une entrée.
@@ -25,6 +27,8 @@ export const DESCRIPTION_LIMIT = 300
 
 export interface ReferenceDraft {
   name: string
+  /** Seules les communautés en portent un (#166). */
+  slug?: string
   description: string | null
   logoPath: string | null
   logoUrl: string | null
@@ -74,7 +78,7 @@ const COPY = {
 
 function blank(): ReferenceDraft {
   // Active par défaut : c'est ce que #152 et #153 demandent d'une entrée créée.
-  return { name: '', description: null, logoPath: null, logoUrl: null, status: 'active' }
+  return { name: '', slug: '', description: null, logoPath: null, logoUrl: null, status: 'active' }
 }
 
 /**
@@ -145,14 +149,23 @@ function ReferenceForm({
 
   const [draft, setDraft] = useState<ReferenceDraft>(entry ?? blank())
   const [nameError, setNameError] = useState<string | null>(null)
+  const [slugError, setSlugError] = useState<string | null>(null)
+  // Vrai dès qu'on y touche : tant que non, le slug suit le nom à la frappe.
+  const [slugEdited, setSlugEdited] = useState(entry !== null)
+  const [confirmingSlug, setConfirmingSlug] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const slugId = useId()
   const name = draft.name.trim()
+  const withSlug = kind === 'community'
+  // Proposé depuis le nom tant qu'on ne l'a pas corrigé à la main : #166 demande les deux.
+  const slug = withSlug ? (slugEdited ? (draft.slug ?? '') : slugify(name)) : undefined
+  const slugChanged = entry !== null && withSlug && slug !== entry.slug
   const tooLong = (draft.description ?? '').length > DESCRIPTION_LIMIT
 
-  async function submit(event: FormEvent): Promise<void> {
-    event.preventDefault()
+  async function submit(event: FormEvent | null, confirmed = false): Promise<void> {
+    event?.preventDefault()
     setFormError(null)
 
     if (!name) {
@@ -162,12 +175,35 @@ function ReferenceForm({
     }
     if (tooLong) return
 
+    if (withSlug && slug !== undefined && slug !== '' && !isValidSlug(slug)) {
+      setSlugError(
+        'Le slug ne peut contenir que des minuscules non accentuées, des chiffres et des tirets.',
+      )
+      document.getElementById(slugId)?.focus()
+      return
+    }
+
+    // Une adresse déjà partagée cessera de fonctionner : #166 demande que l'écran le dise avant
+    // de l'accepter, et non après.
+    if (slugChanged && !confirmed) {
+      setConfirmingSlug(true)
+      return
+    }
+
     setSaving(true)
     try {
-      await onSubmit({ ...draft, name })
+      await onSubmit({ ...draft, name, ...(withSlug ? { slug: slug || undefined } : {}) })
       onClose()
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code?.endsWith('_NAME_TAKEN')) {
+      if (cause instanceof ApiError && cause.code === 'COMMUNITY_SLUG_TAKEN') {
+        const holder = cause.body?.['holder']
+        setSlugError(
+          typeof holder === 'string'
+            ? `« ${holder} » utilise déjà ce slug.`
+            : 'Une autre communauté utilise déjà ce slug.',
+        )
+        document.getElementById(slugId)?.focus()
+      } else if (cause instanceof ApiError && cause.code?.endsWith('_NAME_TAKEN')) {
         setNameError(copy.taken)
         document.getElementById(nameId)?.focus()
       } else {
@@ -175,6 +211,7 @@ function ReferenceForm({
       }
     } finally {
       setSaving(false)
+      setConfirmingSlug(false)
     }
   }
 
@@ -258,6 +295,32 @@ function ReferenceForm({
           />
         </Field>
 
+        {withSlug ? (
+          <Field
+            label="Adresse (slug)"
+            htmlFor={slugId}
+            hint="L’adresse du backoffice : /c/azure-user-group-france/evenements"
+            error={slugError}
+          >
+            <input
+              id={slugId}
+              value={slug ?? ''}
+              maxLength={SLUG_MAX_LENGTH}
+              placeholder="azure-user-group-france"
+              aria-invalid={slugError !== null}
+              aria-describedby={slugError ? errorId(slugId) : hintId(slugId)}
+              className={INPUT_BASE}
+              onChange={(event) => {
+                setSlugError(null)
+                // Dès la première frappe, il cesse de suivre le nom : une correction manuelle
+                // ne doit pas être écrasée au caractère suivant.
+                setSlugEdited(true)
+                setDraft((current) => ({ ...current, slug: event.target.value }))
+              }}
+            />
+          </Field>
+        ) : null}
+
         {kind === 'community' ? (
           <Field
             label="Description"
@@ -289,6 +352,22 @@ function ReferenceForm({
           }}
         />
       </form>
+
+      <ConfirmDialog
+        open={confirmingSlug}
+        onOpenChange={setConfirmingSlug}
+        title="Changer l’adresse de cette communauté ?"
+        confirmLabel="Changer l’adresse"
+        pending={saving}
+        onConfirm={() => void submit(null, true)}
+        description={
+          <>
+            Les adresses déjà partagées vers{' '}
+            <strong className="text-ink">{entry?.name}</strong> cesseront de fonctionner. La
+            nouvelle sera <strong className="text-ink">/c/{slug}</strong>.
+          </>
+        }
+      />
     </SidePanel>
   )
 }

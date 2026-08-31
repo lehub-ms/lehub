@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation, useParams } from 'react-router'
 import { CommunitiesNotice } from '@/components/CommunitiesNotice'
 import { communityPath, PATHS } from '@/lib/navigation'
 import { useCommunitiesValue } from './useAllowedCommunities'
-import { findCommunity } from './useSelectedCommunity'
+import { findCommunityByRoute } from './useSelectedCommunity'
 
 /**
  * La garde de la section communauté : elle vérifie que l'URL en désigne une que la session
@@ -16,12 +16,14 @@ import { findCommunity } from './useSelectedCommunity'
  * passé par cet écran ou non.
  */
 export function CommunityScope(): ReactNode {
-  const { communityId } = useParams()
+  const { communitySlug } = useParams()
   const { pathname } = useLocation()
   const { state: communities, selectCommunity } = useCommunitiesValue()
 
   const matched =
-    communities.status === 'success' ? findCommunity(communities.communities, communityId) : null
+    communities.status === 'success'
+      ? findCommunityByRoute(communities.communities, communitySlug)
+      : null
 
   useEffect(() => {
     if (matched) selectCommunity(matched.id)
@@ -34,16 +36,19 @@ export function CommunityScope(): ReactNode {
   // Habilité mais aucune communauté à piloter : l'entrée du backoffice le dira, plutôt que de
   // renvoyer ici vers une communauté qui n'existe pas.
   if (!first) return <Navigate to={PATHS.home} replace />
-  if (!matched) return <Navigate to={communityPath(first.id, 'evenements')} replace />
+  if (!matched) return <Navigate to={communityPath(first.slug, 'evenements')} replace />
 
-  /* Une URL par communauté, et une seule. SQL Server rend ses `UNIQUEIDENTIFIER` en majuscules
-     tandis qu'un lien copié à la main peut porter n'importe quelle casse ; la résolution est
-     insensible à la casse, mais tout ce qui compare des chemins ne l'est pas — le marquage de
-     l'entrée courante s'y perdait. Plutôt que de rendre chaque comparaison tolérante, l'URL est
-     ramenée à sa forme canonique une fois pour toutes, ce qui rejoint la règle du site public :
-     un chemin canonique par écran. */
-  if (communityId && matched.id !== communityId) {
-    return <Navigate to={pathname.replace(`/c/${communityId}`, `/c/${matched.id}`)} replace />
+  /* Une URL par communauté, et une seule. La forme canonique est le slug depuis #166 ; tout ce
+     qui résout aussi — un identifiant partagé avant, une casse recopiée de travers — arrive ici
+     et repart dessus. C'est le même mécanisme qui ramenait déjà la casse des identifiants, et
+     c'est ce qui fait qu'« une adresse portant encore un identifiant continue de fonctionner et
+     amène sur la forme canonique » ne demande aucune redirection supplémentaire.
+
+     Plutôt que de rendre chaque comparaison de chemin tolérante — le marquage de l'entrée
+     courante s'y perdait — l'URL est normalisée une fois pour toutes, ce qui rejoint la règle du
+     site public : un chemin canonique par écran. */
+  if (communitySlug && matched.slug !== communitySlug) {
+    return <Navigate to={pathname.replace(`/c/${communitySlug}`, `/c/${matched.slug}`)} replace />
   }
 
   return <Outlet />

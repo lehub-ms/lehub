@@ -99,7 +99,7 @@ export function SidebarNav({ collapsed }: { collapsed: boolean }): ReactNode {
     active === null
       ? []
       : (['evenements', 'organisateurs'] as const).map((section) => ({
-          to: communityPath(active.id, section),
+          to: communityPath(active.slug, section),
           label: COMMUNITY_LABELS[section],
           icon: COMMUNITY_ICONS[section],
         }))

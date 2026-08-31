@@ -37,30 +37,30 @@ IF NOT EXISTS (SELECT 1 FROM dbo.FormatType)
 MERGE dbo.Community AS target
 USING (VALUES
   ('C1C1C1C1-0000-0000-0000-000000000001', N'Azure User Group France',   N'communities/azure-user-group-france.svg',
-   N'L''écosystème Azure au cœur de vos projets cloud, IA et DevOps — formations, meetups et retours d''expérience.'),
+   N'L''écosystème Azure au cœur de vos projets cloud, IA et DevOps — formations, meetups et retours d''expérience.', N'azure-user-group-france'),
   ('C2C2C2C2-0000-0000-0000-000000000002', N'Microsoft 365 Community',   NULL,
-   N'Maîtrisez Teams, SharePoint, Power Automate et Copilot avec une communauté francophone active et passionnée.'),
+   N'Maîtrisez Teams, SharePoint, Power Automate et Copilot avec une communauté francophone active et passionnée.', N'microsoft-365-community'),
   ('C3C3C3C3-0000-0000-0000-000000000003', N'Power Platform France',     N'communities/power-platform-france.svg',
-   N'Power Apps, Power BI, Power Automate, Power Virtual Agents — des solutions low-code au service de tous.'),
+   N'Power Apps, Power BI, Power Automate, Power Virtual Agents — des solutions low-code au service de tous.', N'power-platform-france'),
   ('C4C4C4C4-0000-0000-0000-000000000004', N'GitHub France',             NULL,
-   N'Collaboration, open source et GitHub Copilot — rejoignez la communauté française des développeurs GitHub.'),
+   N'Collaboration, open source et GitHub Copilot — rejoignez la communauté française des développeurs GitHub.', N'github-france'),
   ('C5C5C5C5-0000-0000-0000-000000000005', N'DevCom Lyon',               N'communities/devcom-lyon.svg',
-   N'La communauté tech lyonnaise — meetups, conférences et afterworks à Lyon et en Auvergne-Rhône-Alpes.'),
+   N'La communauté tech lyonnaise — meetups, conférences et afterworks à Lyon et en Auvergne-Rhône-Alpes.', N'devcom-lyon'),
   ('C6C6C6C6-0000-0000-0000-000000000006', N'Azure User Group Bordeaux', NULL,
-   N'Le rendez-vous mensuel des passionnés Azure en Gironde — cloud, infra et bonnes pratiques.'),
+   N'Le rendez-vous mensuel des passionnés Azure en Gironde — cloud, infra et bonnes pratiques.', N'azure-user-group-bordeaux'),
   ('C7C7C7C7-0000-0000-0000-000000000007', N'Cloud Native Nantes',       N'communities/cloud-native-nantes.svg',
-   N'Kubernetes, conteneurs et architectures cloud native, décryptés par la communauté nantaise.'),
+   N'Kubernetes, conteneurs et architectures cloud native, décryptés par la communauté nantaise.', N'cloud-native-nantes'),
   ('C8C8C8C8-0000-0000-0000-000000000008', N'Azure User Group Toulouse', NULL,
-   N'Retours d''expérience et sessions techniques Azure, portés par l''écosystème tech toulousain.'),
+   N'Retours d''expérience et sessions techniques Azure, portés par l''écosystème tech toulousain.', N'azure-user-group-toulouse'),
   ('C9C9C9C9-0000-0000-0000-000000000009', N'Tech & Wine Marseille',     NULL,
-   N'Des rencontres tech conviviales sur la Canebière, entre découvertes techniques et dégustation.'),
+   N'Des rencontres tech conviviales sur la Canebière, entre découvertes techniques et dégustation.', N'tech-wine-marseille'),
   ('CACACACA-0000-0000-0000-00000000000A', N'PyData Strasbourg',         NULL,
-   N'Data science et machine learning en Python, pour la communauté data strasbourgeoise.'),
+   N'Data science et machine learning en Python, pour la communauté data strasbourgeoise.', N'pydata-strasbourg'),
   ('CBCBCBCB-0000-0000-0000-00000000000B', N'Women in Tech France',      N'communities/women-in-tech-france.svg',
-   N'Un réseau national pour faire avancer la place des femmes dans la tech, meetups et mentorat.'),
+   N'Un réseau national pour faire avancer la place des femmes dans la tech, meetups et mentorat.', N'women-in-tech-france'),
   ('CCCCCCCC-0000-0000-0000-00000000000C', N'DevFest Lille',             NULL,
-   N'La conférence développeurs annuelle du Nord — talks, ateliers et networking.')
-) AS source (Id, Name, LogoPath, Description)
+   N'La conférence développeurs annuelle du Nord — talks, ateliers et networking.', N'devfest-lille')
+) AS source (Id, Name, LogoPath, Description, Slug)
 ON target.Id = source.Id
 -- Backfills Description on communities seeded before it existed (migration 0002) and
 -- LogoPath on those seeded before the local media existed. COALESCE keeps a value
@@ -70,8 +70,8 @@ WHEN MATCHED AND (target.Description IS NULL OR target.LogoPath IS NULL) THEN
   UPDATE SET Description = COALESCE(target.Description, source.Description),
              LogoPath    = COALESCE(target.LogoPath,    source.LogoPath)
 WHEN NOT MATCHED THEN
-  INSERT (Id, Name, LogoPath, Description)
-  VALUES (source.Id, source.Name, source.LogoPath, source.Description);
+  INSERT (Id, Name, LogoPath, Description, Slug)
+  VALUES (source.Id, source.Name, source.LogoPath, source.Description, source.Slug);
 
 -- Status (migration 0006) is deliberately absent from both clauses above, and that absence is
 -- the rule rather than an omission. The INSERT names an explicit column list, so a new

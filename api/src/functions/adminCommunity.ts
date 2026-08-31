@@ -9,6 +9,7 @@ import {
   routeLabel,
 } from '../lib/httpErrors'
 import { UPDATE_COMMUNITY } from '../lib/referenceSchemas'
+import { communityWriteRefusal } from '../lib/referenceResponses'
 import { guidParam, parseBody } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
@@ -58,12 +59,7 @@ export async function adminCommunity(
     )
   }
 
-  if (!result.ok) {
-    if (result.error === 'name-taken') {
-      return errorResponse(409, 'COMMUNITY_NAME_TAKEN', 'Another community already has this name.')
-    }
-    return errorResponse(404, 'COMMUNITY_NOT_FOUND', 'No community carries this identifier.')
-  }
+  if (!result.ok) return communityWriteRefusal(result)
 
   return { status: 200, jsonBody: result.community }
 }

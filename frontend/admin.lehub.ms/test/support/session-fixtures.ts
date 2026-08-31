@@ -23,12 +23,14 @@ export const MIRROR = {
 export const COMMUNITIES: CommunitySummary[] = [
   {
     id: 'C1C1C1C1-0000-0000-0000-000000000001',
+    slug: 'azure-user-group-france',
     name: 'Azure User Group France',
     logoUrl: null,
     description: null,
   },
   {
     id: 'C2C2C2C2-0000-0000-0000-000000000002',
+    slug: 'power-platform-france',
     name: 'Power Platform France',
     logoUrl: null,
     description: null,
@@ -45,6 +47,7 @@ export const COMMUNITIES: CommunitySummary[] = [
 export const ADMIN_COMMUNITIES: AdminCommunity[] = [
   {
     id: 'C1C1C1C1-0000-0000-0000-000000000001',
+    slug: 'azure-user-group-france',
     name: 'Azure User Group France',
     description: 'L’écosystème Azure au cœur de vos projets cloud.',
     logoPath: 'communities/azure-user-group-france.svg',
@@ -55,6 +58,7 @@ export const ADMIN_COMMUNITIES: AdminCommunity[] = [
   },
   {
     id: 'C2C2C2C2-0000-0000-0000-000000000002',
+    slug: 'power-platform-france',
     name: 'Power Platform France',
     description: 'Low-code au service de tous.',
     logoPath: null,
@@ -67,6 +71,7 @@ export const ADMIN_COMMUNITIES: AdminCommunity[] = [
   },
   {
     id: 'C3C3C3C3-0000-0000-0000-000000000003',
+    slug: 'communaute-generaliste-du-numerique-responsable-en',
     name: 'Communauté Généraliste du Numérique Responsable en Nouvelle-Aquitaine',
     description: null,
     logoPath: null,

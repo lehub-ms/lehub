@@ -51,6 +51,8 @@ interface ReferenceEntryBase {
 }
 
 export interface AdminCommunity extends ReferenceEntryBase {
+  /** L'adresse lisible de la communauté (#166) : modifiable, contrairement à l'identifiant. */
+  slug: string
   description: string | null
   /** Désignations en vigueur. Zéro n'est pas une anomalie (#151). */
   organizerCount: number
@@ -69,6 +71,8 @@ export function listAdminTechnologies(): Promise<AdminTechnology[]> {
 /** Le corps accepté à la création. Le serveur fait foi — voir `api/src/lib/referenceSchemas.ts`. */
 export interface CommunityInput {
   name: string
+  /** Facultatif à la création : absent, le serveur le dérive du nom. */
+  slug?: string
   description: string | null
   logoPath: string | null
   status: ReferenceStatus

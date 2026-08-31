@@ -10,6 +10,7 @@ const REGION_NAME = /Carrousel des communautés partenaires/
 function mockCommunities(prefix: string, count: number): CommunitySummary[] {
   return Array.from({ length: count }, (_, index) => ({
     id: `${prefix}-${index}`,
+    slug: `communaute-${prefix}-${index}`,
     name: `Communauté ${prefix} ${index}`,
     logoUrl: index === 0 ? null : `https://example.com/${prefix}-${index}.png`,
     description: index === 1 ? null : `Description ${prefix} ${index}`,
@@ -19,6 +20,7 @@ function mockCommunities(prefix: string, count: number): CommunitySummary[] {
 function mockCommunity(prefix: string, overrides: Partial<CommunitySummary> = {}): CommunitySummary {
   return {
     id: `${prefix}-0`,
+    slug: `communaute-${prefix}-0`,
     name: `Communauté ${prefix} 0`,
     logoUrl: `https://example.com/${prefix}-0.png`,
     description: `Description ${prefix} 0`,

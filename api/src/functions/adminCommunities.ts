@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { canWriteReferenceData } from '../lib/authz'
 import { createCommunity, listAdminCommunities } from '../lib/communitiesRepo'
-import { errorResponse, forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
+import { forbidden, listFetchError, routeLabel } from '../lib/httpErrors'
 import { CREATE_COMMUNITY } from '../lib/referenceSchemas'
+import { communityWriteRefusal } from '../lib/referenceResponses'
+import { slugFor } from '../lib/slug'
 import { parseBody } from '../lib/validation'
 import { withAuthorization, type AuthenticatedSession } from '../lib/withAuthorization'
 
@@ -60,9 +63,14 @@ async function create(
   const body = await parseBody(request, context, CREATE_COMMUNITY)
   if (!body.ok) return body.response
 
+  // The slug is proposed by the form; a caller that sends none gets one derived from the name.
+  // `slugFor` never returns an empty string — an untransposable name falls back to an
+  // identifier-derived slug rather than being refused.
+  const slug = body.value.slug ?? slugFor(body.value.name, randomUUID())
+
   let result
   try {
-    result = await createCommunity(body.value)
+    result = await createCommunity({ ...body.value, slug })
   } catch (error) {
     return listFetchError(
       context,
@@ -73,11 +81,7 @@ async function create(
     )
   }
 
-  if (!result.ok) {
-    // 409 and not 400: the body is perfectly well formed, another row simply holds that name.
-    // The French sentence is the front-end's, as httpErrors' header explains.
-    return errorResponse(409, 'COMMUNITY_NAME_TAKEN', 'Another community already has this name.')
-  }
+  if (!result.ok) return communityWriteRefusal(result)
 
   return { status: 201, jsonBody: result.community }
 }

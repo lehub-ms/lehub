@@ -131,6 +131,7 @@ describe('projection des lignes', () => {
   it('rend le chemin du logo et son URL absolue, jamais l’un sans l’autre', () => {
     const mapped = mapAdminCommunity(MEDIA)({
       Id: 'C1C1C1C1-0000-0000-0000-000000000001',
+      Slug: 'azure-user-group-france',
       Name: 'Azure User Group France',
       LogoPath: 'communities/azure-user-group-france.svg',
       Description: 'L’écosystème Azure.',
@@ -141,6 +142,7 @@ describe('projection des lignes', () => {
 
     // Le chemin, parce que le panneau le renvoie tel quel à l'enregistrement ; l'URL, parce que
     // l'aperçu l'affiche — recomposer l'un depuis l'autre mettrait mediaUrls dans un navigateur.
+    expect(mapped.slug).toBe('azure-user-group-france')
     expect(mapped.logoPath).toBe('communities/azure-user-group-france.svg')
     expect(mapped.logoUrl).toBe(
       'https://media.example/media/communities/azure-user-group-france.svg',
@@ -152,6 +154,7 @@ describe('projection des lignes', () => {
   it('rend une communauté sans logo sans fabriquer d’URL', () => {
     const mapped = mapAdminCommunity(MEDIA)({
       Id: 'C2C2C2C2-0000-0000-0000-000000000002',
+      Slug: 'microsoft-365-community',
       Name: 'Microsoft 365 Community',
       LogoPath: null,
       Description: null,

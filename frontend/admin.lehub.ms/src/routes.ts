@@ -68,7 +68,7 @@ export const routes: RouteObject[] = [
               /* Section communauté : la communauté est un segment de route, donc un lien
                  vers un de ces écrans se partage tel quel.
 
-                 Route parente plutôt que deux chemins absolus, pour que `communityId` reste
+                 Route parente plutôt que deux chemins absolus, pour que `communitySlug` reste
                  résolu sous n'importe quel enfant — le formulaire d'évènement de #143, et
                  jusqu'à l'écran introuvable d'une URL mal tapée. Sans elle, la coquille
                  perdrait sa section communauté au premier segment de trop. */

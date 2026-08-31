@@ -1,7 +1,7 @@
 import { useParams } from 'react-router'
 import type { CommunitySummary } from '@/lib/api'
 import { useCommunitiesValue } from './useAllowedCommunities'
-import { findCommunity } from './useSelectedCommunity'
+import { findCommunity, findCommunityByRoute } from './useSelectedCommunity'
 
 /**
  * La communauté que **la barre latérale** désigne, qui n'est pas celle de l'écran.
@@ -16,12 +16,12 @@ import { findCommunity } from './useSelectedCommunity'
  * continue de n'afficher une communauté que lorsque l'écran en a vraiment une.
  */
 export function useActiveCommunity(): CommunitySummary | null {
-  const { communityId } = useParams()
+  const { communitySlug } = useParams()
   const { state, preferredId } = useCommunitiesValue()
   if (state.status !== 'success') return null
 
   return (
-    findCommunity(state.communities, communityId) ??
+    findCommunityByRoute(state.communities, communitySlug) ??
     findCommunity(state.communities, preferredId) ??
     state.communities[0] ??
     null
