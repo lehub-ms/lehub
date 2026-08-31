@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '@lehub/shared/auth/AuthProvider'
 import { AccountPicker } from '@/components/people/AccountPicker'
-import type { Account } from '@/lib/api'
+import { ApiError, type Account } from '@/lib/api'
 import { GLOBAL_ADMIN } from './support/session-fixtures'
 import { jsonResponse, stubSignedIn, type FetchOverrides } from './support/stub-session'
 
@@ -192,6 +192,32 @@ describe('désignation depuis le tiroir', () => {
     await waitFor(() => {
       expect(designated).toEqual([AMELIE])
     })
+  })
+
+  it('nomme le refus métier plutôt que d’envoyer réessayer', async () => {
+    // Les deux refus que l'API distingue par un code. « Réessayez » sur un doublon serait un
+    // conseil qui ne peut jamais aboutir — et le cas est atteignable : la liste repasse « en
+    // cours » le temps d'une relecture, donc la puce « Déjà désigné » s'efface brièvement.
+    for (const [code, status, expected] of [
+      ['ALREADY_DESIGNATED', 409, 'Cette personne est déjà désignée sur ce périmètre.'],
+      ['ACCOUNT_NOT_FOUND', 404, 'Cette personne n’a plus de compte LeHub.'],
+      ['FORBIDDEN', 403, 'Vous n’êtes plus autorisé à désigner sur ce périmètre.'],
+    ] as const) {
+      open(answers({ accounts: [AMELIE] }), {
+        onDesignate: () =>
+          Promise.reject(new ApiError('refusé', status, code, { body: { code } })),
+      })
+
+      type('rou')
+      fireEvent.click(await screen.findByRole('button', { name: 'Ajouter Amélie Rousseau' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toBe(expected)
+
+      cleanup()
+      vi.unstubAllGlobals()
+      window.localStorage.clear()
+    }
   })
 
   it('dit ce qui a échoué, sur la ligne concernée, sans refermer le tiroir', async () => {

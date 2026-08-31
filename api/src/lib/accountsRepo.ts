@@ -1,5 +1,5 @@
 import sql from 'mssql'
-import { EMAIL_COLUMN_LENGTH, MAX_SEARCH_RESULTS } from './designationSchemas'
+import { EMAIL_COLUMN_LENGTH, MAX_SEARCH_LENGTH, MAX_SEARCH_RESULTS } from './designationSchemas'
 import { getPool } from './sqlClient'
 
 /**
@@ -40,6 +40,18 @@ export interface AccountSearchResult {
 export function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_[]/g, (character) => `\\${character}`)
 }
+
+/**
+ * How wide the pattern parameter has to be declared.
+ *
+ * **Not the query's own bound**, which is the trap: escaping doubles every one of the four
+ * syntax characters, so a query made entirely of `%` comes back twice as long, and the two
+ * surrounding wildcards add two more. Declared at the query's length, the driver would truncate
+ * such a pattern silently — cutting it mid-escape, which either changes what it matches or makes
+ * SQL Server reject the pattern outright and surfaces as a 500. Derived rather than written as a
+ * number so it cannot fall behind `MAX_SEARCH_LENGTH`.
+ */
+export const PATTERN_PARAMETER_LENGTH = 2 * MAX_SEARCH_LENGTH + 2
 
 /**
  * The one search in this API that reads the account table, and the first query-driven read in it
@@ -91,7 +103,7 @@ export async function searchAccounts(q: string): Promise<AccountSearchResult> {
   const result = await pool
     .request()
     .input('exact', sql.NVarChar(EMAIL_COLUMN_LENGTH), q)
-    .input('pattern', sql.NVarChar(400), `%${escapeLikePattern(q)}%`)
+    .input('pattern', sql.NVarChar(PATTERN_PARAMETER_LENGTH), `%${escapeLikePattern(q)}%`)
     .input('limit', sql.Int, MAX_SEARCH_RESULTS + 1)
     .query<AccountRow>(SEARCH_ACCOUNTS_QUERY)
 

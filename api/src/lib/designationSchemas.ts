@@ -47,11 +47,20 @@ export const MAX_SEARCH_RESULTS = 20
 export const EMAIL_COLUMN_LENGTH = 320
 
 /**
+ * The longest query the search accepts.
+ *
+ * Generous, and its only job is to keep an unbounded string out of a `LIKE` pattern. Exported
+ * because `accountsRepo` sizes its parameter from it: a hand-picked number there would go stale
+ * the day this one moves, and the pattern is *longer* than the query it wraps.
+ */
+export const MAX_SEARCH_LENGTH = 200
+
+/**
  * Trimmed before it is measured, like every other free-text field here: two spaces are not a
  * query. The upper bound is generous and exists only so an unbounded string never reaches a
  * `LIKE` pattern.
  */
-const query = z.string().trim().min(MIN_SEARCH_LENGTH).max(200)
+const query = z.string().trim().min(MIN_SEARCH_LENGTH).max(MAX_SEARCH_LENGTH)
 
 /**
  * Not trimmed, deliberately, and it is the one place this module departs from `referenceSchemas`.

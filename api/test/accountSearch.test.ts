@@ -1,9 +1,17 @@
 import { HttpRequest, InvocationContext } from '@azure/functions'
 import { describe, expect, it } from 'vitest'
 import { accountSearch } from '../src/functions/accountSearch'
-import { escapeLikePattern, SEARCH_ACCOUNTS_QUERY } from '../src/lib/accountsRepo'
+import {
+  escapeLikePattern,
+  PATTERN_PARAMETER_LENGTH,
+  SEARCH_ACCOUNTS_QUERY,
+} from '../src/lib/accountsRepo'
 import { canSearchAccounts } from '../src/lib/authz'
-import { MAX_SEARCH_RESULTS, MIN_SEARCH_LENGTH } from '../src/lib/designationSchemas'
+import {
+  MAX_SEARCH_LENGTH,
+  MAX_SEARCH_RESULTS,
+  MIN_SEARCH_LENGTH,
+} from '../src/lib/designationSchemas'
 import { type SessionPermissions } from '../src/lib/permissionsRepo'
 import { type AuthenticatedIdentity } from '../src/lib/tokenValidation'
 import { type AuthenticatedSession } from '../src/lib/withAuthorization'
@@ -163,6 +171,17 @@ describe('requête SQL de recherche', () => {
     // La barre inverse d'abord, sinon elle échapperait les échappements qu'on vient de poser.
     expect(escapeLikePattern('a\\%')).toBe('a\\\\\\%')
     expect(escapeLikePattern('rousseau')).toBe('rousseau')
+  })
+
+  it('déclare le motif assez large pour la pire requête recevable', () => {
+    // Le piège : échapper *allonge*. Une requête de 200 « % » en rend 400, plus les deux
+    // jokers qui l'entourent. Déclaré à la longueur de la requête, le pilote tronquerait ce
+    // motif en plein échappement — ce qui change ce qu'il capture, ou fait rejeter le motif
+    // par SQL Server et remonte en 500.
+    const worst = `%${escapeLikePattern('%'.repeat(MAX_SEARCH_LENGTH))}%`
+
+    expect(worst).toHaveLength(2 * MAX_SEARCH_LENGTH + 2)
+    expect(PATTERN_PARAMETER_LENGTH).toBeGreaterThanOrEqual(worst.length)
   })
 
   it('lit un enregistrement de plus qu’il n’en rend, pour signaler le dépassement', () => {

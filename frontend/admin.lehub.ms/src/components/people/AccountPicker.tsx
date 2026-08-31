@@ -114,13 +114,7 @@ export function AccountPicker({
     try {
       await onDesignate(account)
     } catch (cause) {
-      setFailure({
-        email: account.email,
-        message:
-          cause instanceof ApiError && cause.status === 403
-            ? 'Vous n’êtes plus autorisé à désigner sur ce périmètre.'
-            : 'La désignation a échoué. Réessayez dans un instant.',
-      })
+      setFailure({ email: account.email, message: refusal(cause) })
     } finally {
       setPending(null)
     }
@@ -242,4 +236,32 @@ export function AccountPicker({
       </p>
     </SidePanel>
   )
+}
+
+/**
+ * Ce qu'on dit d'un refus de désignation.
+ *
+ * Les deux refus métier de l'API portent chacun leur code parce que l'écran a une phrase
+ * différente à composer — c'est ce que dit l'en-tête d'`api/src/lib/designationResponses.ts`,
+ * et les replier tous sur « réessayez » rendrait ce contrat inutile.
+ *
+ * `ALREADY_DESIGNATED` n'est pas théorique : la liste repasse « en cours » le temps d'une
+ * relecture, donc les puces « Déjà désigné » s'effacent brièvement et un second clic sur la même
+ * personne est possible. « Réessayez » y serait un conseil qui ne peut jamais aboutir.
+ */
+function refusal(cause: unknown): string {
+  if (!(cause instanceof ApiError)) return 'La désignation a échoué. Réessayez dans un instant.'
+
+  switch (cause.code) {
+    case 'ALREADY_DESIGNATED':
+      return 'Cette personne est déjà désignée sur ce périmètre.'
+    case 'ACCOUNT_NOT_FOUND':
+      // Le compte a disparu entre la recherche et la désignation. Rare, mais le dire vaut mieux
+      // que d'envoyer réessayer sur quelque chose qui n'existe plus.
+      return 'Cette personne n’a plus de compte LeHub.'
+    default:
+      return cause.status === 403
+        ? 'Vous n’êtes plus autorisé à désigner sur ce périmètre.'
+        : 'La désignation a échoué. Réessayez dans un instant.'
+  }
 }
