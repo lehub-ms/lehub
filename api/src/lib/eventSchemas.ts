@@ -125,11 +125,15 @@ export const CREATE_EVENT = z
  * alone, which is not the same as one explicitly set to `null` — clearing a description is a
  * legitimate edit and says so with `null`.
  *
- * **The attachments are not here yet**, and their absence is deliberate rather than pending.
- * Replacing `communityIds` is the one write this API bounds asymmetrically: attaching is open to
- * anyone, detaching is not (#147), and a PATCH that accepted the field before those rules
- * existed would let a forged request strip an event of its co-organisers. They arrive in the
- * same change as `canDetachCommunity`, or not at all.
+ * The attachments **replace** the set rather than adding to it: an absent key leaves the links
+ * alone, and a present one is the complete list from now on. There is no "remove this one"
+ * operation, because the form does not have one either — it hands back the chips it shows.
+ *
+ * What this schema deliberately does *not* express is who may remove what. Attaching is open to
+ * anyone, detaching is not (#147), and that asymmetry depends on the caller's designations and
+ * on the event's current set — neither of which a body schema can see. It lives in the route,
+ * next to `canDetachCommunity`, and this comment exists so that the absence reads as a decision
+ * rather than as a hole.
  *
  * The date ordering is **not** checked here. A patch may carry one date and not the other, and
  * the one it omits is in the database — so the comparison needs the stored row and belongs to
@@ -144,6 +148,8 @@ export const UPDATE_EVENT = z
     formatTypeId: id.optional(),
     eventModeId: id.optional(),
     bannerImagePath: bannerImagePath.nullable().optional(),
+    communityIds: ids.optional(),
+    technologyIds: ids.optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
     message: 'At least one field must be supplied.',

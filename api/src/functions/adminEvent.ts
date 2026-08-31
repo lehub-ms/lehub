@@ -1,5 +1,5 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
-import { canWriteEvent } from '../lib/authz'
+import { canDetachCommunity, canWriteEvent, sameId } from '../lib/authz'
 import { eventWriteRefusal } from '../lib/eventResponses'
 import { getAdminEvent, updateEvent, type AdminEvent } from '../lib/eventsRepo'
 import { UPDATE_EVENT } from '../lib/eventSchemas'
@@ -66,12 +66,61 @@ export function eventHandler(read = getAdminEvent, write = updateEvent) {
 
     if (request.method === 'GET') return { status: 200, jsonBody: event }
 
-    return modify(request, context, event, write)
+    return modify(request, context, session, event, write)
   }
 }
 
 function notFound(): HttpResponseInit {
   return errorResponse(404, 'EVENT_NOT_FOUND', 'No event carries this identifier.')
+}
+
+/**
+ * The one asymmetry of co-organisation, enforced: attaching is open, detaching is not.
+ *
+ * **Only removals are examined.** An organiser may attach any community they like, including
+ * ones they have nothing to do with — that is how a joint evening gets organised without asking
+ * an administrator, and #147 makes the openness explicit rather than incidental. So this
+ * computes the difference and asks a question about each *departure*, never about an arrival.
+ *
+ * Two rules, and they are not the same rule twice. `canDetachCommunity` answers per community:
+ * an organiser may only remove one they organise themselves, because removing someone else's is
+ * evicting a co-organiser. The emptiness check answers about the **result**: with `[A, B]` and an
+ * organiser of both, each single removal passes on its own — the other still stands in the stored
+ * set — and yet removing both at once would leave an orphan event that only an administrator
+ * could ever reopen. Per-item checks against the original set cannot see that, which is exactly
+ * why the second check exists.
+ *
+ * Handing the event over is deliberately still allowed: removing one's own last community while
+ * another remains passes both rules. The screen warns that access goes with it.
+ */
+function refuseDetachment(
+  request: HttpRequest,
+  context: InvocationContext,
+  session: AuthenticatedSession,
+  stored: AdminEvent,
+  submitted: readonly string[] | undefined,
+): HttpResponseInit | null {
+  if (!submitted) return null
+
+  const current = stored.communities.map((community) => community.id)
+  const removed = current.filter((id) => !submitted.some((kept) => sameId(kept, id)))
+
+  const refuse = (action: string): HttpResponseInit =>
+    forbidden(context, {
+      route: routeLabel(request),
+      action,
+      objectId: session.identity.objectId,
+    })
+
+  for (const id of removed) {
+    if (!canDetachCommunity(session.permissions, current, id)) return refuse('detach:community')
+  }
+
+  if (submitted.length === 0 && !session.permissions.isGlobalAdmin) {
+    return refuse('detach:last-community')
+  }
+
+  return null
 }
 
 /**
@@ -85,11 +134,15 @@ function notFound(): HttpResponseInit {
 async function modify(
   request: HttpRequest,
   context: InvocationContext,
+  session: AuthenticatedSession,
   stored: AdminEvent,
   write: typeof updateEvent,
 ): Promise<HttpResponseInit> {
   const body = await parseBody(request, context, UPDATE_EVENT)
   if (!body.ok) return body.response
+
+  const detachment = refuseDetachment(request, context, session, stored, body.value.communityIds)
+  if (detachment) return detachment
 
   const startDate = body.value.startDate ?? stored.startDate
   const endDate = body.value.endDate ?? stored.endDate

@@ -166,6 +166,17 @@ export function listCommunityEvents(communityId: string): Promise<AdminEvent[]> 
   )
 }
 
+/**
+ * Les technologies actives, pour le rattachement d’un évènement (#147).
+ *
+ * Anonyme, comme `listCommunities` : `listAdminTechnologies` est réservée aux administrateurs
+ * globaux, et un organisateur doit pouvoir étiqueter son évènement. La vue d’administration
+ * n’est pas la même chose que le référentiel.
+ */
+export function listTechnologies(): Promise<NamedRef[]> {
+  return apiFetch<NamedRef[]>('/api/technologies')
+}
+
 /** Une entrée d’un vocabulaire fermé : un identifiant à renvoyer, un libellé à afficher. */
 export interface EventOption {
   id: string

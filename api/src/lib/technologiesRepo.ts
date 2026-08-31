@@ -34,6 +34,51 @@ interface AdminTechnologyRow {
 }
 
 /**
+ * A technology as anyone may see it: what it is called and how it is marked, nothing more.
+ *
+ * The same shape as a `NamedRef` nested in an event, on purpose — an event's chips and the list
+ * they are chosen from render through the same component, and two shapes would mean two.
+ */
+export interface TechnologySummary {
+  id: string
+  name: string
+  logoUrl: string | null
+}
+
+/**
+ * All *active* technologies, alphabetical — the exact counterpart of `LIST_COMMUNITIES_QUERY`.
+ *
+ * Anonymous, and that is the point: attaching a technology to an event is an organiser's job
+ * (#147), and `manage/technologies` is closed to anyone who is not a global administrator. An
+ * organiser needs this list and has no business seeing the administration view of it — the
+ * archived entries, the counts — which is exactly the split #151 already drew for communities.
+ *
+ * The status filter is the public half of #155: an archived technology stops being *offered*
+ * while every attachment it already carries stands, which is why the filter lives here and not
+ * in the events payload.
+ */
+export const LIST_TECHNOLOGIES_QUERY = `
+SELECT Id, Name, LogoPath
+FROM dbo.Technology
+WHERE Status = 'active'
+ORDER BY Name
+`
+
+export async function listTechnologies(): Promise<TechnologySummary[]> {
+  const media = getMediaConfig()
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .query<{ Id: string; Name: string; LogoPath: string | null }>(LIST_TECHNOLOGIES_QUERY)
+
+  return result.recordset.map((row) => ({
+    id: row.Id,
+    name: row.Name,
+    logoUrl: mediaUrl(row.LogoPath, media),
+  }))
+}
+
+/**
  * Every technology, archived ones included. Same shape as the community listing, and the same
  * reason for the correlated subquery: it is an index seek on `IX_EventTechnology_TechnologyId`.
  */

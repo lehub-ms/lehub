@@ -444,9 +444,42 @@ export async function createEvent(input: CreateEventInput): Promise<EventWriteRe
  * validated body hands over for a key the caller omitted. Same shape as `UpdateCommunityInput`.
  */
 export type UpdateEventInput = {
-  [K in keyof Omit<CreateEventInput, 'communityIds' | 'technologyIds'>]?:
-    | CreateEventInput[K]
-    | undefined
+  [K in keyof CreateEventInput]?: CreateEventInput[K] | undefined
+}
+
+/**
+ * Replaces one set of links, without churning the rows that do not change.
+ *
+ * `NOT IN` then `NOT EXISTS` rather than "delete everything and reinsert": a blanket delete would
+ * rewrite every unchanged pair, and — more to the point — would briefly leave the event with no
+ * community at all inside the transaction, which is the exact state #147 spends three rules
+ * forbidding. Nothing outside would see it, but a statement that produces a forbidden state and
+ * relies on isolation to hide it is one refactor away from being wrong.
+ *
+ * Guarded by `IS NOT NULL` because an absent list means "leave these links alone", which is not
+ * the same as an empty list meaning "remove them all".
+ *
+ * Guarded by the event's existence too, and that one is not belt-and-braces. An event deleted
+ * from another tab while this one was editing it must answer "this event is gone" — but the
+ * insert would hit `FK_EventCommunity_Event` first and answer "something you referenced does not
+ * exist", which is true of the event and useless to the person reading it. Skipping the links
+ * lets the trailing SELECT come back empty, which is what `not-found` is read from.
+ */
+function replaceLinks(table: string, column: string, parameter: string): string {
+  return `
+IF @${parameter} IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.Event WHERE Id = @id)
+BEGIN
+  DELETE FROM dbo.${table}
+   WHERE EventId = @id
+     AND ${column} NOT IN (SELECT value FROM OPENJSON(@${parameter}) WITH (value UNIQUEIDENTIFIER '$'));
+
+  INSERT INTO dbo.${table} (EventId, ${column})
+  SELECT DISTINCT @id, j.value
+    FROM OPENJSON(@${parameter}) WITH (value UNIQUEIDENTIFIER '$') AS j
+   WHERE NOT EXISTS (SELECT 1 FROM dbo.${table} AS existing
+                      WHERE existing.EventId = @id AND existing.${column} = j.value);
+END
+`
 }
 
 /**
@@ -485,20 +518,46 @@ export async function updateEvent(
   const assignments: string[] = []
 
   for (const [key, spec] of Object.entries(UPDATABLE_EVENT_COLUMNS)) {
-    const value = patch[key as keyof UpdateEventInput]
+    const value = patch[key as keyof typeof UPDATABLE_EVENT_COLUMNS]
     if (value === undefined) continue
     assignments.push(`${spec.column} = @${key}`)
     request.input(key, spec.type, columnValue(key, value))
   }
+
+  // Always declared, `null` when absent: the statement below names them, and `null` is what
+  // makes its `IS NOT NULL` guard mean "leave these links alone".
+  request.input(
+    'communityIds',
+    sql.NVarChar(sql.MAX),
+    patch.communityIds ? JSON.stringify(patch.communityIds) : null,
+  )
+  request.input(
+    'technologyIds',
+    sql.NVarChar(sql.MAX),
+    patch.technologyIds ? JSON.stringify(patch.technologyIds) : null,
+  )
 
   // The schema already refuses an empty patch; this keeps the statement valid if that ever
   // changes, and answers the read rather than a syntax error.
   const update =
     assignments.length > 0 ? `UPDATE dbo.Event SET ${assignments.join(', ')} WHERE Id = @id;` : ''
 
+  // One transaction, like the creation: the columns and both sets of links move together or not
+  // at all. An event whose communities were replaced but whose title was not would be a state no
+  // caller asked for.
+  const statement = `
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+${update}
+${replaceLinks('EventCommunity', 'CommunityId', 'communityIds')}
+${replaceLinks('EventTechnology', 'TechnologyId', 'technologyIds')}
+COMMIT TRANSACTION;
+${SELECT_ADMIN_EVENT}
+`
+
   let rows: AdminEventRow[]
   try {
-    const result = await request.query<AdminEventRow>(`${update}${SELECT_ADMIN_EVENT}`)
+    const result = await request.query<AdminEventRow>(statement)
     rows = result.recordset
   } catch (error) {
     if (isForeignKeyViolation(error)) return { ok: false, error: 'unknown-reference' }

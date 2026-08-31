@@ -17,6 +17,9 @@ export interface EventDraft {
   endLocal: string
   formatTypeId: string
   eventModeId: string
+  /** Les rattachements cochés. Remplacent l'ensemble à l'enregistrement, jamais s'y ajoutent. */
+  communityIds: string[]
+  technologyIds: string[]
 }
 
 export const EMPTY_DRAFT: EventDraft = {
@@ -26,6 +29,8 @@ export const EMPTY_DRAFT: EventDraft = {
   endLocal: '',
   formatTypeId: '',
   eventModeId: '',
+  communityIds: [],
+  technologyIds: [],
 }
 
 /** Ce que l'enregistrement reçoit : les dates converties, la description normalisée. */
@@ -36,6 +41,8 @@ export interface EventFormValues {
   endDate: string
   formatTypeId: string
   eventModeId: string
+  communityIds: string[]
+  technologyIds: string[]
 }
 
 export type FieldKey = 'title' | 'startLocal' | 'endLocal' | 'formatTypeId' | 'eventModeId'

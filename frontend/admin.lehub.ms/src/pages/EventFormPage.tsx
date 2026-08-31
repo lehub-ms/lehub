@@ -1,6 +1,8 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { CalendarX } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
+import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
+import { useAuth } from '@lehub/shared/auth/useAuth'
 import { EmptyState } from '@lehub/shared/components/EmptyState'
 import { ErrorState } from '@lehub/shared/components/ErrorState'
 import { EventForm } from '@/components/events/EventForm'
@@ -12,11 +14,15 @@ import {
   ApiError,
   createEvent,
   getEvent,
+  listCommunities,
   listEventOptions,
+  listTechnologies,
   updateEvent,
   type AdminEvent,
   type EventOptions,
+  type NamedRef,
 } from '@/lib/api'
+import { communityChips, technologyChips } from '@/lib/eventAttachments'
 import { toLocalInput } from '@/lib/eventDates'
 import { communityPath } from '@/lib/navigation'
 
@@ -27,6 +33,15 @@ const LEAVE_MESSAGE =
 interface FormData {
   options: EventOptions
   event: AdminEvent | null
+  /**
+   * **Toutes** les communautés actives, et non celles que la session pilote.
+   *
+   * `useAllowedCommunities` filtre sur les désignations, ce qui est juste pour la barre latérale
+   * et faux ici : un organisateur peut rattacher n'importe quelle communauté active, y compris
+   * une qu'il n'organise pas, et c'est ainsi qu'une soirée commune se monte (#147).
+   */
+  communities: NamedRef[]
+  technologies: NamedRef[]
 }
 
 /**
@@ -64,9 +79,17 @@ function messageFor(error: unknown): string {
   }
 }
 
-/** Le brouillon initial : vide en création, l'évènement converti en heure de Paris en édition. */
-function draftFor(event: AdminEvent | null): EventDraft {
-  if (!event) return EMPTY_DRAFT
+/**
+ * Le brouillon initial.
+ *
+ * En création, la communauté sélectionnée est cochée **d'office** : créer un évènement qu'on ne
+ * pourrait pas rouvrir n'aurait pas de sens (#145). Elle l'est dans le brouillon et non au moment
+ * d'enregistrer, pour que la pastille le montre plutôt que de le faire dans le dos.
+ */
+function draftFor(event: AdminEvent | null, defaultCommunityId: string | null): EventDraft {
+  if (!event) {
+    return { ...EMPTY_DRAFT, communityIds: defaultCommunityId ? [defaultCommunityId] : [] }
+  }
 
   return {
     title: event.title,
@@ -75,6 +98,8 @@ function draftFor(event: AdminEvent | null): EventDraft {
     endLocal: toLocalInput(event.endDate),
     formatTypeId: event.formatTypeId,
     eventModeId: event.eventModeId,
+    communityIds: event.communities.map((community) => community.id),
+    technologyIds: event.technologies.map((technology) => technology.id),
   }
 }
 
@@ -93,15 +118,18 @@ export function EventFormPage(): ReactNode {
   const { eventId } = useParams()
   const community = useSelectedCommunity()
   const navigate = useNavigate()
+  const { state: session } = useAuth()
 
   const load = useCallback(async (): Promise<FormData[]> => {
     // En parallèle : les deux lectures sont indépendantes, et les enchaîner doublerait
     // l'attente devant un formulaire vide.
-    const [options, event] = await Promise.all([
+    const [options, event, communities, technologies] = await Promise.all([
       listEventOptions(),
       eventId ? getEvent(eventId) : Promise.resolve(null),
+      listCommunities(),
+      listTechnologies(),
     ])
-    return [{ options, event }]
+    return [{ options, event, communities, technologies }]
   }, [eventId])
   const state = useReferenceList(load)
   const data = state.status === 'success' ? (state.entries[0] ?? null) : null
@@ -114,7 +142,7 @@ export function EventFormPage(): ReactNode {
   const [seen, setSeen] = useState<FormData | null>(null)
   if (data && seen !== data) {
     setSeen(data)
-    setDraft(draftFor(data.event))
+    setDraft(draftFor(data.event, community?.id ?? null))
   }
 
   const [dirty, setDirty] = useState(false)
@@ -127,24 +155,45 @@ export function EventFormPage(): ReactNode {
   const stored = seen?.event ?? null
   const heading = stored ? stored.title : 'Nouvel évènement'
 
+  /* Les habilitations décident de ce qui se retire (#147). Absentes — la session n'est pas
+     encore résolue — on ne verrouille rien : l'écran n'est de toute façon pas la barrière, et
+     l'API refuse la même écriture qu'une pastille ait été cliquable ou non.
+
+     Mémorisées, sinon l'objet de repli serait recréé à chaque rendu et emporterait le `useMemo`
+     ci-dessous avec lui. */
+  const permissions = useMemo<SessionPermissions>(
+    () =>
+      session.status === 'authenticated'
+        ? session.permissions
+        : { isGlobalAdmin: false, organizedCommunityIds: [] },
+    [session],
+  )
+
+  const chips = useMemo(() => {
+    if (!data) return { communities: [], technologies: [] }
+    return {
+      communities: communityChips({
+        offered: data.communities,
+        // Ce que l'évènement portait **à l'ouverture** : c'est à cet ensemble-là que le serveur
+        // comparera pour décider de ce qui est un retrait.
+        attached: data.event?.communities ?? [],
+        selected: draft.communityIds,
+        permissions,
+      }),
+      technologies: technologyChips(data.technologies, data.event?.technologies ?? []),
+    }
+  }, [data, draft.communityIds, permissions])
+
   async function save(values: EventFormValues): Promise<void> {
     setPending(true)
     setSubmitError(null)
     try {
       if (stored) {
-        // Les six champs que ce formulaire possède, et eux seuls : la bannière (#148) et les
-        // rattachements (#147) ne sont pas envoyés, donc pas touchés.
+        // La bannière n'est pas envoyée, donc pas touchée : elle appartient à #148 et ce
+        // formulaire ne la possède pas encore.
         await updateEvent(stored.id, values)
       } else {
-        await createEvent({
-          ...values,
-          bannerImagePath: null,
-          /* La communauté sélectionnée est rattachée d'office : créer un évènement qu'on ne
-             pourrait pas rouvrir n'aurait pas de sens (#145). Le choix d'autres communautés
-             arrive avec #147. */
-          communityIds: community ? [community.id] : [],
-          technologyIds: [],
-        })
+        await createEvent({ ...values, bannerImagePath: null })
       }
       // Désarmée **avant** de naviguer. `setDirty(false)` seul ne suffit pas : la garde
       // interroge sa condition de façon synchrone, avant que l'état n'ait été propagé.
@@ -211,6 +260,8 @@ export function EventFormPage(): ReactNode {
             setDirty(true)
           }}
           options={data.options}
+          communityChips={chips.communities}
+          technologyChips={chips.technologies}
           submitError={submitError}
           pending={pending}
           submitLabel="Enregistrer"

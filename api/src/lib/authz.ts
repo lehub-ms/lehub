@@ -33,8 +33,13 @@ import { type UploadDestination } from './uploadSchemas'
  * server (#135) — and no client is under any obligation to echo back the casing it was
  * given. A case-sensitive miss here fails closed: a legitimate organiser gets a 403 on their
  * own community, and it reads as a permissions bug rather than a casing one.
+ *
+ * Exported since #147: the route that replaces an event's communities has to work out which ones
+ * were *removed*, by comparing the stored set against the submitted one — the same comparison,
+ * with the same trap. A second spelling of it over there is precisely what this comment warns
+ * against.
  */
-function sameId(a: string, b: string): boolean {
+export function sameId(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase()
 }
 

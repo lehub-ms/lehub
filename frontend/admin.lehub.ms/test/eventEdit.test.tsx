@@ -102,7 +102,7 @@ describe('modification d’un évènement', () => {
     expect(screen.getByText('La date de fin doit être postérieure à la date de début.')).toBeTruthy()
   })
 
-  it('n’envoie que les champs du formulaire, et ramène à la liste', async () => {
+  it('n’envoie que ce que le formulaire possède, et ramène à la liste', async () => {
     stubSignedIn(ORGANIZER)
     const { router } = await openEdit()
 
@@ -116,11 +116,13 @@ describe('modification d’un évènement', () => {
     const sent = lastPatch()
     expect(sent.title).toBe('Azure Deep Dive — édition 2')
     expect(sent.startDate).toBe(EVENT.startDate)
-    // La bannière et les rattachements ne sont pas envoyés, donc pas touchés : ils
-    // appartiennent à #148 et #147, et un PATCH qui les porterait les écraserait.
+    // Les rattachements repartent **inchangés** plutôt qu'absents : le formulaire les possède
+    // depuis #147, et il renvoie l'ensemble qu'il affiche.
+    expect(sent.communityIds).toEqual(EVENT.communities.map((community) => community.id))
+    expect(sent.technologyIds).toEqual([])
+    // La bannière, elle, n'est pas envoyée donc pas touchée : elle appartient à #148, et un
+    // PATCH qui la porterait l'écraserait avec une valeur que ce formulaire n'a jamais lue.
     expect(sent).not.toHaveProperty('bannerImagePath')
-    expect(sent).not.toHaveProperty('communityIds')
-    expect(sent).not.toHaveProperty('technologyIds')
   })
 
   it('dit qu’un identifiant inconnu ne correspond à rien, et ramène à la liste', async () => {

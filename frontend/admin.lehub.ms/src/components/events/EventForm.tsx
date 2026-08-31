@@ -1,10 +1,14 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Button } from '@lehub/shared/components/Button'
+import { CommunityAvatar } from '@lehub/shared/components/entities/CommunityAvatar'
+import { TechnologyAvatar } from '@lehub/shared/components/entities/TechnologyAvatar'
 import { Field } from '@lehub/shared/components/form/Field'
 import { cn } from '@lehub/shared/lib/cn'
 import { errorId } from '@lehub/shared/lib/fieldIds'
 import { INPUT_BASE } from '@lehub/shared/lib/form-styles'
+import { ChipPicker, type ChipEntry } from '@/components/events/ChipPicker'
 import type { EventOptions } from '@/lib/api'
+import { SHARING_NOTE } from '@/lib/eventAttachments'
 import { fromLocalInput } from '@/lib/eventDates'
 import {
   FIELD_ORDER,
@@ -25,6 +29,9 @@ interface EventFormProps {
   submitLabel: string
   onSubmit: (values: EventFormValues) => void
   onCancel: () => void
+  /** Les pastilles déjà arbitrées : ce qui se retire, et à quel prix. Voir `eventAttachments`. */
+  communityChips: readonly ChipEntry[]
+  technologyChips: readonly ChipEntry[]
   /** L'action destructrice, absente en création (#146). */
   destructiveAction?: ReactNode
 }
@@ -46,6 +53,8 @@ export function EventForm({
   submitLabel,
   onSubmit,
   onCancel,
+  communityChips,
+  technologyChips,
   destructiveAction,
 }: EventFormProps): ReactNode {
   const ids = useId()
@@ -96,6 +105,8 @@ export function EventForm({
       endDate,
       formatTypeId: draft.formatTypeId,
       eventModeId: draft.eventModeId,
+      communityIds: draft.communityIds,
+      technologyIds: draft.technologyIds,
     })
   }
 
@@ -249,6 +260,42 @@ export function EventForm({
                 })}
               </div>
             </Field>
+          </section>
+
+          <section className="glass rounded-2xl p-5 sm:p-6">
+            <header className="mb-5">
+              <h2 className="font-heading text-lg font-semibold text-ink">Rattachements</h2>
+              <p className="mt-1 text-[0.8125rem] text-ink-muted">
+                Ils servent aux filtres et aux recommandations sur lehub.ms.
+              </p>
+            </header>
+
+            <ChipPicker
+              legend="Technologies"
+              entries={technologyChips}
+              selected={draft.technologyIds}
+              onChange={(ids) => {
+                set('technologyIds', ids)
+              }}
+              renderAvatar={(entry) => (
+                <TechnologyAvatar technology={entry} size={18} hidden className="rounded" />
+              )}
+              emptyLabel="Aucune technologie au référentiel pour l’instant."
+            />
+
+            <ChipPicker
+              legend="Communautés"
+              note={SHARING_NOTE}
+              entries={communityChips}
+              selected={draft.communityIds}
+              onChange={(ids) => {
+                set('communityIds', ids)
+              }}
+              renderAvatar={(entry) => (
+                <CommunityAvatar community={entry} size={18} hidden className="rounded-full" />
+              )}
+              emptyLabel="Aucune communauté au référentiel pour l’instant."
+            />
           </section>
         </div>
 

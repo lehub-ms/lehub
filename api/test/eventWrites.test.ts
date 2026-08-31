@@ -63,6 +63,47 @@ function code(response: { jsonBody?: unknown }): string {
   return (response.jsonBody as { code: string }).code
 }
 
+const STORED = {
+  id: 'E1E1E1E1-0000-0000-0000-000000000001',
+  title: 'Azure Deep Dive',
+  description: null,
+  startDate: '2026-09-10T16:30:00.000Z',
+  endDate: '2026-09-10T19:00:00.000Z',
+  bannerImagePath: null,
+  bannerImageUrl: null,
+  formatTypeId: FORMAT,
+  format: 'Meetup',
+  eventModeId: MODE,
+  mode: 'Présentiel',
+  // Porté par une seule communauté, celle que `ORGANIZER` organise.
+  communities: [{ id: MINE, name: 'AZUG', logoUrl: null, archived: false }],
+  technologies: [],
+}
+
+/** Le lecteur et l'écrivain sont des paramètres : la couche s'éprouve sans base. */
+function handler(stored: typeof STORED | null = STORED) {
+  const written: unknown[] = []
+  const route = eventHandler(
+    () => Promise.resolve(stored),
+    (id, patch) => {
+      written.push({ id, patch })
+      return Promise.resolve({ ok: true, event: { ...STORED, ...patch } })
+    },
+  )
+  return { route, written }
+}
+
+function request(method: 'GET' | 'PATCH', payload?: unknown, eventId = STORED.id): HttpRequest {
+  return new HttpRequest({
+    method,
+    url: `https://api.example.com/api/manage/events/${eventId}`,
+    params: { eventId },
+    ...(payload === undefined
+      ? { headers: {} }
+      : { body: { string: JSON.stringify(payload) }, headers: { 'content-type': 'application/json' } }),
+  })
+}
+
 /**
  * Comme les autres suites d'écriture, celle-ci s'arrête au refus : c'est ce que la couche HTTP
  * décide sans base. L'écriture elle-même relève du repository, dont les constantes SQL sont
@@ -227,47 +268,6 @@ describe("écriture d'un évènement et de ses rattachements", () => {
 })
 
 describe('lecture et modification d’un évènement', () => {
-  const STORED = {
-    id: 'E1E1E1E1-0000-0000-0000-000000000001',
-    title: 'Azure Deep Dive',
-    description: null,
-    startDate: '2026-09-10T16:30:00.000Z',
-    endDate: '2026-09-10T19:00:00.000Z',
-    bannerImagePath: null,
-    bannerImageUrl: null,
-    formatTypeId: FORMAT,
-    format: 'Meetup',
-    eventModeId: MODE,
-    mode: 'Présentiel',
-    // Porté par une seule communauté, celle que `ORGANIZER` organise.
-    communities: [{ id: MINE, name: 'AZUG', logoUrl: null, archived: false }],
-    technologies: [],
-  }
-
-  /** Le lecteur et l'écrivain sont des paramètres : la couche s'éprouve sans base. */
-  function handler(stored: typeof STORED | null = STORED) {
-    const written: unknown[] = []
-    const route = eventHandler(
-      () => Promise.resolve(stored),
-      (id, patch) => {
-        written.push({ id, patch })
-        return Promise.resolve({ ok: true, event: { ...STORED, ...patch } })
-      },
-    )
-    return { route, written }
-  }
-
-  function request(method: 'GET' | 'PATCH', payload?: unknown, eventId = STORED.id): HttpRequest {
-    return new HttpRequest({
-      method,
-      url: `https://api.example.com/api/manage/events/${eventId}`,
-      params: { eventId },
-      ...(payload === undefined
-        ? { headers: {} }
-        : { body: { string: JSON.stringify(payload) }, headers: { 'content-type': 'application/json' } }),
-    })
-  }
-
   it("refuse la lecture à qui n'organise aucune de ses communautés", async () => {
     const ctx = context()
     const { route } = handler()
@@ -332,14 +332,127 @@ describe('lecture et modification d’un évènement', () => {
     expect(code(response)).toBe('INVALID_BODY')
   })
 
-  it('refuse un patch portant des rattachements, tant que leurs règles n’existent pas', async () => {
-    // Accepter `communityIds` avant `canDetachCommunity` laisserait une requête forgée
-    // dépouiller un évènement de ses co-organisateurs (#147).
-    const { route, written } = handler()
-    const response = await route(request('PATCH', { communityIds: [THEIRS] }), context(), session(ORGANIZER))
+})
 
-    expect(response.status).toBe(400)
+/**
+ * L'asymétrie de la co-organisation (#147) : rattacher est ouvert, retirer est borné.
+ *
+ * Toute cette suite passe par la route, et non par `canDetachCommunity` seul — c'est le calcul
+ * de la différence entre l'ensemble stocké et l'ensemble soumis qui décide de ce qui est un
+ * retrait, et c'est lui qu'une écriture forgée essaie de contourner.
+ */
+describe('rattachement et retrait des communautés', () => {
+  const THIRD = 'C3C3C3C3-0000-0000-0000-000000000003'
+
+  /** Un évènement porté par les communautés données. */
+  function carrying(...communityIds: string[]) {
+    return {
+      ...STORED,
+      communities: communityIds.map((id) => ({ id, name: id, logoUrl: null, archived: false })),
+    }
+  }
+
+  function patchWith(stored: typeof STORED, permissions: SessionPermissions, communityIds: string[]) {
+    const written: unknown[] = []
+    const route = eventHandler(
+      () => Promise.resolve(stored),
+      (id, patch) => {
+        written.push({ id, patch })
+        return Promise.resolve({ ok: true, event: { ...stored, ...patch } })
+      },
+    )
+    return {
+      written,
+      response: route(request('PATCH', { communityIds }), context(), session(permissions)),
+    }
+  }
+
+  it("laisse rattacher n'importe quelle communauté active, même non organisée", async () => {
+    // C'est ainsi qu'une soirée commune se monte sans passer par un administrateur, et
+    // l'ouverture est délibérée : rien n'examine les arrivées.
+    const { response, written } = patchWith(carrying(MINE), ORGANIZER, [MINE, THEIRS])
+
+    expect((await response).status).toBe(200)
+    expect(written).toHaveLength(1)
+  })
+
+  it("refuse le retrait d'une communauté tierce", async () => {
+    // Évincer un co-organisateur est réservé aux administrateurs.
+    const { response, written } = patchWith(carrying(MINE, THEIRS), ORGANIZER, [MINE])
+
+    expect((await response).status).toBe(403)
     expect(written).toHaveLength(0)
+  })
+
+  it("refuse de laisser l'évènement sans aucune communauté", async () => {
+    // Un évènement orphelin ne se gère plus que par un administrateur.
+    const { response } = patchWith(carrying(MINE), ORGANIZER, [])
+
+    expect((await response).status).toBe(403)
+  })
+
+  it("refuse de retirer *toutes* ses communautés d'un coup", async () => {
+    // La faille que les contrôles au cas par cas ne voient pas : chacun des deux retraits
+    // passe seul — l'autre demeure dans l'ensemble stocké — et le résultat est pourtant vide.
+    const both: SessionPermissions = { isGlobalAdmin: false, organizedCommunityIds: [MINE, THEIRS] }
+    const { response, written } = patchWith(carrying(MINE, THEIRS), both, [])
+
+    expect((await response).status).toBe(403)
+    expect(written).toHaveLength(0)
+  })
+
+  it('permet le passage de main : retirer la sienne quand une autre demeure', async () => {
+    // Permis, et l'écran prévient qu'on perdra l'accès à l'évènement.
+    const { response } = patchWith(carrying(MINE, THEIRS), ORGANIZER, [THEIRS])
+
+    expect((await response).status).toBe(200)
+  })
+
+  it("n'est déjoué ni par la casse ni par l'ordre", async () => {
+    // Les identifiants arrivent d'un corps de requête : aucun client n'est tenu de rendre la
+    // casse qu'on lui a donnée. Comparés brutalement, ces deux-là passeraient pour un retrait
+    // suivi d'un rattachement, et le retrait serait refusé à tort.
+    const { response } = patchWith(carrying(MINE, THEIRS), ORGANIZER, [
+      THEIRS.toLowerCase(),
+      MINE.toLowerCase(),
+    ])
+
+    expect((await response).status).toBe(200)
+  })
+
+  it("n'oppose aucune de ces règles à un administrateur", async () => {
+    const admin = patchWith(carrying(MINE, THEIRS), ADMIN, [])
+    expect((await admin.response).status).toBe(200)
+
+    const evicting = patchWith(carrying(MINE, THEIRS), ADMIN, [THIRD])
+    expect((await evicting.response).status).toBe(200)
+  })
+
+  it('journalise le refus comme un évènement d’autorisation', async () => {
+    const ctx = context()
+    const route = eventHandler(
+      () => Promise.resolve(carrying(MINE, THEIRS)),
+      () => Promise.resolve({ ok: true, event: STORED }),
+    )
+    await route(request('PATCH', { communityIds: [MINE] }), ctx, session(ORGANIZER))
+
+    expect(JSON.stringify(ctx.errors)).toContain('detach:community')
+  })
+
+  it('laisse les technologies libres de toute règle de retrait', async () => {
+    // Rattacher une technologie ne donne la main à personne : il n'y a rien à borner.
+    const written: unknown[] = []
+    const route = eventHandler(
+      () => Promise.resolve(carrying(MINE)),
+      (id, patch) => {
+        written.push(patch)
+        return Promise.resolve({ ok: true, event: STORED })
+      },
+    )
+    const response = await route(request('PATCH', { technologyIds: [] }), context(), session(ORGANIZER))
+
+    expect(response.status).toBe(200)
+    expect(written).toEqual([{ technologyIds: [] }])
   })
 })
 

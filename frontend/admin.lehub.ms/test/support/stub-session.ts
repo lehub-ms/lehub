@@ -6,6 +6,7 @@ import {
   ADMIN_TECHNOLOGIES,
   COMMUNITIES,
   EVENT_OPTIONS,
+  TECHNOLOGIES,
   eventsFor,
   openedSession,
 } from './session-fixtures'
@@ -89,6 +90,11 @@ export function stubSignedIn(
       }
       if (url.includes('/api/event-options')) {
         return Promise.resolve(jsonResponse(EVENT_OPTIONS))
+      }
+      // Après `/api/manage/technologies`, plus haut : les deux chemins diffèrent, mais leur
+      // proximité invite à se tromper d'ordre. Celle-ci ne rend que les actives.
+      if (url.includes('/api/technologies')) {
+        return Promise.resolve(jsonResponse(TECHNOLOGIES))
       }
       // La coquille lit la liste des communautés dès qu'elle se monte : sans elle, chaque
       // suite qui traverse une garde recevrait la session en guise de tableau.

@@ -1,5 +1,5 @@
 import type { SessionPermissions } from '@lehub/shared/auth/AuthContext'
-import type { CommunitySummary } from '@lehub/shared/lib/api'
+import type { CommunitySummary, NamedRef } from '@lehub/shared/lib/api'
 import type { AdminCommunity, AdminEvent, AdminTechnology, EventOptions } from '@/lib/api'
 
 /** La réponse de `POST /api/me/session`, en un seul endroit — comme côté site public. */
@@ -203,6 +203,19 @@ export const ADMIN_EVENTS: AdminEvent[] = [
     communities: [ref(PPF)],
     technologies: [],
   },
+]
+
+/**
+ * Ce que rend `GET /api/technologies` : les technologies **actives** seulement.
+ *
+ * Volontairement disjointe d'`ADMIN_TECHNOLOGIES` sur un point : « Silverlight » y est archivée
+ * et n'apparaît donc pas ici, alors qu'un évènement de la fixture la porte. C'est ce qui rend
+ * éprouvable « une entrée archivée déjà rattachée reste visible et retirable, mais ne peut plus
+ * être ajoutée » (#147).
+ */
+export const TECHNOLOGIES: NamedRef[] = [
+  { id: 'B1B1B1B1-0000-0000-0000-000000000001', name: 'Azure', logoUrl: null },
+  { id: 'B2B2B2B2-0000-0000-0000-000000000002', name: '.NET', logoUrl: null },
 ]
 
 /**
