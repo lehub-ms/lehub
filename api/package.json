@@ -16,7 +16,8 @@
   "dependencies": {
     "@azure/functions": "^4.7.0",
     "jose": "^6.2.2",
-    "mssql": "^11.0.1"
+    "mssql": "^11.0.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@azure/storage-blob": "^12.33.0",

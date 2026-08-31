@@ -12,6 +12,17 @@ export function errorResponse(status: number, code: string, message: string): Ht
 }
 
 /**
+ * `POST /api/admin/communities` — the route as every trace in this file spells it.
+ *
+ * Written once because it was already written twice, and the two spellings had started to
+ * drift. `withAuth` keeps its own inline copy: it builds the label before it has anything to
+ * log and reuses it for both of its refusals.
+ */
+export function routeLabel(request: HttpRequest): string {
+  return `${request.method} ${new URL(request.url).pathname}`
+}
+
+/**
  * Refuses a write the caller is not entitled to make, and leaves the trace that refusal owes.
  *
  * A 403, deliberately distinct from `withAuth`'s 401: one is answered by signing in, the
@@ -53,7 +64,7 @@ export function permissionsUnavailable(
   error: unknown,
 ): HttpResponseInit {
   context.error('Failed to resolve the session permissions', {
-    route: `${request.method} ${new URL(request.url).pathname}`,
+    route: routeLabel(request),
     objectId,
     error,
   })
@@ -74,4 +85,59 @@ export function listFetchError(
 ): HttpResponseInit {
   context.error(logMessage, error)
   return errorResponse(500, code, message)
+}
+
+/**
+ * One field of a refused body, as the log records it: where it was, and what was wrong with
+ * it. Never *what it contained*.
+ */
+export interface ValidationIssue {
+  /** Dotted path from the root of the body; `(root)` when the whole body is wrong. */
+  path: string
+  /** The schema's own vocabulary — `too_small`, `invalid_type`, `unrecognized_keys`… */
+  code: string
+}
+
+/**
+ * Refuses a body that does not match its schema.
+ *
+ * A 400 and not a 403, and the distinction is the one `withAuth` already draws between 401 and
+ * 403: a 400 is answered by sending something else, a 403 never is. A client that cannot tell
+ * them apart either loops or gives up.
+ *
+ * The message is constant and describes nothing. It never echoes the received value — a body is
+ * attacker-controlled, and reflecting it turns an error message into a mirror. The paths and the
+ * codes go to the log instead, which is the same split `forbidden` makes: enough to diagnose,
+ * nothing to exploit. `issues` is deliberately a narrowed shape rather than the validator's own
+ * issue objects, which carry the offending input on some of their variants.
+ */
+export function invalidBody(
+  context: InvocationContext,
+  request: HttpRequest,
+  issues: readonly ValidationIssue[],
+): HttpResponseInit {
+  context.error('Body validation refused', { route: routeLabel(request), issues })
+  return errorResponse(400, 'INVALID_BODY', 'The request body does not match the expected shape.')
+}
+
+/**
+ * Refuses a route parameter that is not in the expected form, before anything reaches the
+ * database.
+ *
+ * Named apart from `INVALID_BODY` because it is a different bug on the caller's side: a
+ * malformed identifier in a URL is a broken link or a hand-edited address, not a bad form
+ * submission, and a client branches on it differently. Only the parameter's *name* is logged;
+ * its value is already in the path the label carries, as it is for every other trace here.
+ */
+export function invalidRouteParameter(
+  context: InvocationContext,
+  request: HttpRequest,
+  parameter: string,
+): HttpResponseInit {
+  context.error('Route parameter refused', { route: routeLabel(request), parameter })
+  return errorResponse(
+    400,
+    'INVALID_ROUTE_PARAMETER',
+    'A route parameter is not in the expected form.',
+  )
 }
