@@ -191,6 +191,12 @@ epic as parent, or an issue left with the default (no) type, is incomplete.
 the single view of where a change stands, from `Todo` to `Done`. The transitions and the `gh
 project` commands belong to the `github-workflow` skill.
 
+**Naming issues in conversation** — never write a bare `#42`. Every mention of an issue, in
+chat as in plans, commit bodies and PR descriptions, carries a short human title right after
+the number: `#42 (carrousel des communautés)`. Use the issue title, or a shorter phrase when
+it is long — the point is that the reader knows what is being discussed without opening
+GitHub. The same holds for lists of issues: each line gets its title.
+
 **Qualified issues (specs)** — an `Epic`, `Feature`, or `Story` also carries the `qualified`
 label once its description is complete enough to serve as a spec. "Spécifier X" / "amender la
 spec de X" always means working on a `qualified` issue of one of these three types. `Bug`
