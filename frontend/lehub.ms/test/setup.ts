@@ -6,16 +6,29 @@
  * mid-file.
  */
 
+import { NARROW_MEDIA_QUERY } from '@/hooks/useMediaQuery'
+
 type MediaListener = (event: MediaQueryListEvent) => void
 
 let desktopMatches = false
 let reducedMotionMatches = false
+let narrowMatches = false
 const listeners = new Set<MediaListener>()
 
 /** Simulate the viewport crossing Tailwind's `md` breakpoint, in either direction. */
 export function setDesktopViewport(matches: boolean): void {
   desktopMatches = matches
   const event = { matches, media: '(min-width: 768px)' } as MediaQueryListEvent
+  for (const listener of [...listeners]) listener(event)
+}
+
+/**
+ * Simulate the viewport crossing the 1024px mark the preferences bar switches on — the
+ * threshold below which it leaves the flow and becomes a bottom-anchored insert (#194).
+ */
+export function setNarrowViewport(matches: boolean): void {
+  narrowMatches = matches
+  const event = { matches, media: NARROW_MEDIA_QUERY } as MediaQueryListEvent
   for (const listener of [...listeners]) listener(event)
 }
 
@@ -28,6 +41,7 @@ export function setPrefersReducedMotion(matches: boolean): void {
 export function resetViewport(): void {
   desktopMatches = false
   reducedMotionMatches = false
+  narrowMatches = false
   listeners.clear()
 }
 
@@ -35,7 +49,11 @@ export function resetViewport(): void {
 // Query-aware because two independent stubs share this one function: NavBar's desktop
 // breakpoint check and CommunitiesCarousel's `prefers-reduced-motion` check.
 window.matchMedia = (query: string): MediaQueryList => {
-  const matchesFor = () => (query === '(prefers-reduced-motion: reduce)' ? reducedMotionMatches : desktopMatches)
+  const matchesFor = () => {
+    if (query === '(prefers-reduced-motion: reduce)') return reducedMotionMatches
+    if (query === NARROW_MEDIA_QUERY) return narrowMatches
+    return desktopMatches
+  }
   const list = {
     media: query,
     get matches(): boolean {
@@ -175,6 +193,54 @@ class ResizeObserverStub {
 }
 
 window.ResizeObserver = ResizeObserverStub
+
+// jsdom ships no `IntersectionObserver`, and `useFooterOverlap` constructs one as soon as the
+// preferences bar switches to its anchored regime. Kept observable rather than a bare no-op so a
+// test can hand it a recouvrement and assert that the insert lifts off the footer.
+interface IntersectionRegistration {
+  callback: IntersectionObserverCallback
+  targets: Set<Element>
+}
+
+const intersectionObservers = new Set<IntersectionRegistration>()
+
+/** Report `height` pixels of overlap to every live `IntersectionObserver`. */
+export function triggerFooterOverlap(height: number): void {
+  for (const { callback, targets } of [...intersectionObservers]) {
+    const entries = [...targets].map(
+      (target) => ({ target, intersectionRect: { height } }) as IntersectionObserverEntry,
+    )
+    callback(entries, {} as IntersectionObserver)
+  }
+}
+
+class IntersectionObserverStub {
+  private readonly registration: IntersectionRegistration
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.registration = { callback, targets: new Set() }
+    intersectionObservers.add(this.registration)
+  }
+
+  observe(target: Element): void {
+    this.registration.targets.add(target)
+  }
+
+  unobserve(target: Element): void {
+    this.registration.targets.delete(target)
+  }
+
+  disconnect(): void {
+    this.registration.targets.clear()
+    intersectionObservers.delete(this.registration)
+  }
+
+  takeRecords(): IntersectionObserverEntry[] {
+    return []
+  }
+}
+
+window.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver
 
 // jsdom implements no part of the CSS Font Loading API, and `EntityRow` awaits
 // `document.fonts.ready` to measure again once the real face has swapped in for the

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import * as designationSchemas from '../src/lib/designationSchemas'
 import * as eventSchemas from '../src/lib/eventSchemas'
+import * as preferenceSchemas from '../src/lib/preferenceSchemas'
 import * as referenceSchemas from '../src/lib/referenceSchemas'
 import { ALL_REQUEST_SCHEMAS } from '../src/lib/requestSchemas'
 import * as uploadSchemas from '../src/lib/uploadSchemas'
@@ -31,6 +32,7 @@ const SCHEMA_MODULES: Record<string, Record<string, unknown>> = {
   uploadSchemas,
   designationSchemas,
   eventSchemas,
+  preferenceSchemas,
 }
 
 describe('dérivation OpenAPI des schémas de requête', () => {

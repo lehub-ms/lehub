@@ -1,0 +1,407 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import * as Collapsible from '@radix-ui/react-collapsible'
+import { Check, ChevronDown, Star } from 'lucide-react'
+import { Button } from '@lehub/shared/components/Button'
+import { ApiError } from '@lehub/shared/lib/api'
+import { cn } from '@lehub/shared/lib/cn'
+import { useFooterOverlap } from '@/hooks/useFooterOverlap'
+import { NARROW_MEDIA_QUERY, useMediaQuery } from '@/hooks/useMediaQuery'
+import { saveMyPreferences, type EventPreferences } from '@/lib/api'
+import {
+  diffFilterSelection,
+  sameFilterSelection,
+  summarizeSelection,
+  type EventFilterSelection,
+  type FilterDiffEntry,
+} from '@/lib/eventFilters'
+
+export interface PreferencesBarProps {
+  /** La sélection enregistrée, ou `null` quand le compte n'a encore rien enregistré. */
+  savedSelection: EventFilterSelection | null
+  selection: EventFilterSelection
+  /** Identifiant → nom : les options du filtrage, complétées par les entrées enregistrées. */
+  names: ReadonlyMap<string, string>
+  /** Revenir à la sélection enregistrée. */
+  onRestore: () => void
+  onSaved: (preferences: EventPreferences) => void
+  /** La session a expiré en cours de route : il n'y a plus rien à enregistrer ici. */
+  onSessionExpired: () => void
+  /**
+   * La hauteur que la page doit réserver sous la liste — celle de l'encart quand il est ancré,
+   * zéro quand la barre est dans le flux. Sans elle, les derniers évènements resteraient
+   * définitivement cachés derrière l'encart.
+   */
+  onReservedHeightChange: (height: number) => void
+}
+
+type Confirmation = 'created' | 'updated'
+
+/**
+ * Les refus, du point de vue de ce que l'utilisateur peut en faire.
+ *
+ * `stale` et `unmirrored` ne se réparent pas en réessayant : le référentiel a bougé pour l'un,
+ * la session n'a pas de ligne miroir pour l'autre (l'API répond alors `ACCOUNT_NOT_MIRRORED`,
+ * qu'un `me/session` réussi est seul à lever). Les confondre avec une panne passagère
+ * enverrait marteler un bouton qui ne passera jamais.
+ */
+type FailureKind = 'stale' | 'unmirrored' | 'transient'
+
+const FAILURE_MESSAGES: Record<FailureKind, string> = {
+  stale: 'Une entrée de votre sélection n’existe plus. Rechargez la page pour repartir de ce qui est proposé.',
+  unmirrored: 'Votre compte n’est pas encore initialisé côté LeHub. Reconnectez-vous, puis réessayez.',
+  transient: 'Vos préférences n’ont pas pu être enregistrées. Réessayez dans un instant.',
+}
+
+function failureKind(error: unknown): FailureKind {
+  if (!(error instanceof ApiError)) return 'transient'
+  if (error.code === 'PREFERENCE_REFERENCE_UNKNOWN') return 'stale'
+  if (error.code === 'ACCOUNT_NOT_MIRRORED') return 'unmirrored'
+  return 'transient'
+}
+
+/**
+ * La barre « Mes préférences », sous session uniquement.
+ *
+ * Trois états **dérivés** et jamais stockés : sans préférence enregistrée elle propose
+ * d'enregistrer ; avec une sélection identique elle confirme ; dès que la sélection diverge elle
+ * énumère l'écart. Un état stocké se désynchroniserait de la sélection au premier chemin oublié.
+ *
+ * L'écart est énuméré entrée par entrée plutôt que résumé par un compte : un compte dit qu'il y a
+ * une différence, l'énumération dit laquelle — c'est ce qui permet de décider d'enregistrer ou de
+ * revenir sans comparer deux listes de mémoire.
+ *
+ * Ce que les maquettes portent et qui n'est pas rendu ici : le CTA « Obtenir mon lien d'agenda »
+ * de l'état au repos. La Feature « Mon lien d'agenda iCal » n'est pas livrée, et #189 interdit
+ * d'en promettre quoi que ce soit d'ici là.
+ */
+export function PreferencesBar({
+  savedSelection,
+  selection,
+  names,
+  onRestore,
+  onSaved,
+  onSessionExpired,
+  onReservedHeightChange,
+}: PreferencesBarProps) {
+  const statusRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLElement>(null)
+  const [pending, setPending] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+  const [open, setOpen] = useState(true)
+
+  const narrow = useMediaQuery(NARROW_MEDIA_QUERY)
+  const footerOverlap = useFooterOverlap(narrow)
+
+  /**
+   * Stable, et c'est ce qui compte : passée en flèche anonyme, elle changeait d'identité à chaque
+   * rendu de la barre — donc à chaque case cochée — et le minuteur de la confirmation se
+   * réarmait, la laissant à l'écran tant que l'utilisateur continuait de régler ses filtres.
+   */
+  const dismissConfirmation = useCallback(() => {
+    setConfirmation(null)
+  }, [])
+
+  /**
+   * « Revenir » démonte le bouton qui vient d'être actionné : sans ce déplacement, le focus
+   * retomberait sur `<body>`. Même geste que sur le chemin d'enregistrement, pour la même raison.
+   */
+  function restore() {
+    onRestore()
+    statusRef.current?.focus()
+  }
+
+  const applied = savedSelection !== null && sameFilterSelection(savedSelection, selection)
+  const diverging = savedSelection !== null && !applied
+  const diff = diverging ? diffFilterSelection(savedSelection, selection, names) : null
+
+  /**
+   * Le libellé de la poignée reprend l'état courant.
+   *
+   * Replié, l'encart doit encore dire de quoi il s'agit **et** s'il y a quelque chose à
+   * enregistrer : sans cela, il ne resterait qu'une bande muette qu'on apprend à ignorer.
+   */
+  const handleLabel =
+    savedSelection === null
+      ? 'Enregistrer ces filtres'
+      : applied
+        ? 'Mes préférences appliquées'
+        : 'Filtres modifiés — non enregistré'
+
+  useEffect(() => {
+    const element = rootRef.current
+    if (!element) return
+
+    if (!narrow) {
+      // Dans le flux, l'encart occupe déjà sa place : réserver en plus la doublerait.
+      onReservedHeightChange(0)
+      return
+    }
+
+    const observer = new ResizeObserver(() => {
+      onReservedHeightChange(element.getBoundingClientRect().height)
+    })
+    observer.observe(element)
+    onReservedHeightChange(element.getBoundingClientRect().height)
+
+    return () => {
+      observer.disconnect()
+      onReservedHeightChange(0)
+    }
+  }, [narrow, onReservedHeightChange])
+
+  async function save() {
+    setPending(true)
+    setFailure(null)
+    try {
+      const preferences = await saveMyPreferences({
+        communityIds: selection.communityIds,
+        technologyIds: selection.technologyIds,
+      })
+      const first = savedSelection === null
+      onSaved(preferences)
+      setConfirmation(first ? 'created' : 'updated')
+      // Le bouton qui vient d'être actionné disparaît avec l'état A ou C. Sans ce déplacement, le
+      // focus retomberait sur `<body>` et la navigation au clavier repartirait du début du document.
+      statusRef.current?.focus()
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        onSessionExpired()
+        return
+      }
+      // La sélection courante n'est pas perdue : la barre reste en divergence, et le message dit
+      // quoi faire plutôt que ce qui a cassé. « Réessayez » est réservé à ce qu'un nouvel essai
+      // peut effectivement réparer — le proposer sur un refus définitif ferait boucler.
+      setFailure(FAILURE_MESSAGES[failureKind(error)])
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <Collapsible.Root
+      // Au large il n'y a rien à replier : le contenu est toujours ouvert et aucune poignée
+      // n'est rendue — pas seulement masquée.
+      open={narrow ? open : true}
+      onOpenChange={setOpen}
+      asChild
+    >
+      <section
+        ref={rootRef}
+        // Un libellé stable plutôt que le titre courant : le repère de navigation ne doit pas
+        // changer de nom quand la sélection bouge.
+        aria-label="Mes préférences"
+        data-state={diverging ? 'diverge' : 'rest'}
+        // `z-[280]` délibérément sous le tiroir de filtres mobile — son voile est à 290 et son
+        // contenu à 300 — pour que le tiroir ouvert passe bien au-dessus de l'encart.
+        style={narrow ? { bottom: footerOverlap } : undefined}
+        className={cn(
+          'glass-strong flex flex-col gap-2.5',
+          narrow
+            ? 'fixed inset-x-0 z-[280] rounded-t-[20px] border-b-0 px-4 pt-1.5 pb-[max(14px,calc(env(safe-area-inset-bottom)+14px))] shadow-[0_-6px_28px_rgb(0_95_184/0.14)]'
+            : 'mt-8 rounded-2xl px-5 py-4',
+          diverging && 'border-primary/28 bg-primary-xs',
+        )}
+      >
+        {narrow && (
+          <Collapsible.Trigger className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-semibold text-ink-muted">
+            <span>{handleLabel}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className="size-[18px] shrink-0 transition-transform duration-200 data-[state=closed]:rotate-180"
+            />
+          </Collapsible.Trigger>
+        )}
+
+        <Collapsible.Content className="flex flex-col gap-2.5">
+          {/* En colonne tant qu'on est à l'étroit, en ligne au large. Une seule ligne partagée
+              sous 1024px écrase le texte à quelques dizaines de pixels — les puces s'y coupent
+              lettre par lettre et le titre passe à la ligne au milieu d'un mot. */}
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5">
+            {/* Seuls le titre et le résumé sont annoncés : la barre entière se re-rend à chaque
+                changement de case, et une région live posée dessus rejouerait tout à chaque fois. */}
+            <div
+              ref={statusRef}
+              tabIndex={-1}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              // `min-w-[240px]` au large : sans plancher, un bouton d'action large réduit la
+              // colonne de texte jusqu'à la rendre illisible.
+              className="min-w-0 outline-none lg:min-w-[240px] lg:flex-1"
+            >
+              <p className="flex flex-wrap items-center gap-2 font-heading text-base font-bold text-ink">
+                {!diverging && <Star aria-hidden="true" className="size-[17px] shrink-0 fill-primary text-primary" />}
+                {savedSelection === null
+                  ? 'Enregistrer ces filtres'
+                  : applied
+                    ? 'Mes préférences'
+                    : 'Filtres modifiés'}
+                {applied && <span className="text-sm font-normal text-ink-muted">appliquées</span>}
+                {diverging && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-3 py-[5px] text-xs font-semibold whitespace-nowrap text-primary">
+                    non enregistré
+                  </span>
+                )}
+              </p>
+
+              {!diverging && (
+                <p className="mt-[3px] text-sm leading-normal text-ink-muted">
+                  {savedSelection === null
+                    ? `${summarizeSelection(selection)} — retrouvez cette sélection à chaque visite.`
+                    : summarizeSelection(savedSelection)}
+                </p>
+              )}
+
+              {diff !== null &&
+                (diff.added.length > 0 || diff.removed.length > 0 ? (
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {diff.added.map((entry) => (
+                      <DiffChip key={`add-${entry.dimension}-${entry.id}`} entry={entry} operation="added" />
+                    ))}
+                    {diff.removed.map((entry) => (
+                      <DiffChip key={`rem-${entry.dimension}-${entry.id}`} entry={entry} operation="removed" />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-[3px] text-sm leading-normal text-ink-muted">
+                    {summarizeSelection(selection)}
+                  </p>
+                ))}
+            </div>
+
+            {/* À l'étroit les deux actions se partagent la largeur ; au large elles reprennent
+                leur taille propre et cessent de pousser la colonne de texte. */}
+            <div className="flex flex-wrap gap-2.5 lg:shrink-0">
+              {!applied && (
+                <Button
+                  variant="primary"
+                  disabled={pending}
+                  onClick={() => void save()}
+                  className="min-h-11 min-w-0 flex-1 rounded-full bg-cta px-[18px] text-sm shadow-none hover:bg-cta-dark lg:flex-none"
+                >
+                  {savedSelection === null
+                    ? 'Enregistrer mes préférences'
+                    : 'Mettre à jour mes préférences'}
+                </Button>
+              )}
+              {diverging && (
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={restore}
+                  className="min-h-11 min-w-0 flex-1 rounded-full px-[18px] text-sm lg:flex-none"
+                >
+                  Revenir
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {failure !== null && (
+            <p role="alert" className="text-sm text-red-700">
+              {failure}
+            </p>
+          )}
+        </Collapsible.Content>
+
+        {confirmation !== null && (
+          <PreferencesToast kind={confirmation} onDismiss={dismissConfirmation} />
+        )}
+      </section>
+    </Collapsible.Root>
+  )
+}
+
+/**
+ * Une entrée de l'écart.
+ *
+ * Distinguée deux fois sans la couleur : le préfixe « + » et le texte barré le disent à l'œil, le
+ * mot en `sr-only` le dit aux technologies d'assistance. La couleur seule ne distingue rien pour
+ * qui ne la perçoit pas.
+ */
+function DiffChip({
+  entry,
+  operation,
+}: {
+  entry: FilterDiffEntry
+  operation: 'added' | 'removed'
+}) {
+  return (
+    <li
+      className={cn(
+        // `whitespace-nowrap` : une puce se replie **entre** puces, jamais à l'intérieur d'un
+        // nom. Sans lui, « Azure User Group France » se casse en quatre lignes d'un mot.
+        'inline-flex items-center rounded-full border px-[11px] py-1 text-xs font-semibold whitespace-nowrap',
+        operation === 'added'
+          ? 'border-primary/22 bg-white/75 text-primary'
+          : 'border-ink-muted/28 bg-white/75 text-ink-muted line-through',
+      )}
+    >
+      <span className="sr-only">{operation === 'added' ? 'Ajouté : ' : 'Retiré : '}</span>
+      <span aria-hidden="true">{operation === 'added' ? '+ ' : ''}</span>
+      {entry.name}
+    </li>
+  )
+}
+
+const CONFIRMATIONS: Record<Confirmation, { title: string; detail: string }> = {
+  created: {
+    title: 'Préférences enregistrées',
+    // La maquette enchaîne ici sur le lien d'agenda. Tant que sa Feature n'est pas livrée, la
+    // confirmation ne promet que ce qui vient d'arriver.
+    detail: 'Elles sont appliquées à chaque visite.',
+  },
+  updated: {
+    title: 'Préférences mises à jour',
+    // La seule information que l'utilisateur n'a aucun moyen de deviner, et la seule qui
+    // l'empêche de croire qu'il vient de casser son agenda.
+    detail:
+      'Aucun réabonnement nécessaire : les agendas déjà abonnés se mettent à jour automatiquement.',
+  },
+}
+
+const TOAST_DURATION_MS = 6000
+
+/**
+ * La confirmation.
+ *
+ * **Portée dans `document.body`, et c'est indispensable** : la barre rend `glass-strong`, donc
+ * `backdrop-filter`, et une propriété de filtre fait de l'élément un bloc conteneur pour ses
+ * descendants `position: fixed`. Rendu à l'intérieur de la barre, ce `fixed` se plaçait par
+ * rapport à elle — la confirmation apparaissait au milieu de la page, posée sur l'encart.
+ *
+ * En haut à droite au large, centrée en haut à l'étroit. La maquette la posait en bas au centre
+ * sur grand écran ; le placement retenu est celui demandé par le mainteneur, et il est dû en
+ * retour au projet Claude Design. En haut dans les deux cas de toute façon sous 1024px, là où
+ * l'encart fixe la recouvrirait (#194).
+ *
+ * Non interactive : elle s'annonce, ne capture ni le focus ni le pointeur, et s'efface seule.
+ */
+function PreferencesToast({ kind, onDismiss }: { kind: Confirmation; onDismiss: () => void }) {
+  const { title, detail } = CONFIRMATIONS[kind]
+
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, TOAST_DURATION_MS)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [onDismiss])
+
+  return createPortal(
+    <div
+      role="status"
+      className="pointer-events-none fixed top-[84px] left-1/2 z-[320] flex max-w-[min(440px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-[14px] border border-primary/18 bg-white/96 px-[18px] py-3.5 shadow-[0_12px_40px_rgb(0_95_184/0.18)] backdrop-blur-[20px] lg:top-28 lg:right-6 lg:left-auto lg:translate-x-0"
+    >
+      <span className="mt-px flex size-[26px] shrink-0 items-center justify-center rounded-full bg-primary-xs text-primary">
+        <Check aria-hidden="true" className="size-[18px]" strokeWidth={2.2} />
+      </span>
+      <div>
+        <p className="font-heading text-[0.9375rem] font-bold text-ink">{title}</p>
+        <p className="mt-0.5 text-[0.8125rem] leading-normal text-ink-muted">{detail}</p>
+      </div>
+    </div>,
+    document.body,
+  )
+}
