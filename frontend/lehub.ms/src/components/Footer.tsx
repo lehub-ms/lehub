@@ -6,12 +6,22 @@ const EXTERNAL_LINK =
   'inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-primary/5 hover:text-primary'
 
 /**
+ * Repéré par un identifiant plutôt que par `document.querySelector('footer')` : l'encart de
+ * préférences observe cet élément pour se relever au-dessus de lui (#194), et un sélecteur de
+ * balise désignerait le premier `<footer>` venu le jour où un autre apparaîtrait.
+ */
+export const FOOTER_ELEMENT_ID = 'pied-de-page'
+
+/**
  * Present on every public page, including the 404 — it is rendered by the layout, not
  * by the pages, so a route cannot forget it.
  */
 export function Footer() {
   return (
-    <footer className="relative z-10 border-t border-white/70 bg-white/40 backdrop-blur-md">
+    <footer
+      id={FOOTER_ELEMENT_ID}
+      className="relative z-10 border-t border-white/70 bg-white/40 backdrop-blur-md"
+    >
       <div className="mx-auto flex w-full max-w-[75rem] flex-wrap items-center justify-between gap-4 px-6 py-6">
         <Wordmark className="text-xl" />
 

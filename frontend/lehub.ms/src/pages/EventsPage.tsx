@@ -68,6 +68,14 @@ export function EventsPage() {
   const [override, setOverride] = useState<EventFilterSelection | null>(null)
   const selection = override ?? savedSelection
 
+  /**
+   * Ce que l'encart ancré occupe en bas de la fenêtre, et que la page doit rendre au flux.
+   *
+   * Zéro quand la barre est dans le flux : elle y prend déjà sa place. La barre mesure et
+   * annonce, la page réserve — c'est elle qui possède le bas de la liste.
+   */
+  const [reservedHeight, setReservedHeight] = useState(0)
+
   const events = upcoming.status === 'success' ? upcoming.events : NO_EVENTS
   // Always derived from the FULL upcoming set — never from `visibleEvents` — so each
   // dimension's option list stays independent of the other dimension's active filter.
@@ -163,6 +171,7 @@ export function EventsPage() {
           onSessionExpired={() => {
             void navigate(PATHS.signIn, { state: { from: PATHS.events } })
           }}
+          onReservedHeightChange={setReservedHeight}
         />
       )}
 
@@ -207,6 +216,12 @@ export function EventsPage() {
           <EventFilterPanel options={options} selection={selection} onChange={setOverride} onReset={resetFilters} />
         )}
       </div>
+
+      {/* La place de l'encart ancré, rendue au flux : sans elle, les derniers évènements
+          resteraient définitivement cachés derrière lui, replié comme déplié. */}
+      {reservedHeight > 0 && (
+        <div aria-hidden="true" data-testid="preferences-bar-spacer" style={{ height: reservedHeight }} />
+      )}
     </div>
   )
 }

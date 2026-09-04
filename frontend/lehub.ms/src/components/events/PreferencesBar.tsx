@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Star } from 'lucide-react'
+import * as Collapsible from '@radix-ui/react-collapsible'
+import { Check, ChevronDown, Star } from 'lucide-react'
 import { Button } from '@lehub/shared/components/Button'
 import { ApiError } from '@lehub/shared/lib/api'
 import { cn } from '@lehub/shared/lib/cn'
+import { useFooterOverlap } from '@/hooks/useFooterOverlap'
+import { NARROW_MEDIA_QUERY, useMediaQuery } from '@/hooks/useMediaQuery'
 import { saveMyPreferences, type EventPreferences } from '@/lib/api'
 import {
   diffFilterSelection,
@@ -23,6 +26,12 @@ export interface PreferencesBarProps {
   onSaved: (preferences: EventPreferences) => void
   /** La session a expiré en cours de route : il n'y a plus rien à enregistrer ici. */
   onSessionExpired: () => void
+  /**
+   * La hauteur que la page doit réserver sous la liste — celle de l'encart quand il est ancré,
+   * zéro quand la barre est dans le flux. Sans elle, les derniers évènements resteraient
+   * définitivement cachés derrière l'encart.
+   */
+  onReservedHeightChange: (height: number) => void
 }
 
 type Confirmation = 'created' | 'updated'
@@ -49,15 +58,56 @@ export function PreferencesBar({
   onRestore,
   onSaved,
   onSessionExpired,
+  onReservedHeightChange,
 }: PreferencesBarProps) {
   const statusRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLElement>(null)
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+  const [open, setOpen] = useState(true)
+
+  const narrow = useMediaQuery(NARROW_MEDIA_QUERY)
+  const footerOverlap = useFooterOverlap(narrow)
 
   const applied = savedSelection !== null && sameFilterSelection(savedSelection, selection)
   const diverging = savedSelection !== null && !applied
   const diff = diverging ? diffFilterSelection(savedSelection, selection, names) : null
+
+  /**
+   * Le libellé de la poignée reprend l'état courant.
+   *
+   * Replié, l'encart doit encore dire de quoi il s'agit **et** s'il y a quelque chose à
+   * enregistrer : sans cela, il ne resterait qu'une bande muette qu'on apprend à ignorer.
+   */
+  const handleLabel =
+    savedSelection === null
+      ? 'Enregistrer ces filtres'
+      : applied
+        ? 'Mes préférences appliquées'
+        : 'Filtres modifiés — non enregistré'
+
+  useEffect(() => {
+    const element = rootRef.current
+    if (!element) return
+
+    if (!narrow) {
+      // Dans le flux, l'encart occupe déjà sa place : réserver en plus la doublerait.
+      onReservedHeightChange(0)
+      return
+    }
+
+    const observer = new ResizeObserver(() => {
+      onReservedHeightChange(element.getBoundingClientRect().height)
+    })
+    observer.observe(element)
+    onReservedHeightChange(element.getBoundingClientRect().height)
+
+    return () => {
+      observer.disconnect()
+      onReservedHeightChange(0)
+    }
+  }, [narrow, onReservedHeightChange])
 
   async function save() {
     setPending(true)
@@ -91,108 +141,135 @@ export function PreferencesBar({
   }
 
   return (
-    <section
-      // Un libellé stable plutôt que le titre courant : le repère de navigation ne doit pas
-      // changer de nom quand la sélection bouge.
-      aria-label="Mes préférences"
-      data-state={diverging ? 'diverge' : 'rest'}
-      className={cn(
-        'glass-strong mt-8 flex flex-col gap-2.5 rounded-2xl px-5 py-4',
-        diverging && 'border-primary/28 bg-primary-xs',
-      )}
+    <Collapsible.Root
+      // Au large il n'y a rien à replier : le contenu est toujours ouvert et aucune poignée
+      // n'est rendue — pas seulement masquée.
+      open={narrow ? open : true}
+      onOpenChange={setOpen}
+      asChild
     >
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        {/* Seuls le titre et le résumé sont annoncés : la barre entière se re-rend à chaque
-            changement de case, et une région live posée dessus rejouerait tout à chaque fois. */}
-        <div
-          ref={statusRef}
-          tabIndex={-1}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          className="min-w-0 flex-1 outline-none"
-        >
-          <p className="flex flex-wrap items-center gap-2 font-heading text-base font-bold text-ink">
-            {!diverging && <Star aria-hidden="true" className="size-[17px] shrink-0 fill-primary text-primary" />}
-            {savedSelection === null
-              ? 'Enregistrer ces filtres'
-              : applied
-                ? 'Mes préférences'
-                : 'Filtres modifiés'}
-            {applied && <span className="text-sm font-normal text-ink-muted">appliquées</span>}
-            {diverging && (
-              <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-[5px] text-xs font-semibold text-primary">
-                non enregistré
-              </span>
-            )}
-          </p>
+      <section
+        ref={rootRef}
+        // Un libellé stable plutôt que le titre courant : le repère de navigation ne doit pas
+        // changer de nom quand la sélection bouge.
+        aria-label="Mes préférences"
+        data-state={diverging ? 'diverge' : 'rest'}
+        // `z-[280]` délibérément sous le tiroir de filtres mobile — son voile est à 290 et son
+        // contenu à 300 — pour que le tiroir ouvert passe bien au-dessus de l'encart.
+        style={narrow ? { bottom: footerOverlap } : undefined}
+        className={cn(
+          'glass-strong flex flex-col gap-2.5',
+          narrow
+            ? 'fixed inset-x-0 z-[280] rounded-t-[20px] border-b-0 px-4 pt-1.5 pb-[max(14px,calc(env(safe-area-inset-bottom)+14px))] shadow-[0_-6px_28px_rgb(0_95_184/0.14)]'
+            : 'mt-8 rounded-2xl px-5 py-4',
+          diverging && 'border-primary/28 bg-primary-xs',
+        )}
+      >
+        {narrow && (
+          <Collapsible.Trigger className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-semibold text-ink-muted">
+            <span>{handleLabel}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className="size-[18px] shrink-0 transition-transform duration-200 data-[state=closed]:rotate-180"
+            />
+          </Collapsible.Trigger>
+        )}
 
-          {!diverging && (
-            <p className="mt-[3px] text-sm leading-normal text-ink-muted">
-              {savedSelection === null
-                ? `${summarizeSelection(selection)} — retrouvez cette sélection à chaque visite.`
-                : summarizeSelection(savedSelection)}
+        <Collapsible.Content className="flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+            {/* Seuls le titre et le résumé sont annoncés : la barre entière se re-rend à chaque
+                changement de case, et une région live posée dessus rejouerait tout à chaque fois. */}
+            <div
+              ref={statusRef}
+              tabIndex={-1}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="min-w-0 flex-1 outline-none"
+            >
+              <p className="flex flex-wrap items-center gap-2 font-heading text-base font-bold text-ink">
+                {!diverging && <Star aria-hidden="true" className="size-[17px] shrink-0 fill-primary text-primary" />}
+                {savedSelection === null
+                  ? 'Enregistrer ces filtres'
+                  : applied
+                    ? 'Mes préférences'
+                    : 'Filtres modifiés'}
+                {applied && <span className="text-sm font-normal text-ink-muted">appliquées</span>}
+                {diverging && (
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-[5px] text-xs font-semibold text-primary">
+                    non enregistré
+                  </span>
+                )}
+              </p>
+
+              {!diverging && (
+                <p className="mt-[3px] text-sm leading-normal text-ink-muted">
+                  {savedSelection === null
+                    ? `${summarizeSelection(selection)} — retrouvez cette sélection à chaque visite.`
+                    : summarizeSelection(savedSelection)}
+                </p>
+              )}
+
+              {diff !== null &&
+                (diff.added.length > 0 || diff.removed.length > 0 ? (
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                    {diff.added.map((entry) => (
+                      <DiffChip key={`add-${entry.dimension}-${entry.id}`} entry={entry} operation="added" />
+                    ))}
+                    {diff.removed.map((entry) => (
+                      <DiffChip key={`rem-${entry.dimension}-${entry.id}`} entry={entry} operation="removed" />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-[3px] text-sm leading-normal text-ink-muted">
+                    {summarizeSelection(selection)}
+                  </p>
+                ))}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-2.5">
+              {!applied && (
+                <Button
+                  variant="primary"
+                  disabled={pending}
+                  onClick={() => void save()}
+                  className="min-h-11 rounded-full bg-cta px-[18px] text-sm shadow-none hover:bg-cta-dark"
+                >
+                  {savedSelection === null
+                    ? 'Enregistrer mes préférences'
+                    : 'Mettre à jour mes préférences'}
+                </Button>
+              )}
+              {diverging && (
+                <Button
+                  variant="outline"
+                  disabled={pending}
+                  onClick={onRestore}
+                  className="min-h-11 rounded-full px-[18px] text-sm"
+                >
+                  Revenir
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {failure !== null && (
+            <p role="alert" className="text-sm text-red-700">
+              {failure}
             </p>
           )}
+        </Collapsible.Content>
 
-          {diff !== null &&
-            (diff.added.length > 0 || diff.removed.length > 0 ? (
-              <ul className="mt-2 flex flex-wrap gap-1.5">
-                {diff.added.map((entry) => (
-                  <DiffChip key={`add-${entry.dimension}-${entry.id}`} entry={entry} operation="added" />
-                ))}
-                {diff.removed.map((entry) => (
-                  <DiffChip key={`rem-${entry.dimension}-${entry.id}`} entry={entry} operation="removed" />
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-[3px] text-sm leading-normal text-ink-muted">
-                {summarizeSelection(selection)}
-              </p>
-            ))}
-        </div>
-
-        <div className="flex shrink-0 flex-wrap gap-2.5">
-          {!applied && (
-            <Button
-              variant="primary"
-              disabled={pending}
-              onClick={() => void save()}
-              className="min-h-11 rounded-full bg-cta px-[18px] text-sm shadow-none hover:bg-cta-dark"
-            >
-              {savedSelection === null
-                ? 'Enregistrer mes préférences'
-                : 'Mettre à jour mes préférences'}
-            </Button>
-          )}
-          {diverging && (
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={onRestore}
-              className="min-h-11 rounded-full px-[18px] text-sm"
-            >
-              Revenir
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {failure !== null && (
-        <p role="alert" className="text-sm text-red-700">
-          {failure}
-        </p>
-      )}
-
-      {confirmation !== null && (
-        <PreferencesToast
-          kind={confirmation}
-          onDismiss={() => {
-            setConfirmation(null)
-          }}
-        />
-      )}
-    </section>
+        {confirmation !== null && (
+          <PreferencesToast
+            kind={confirmation}
+            onDismiss={() => {
+              setConfirmation(null)
+            }}
+          />
+        )}
+      </section>
+    </Collapsible.Root>
   )
 }
 
