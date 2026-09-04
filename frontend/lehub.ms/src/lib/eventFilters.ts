@@ -68,3 +68,22 @@ export function applyEventFilters(
 export function activeFilterCount(selection: EventFilterSelection): number {
   return selection.communityIds.length + selection.technologyIds.length
 }
+
+/**
+ * La sélection enregistrée, telle que l'API la rend : des entrées complètes, pas des
+ * identifiants nus.
+ *
+ * Rien n'est retiré au passage, pas même une entrée archivée. Elle n'apparaîtra pas dans les
+ * options — `deriveFilterOptions` l'exclut — mais elle continue de désigner les évènements qui
+ * la portent, et la conserver ici est ce qui la préserve à l'enregistrement suivant plutôt que
+ * de la perdre silencieusement.
+ */
+export function selectionFromRefs(
+  communities: NamedRef[],
+  technologies: NamedRef[],
+): EventFilterSelection {
+  return {
+    communityIds: communities.map((ref) => ref.id),
+    technologyIds: technologies.map((ref) => ref.id),
+  }
+}
