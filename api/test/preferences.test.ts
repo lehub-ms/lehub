@@ -125,9 +125,33 @@ describe('remplacement intégral de la sélection', () => {
       REPLACE_PREFERENCES_QUERY.indexOf('BEGIN TRANSACTION'),
     )
 
-    expect(guard).toContain("FROM dbo.Community WHERE Id = s.Id AND Status = 'active'")
-    expect(guard).toContain("FROM dbo.Technology WHERE Id = s.Id AND Status = 'active'")
+    expect(guard).toContain("c.Status = 'active'")
+    expect(guard).toContain("t.Status = 'active'")
     expect(guard).toContain("'unknown-reference' AS Outcome")
+  })
+
+  it('accepte une entrée archivée que le compte suivait déjà', () => {
+    // Sinon l'impasse : #195 affiche l'entrée archivée pas encore purgée, elle revient donc à
+    // chaque lecture, et un refus rendrait *tout* enregistrement ultérieur impossible tant que
+    // l'utilisateur n'aurait pas tout réinitialisé. La garde ne vise que ce qu'on vient de
+    // cocher alors que ça venait de disparaître.
+    const guard = REPLACE_PREFERENCES_QUERY.slice(
+      0,
+      REPLACE_PREFERENCES_QUERY.indexOf('BEGIN TRANSACTION'),
+    )
+
+    expect(guard).toContain('FROM dbo.UserPreferredCommunity AS p')
+    expect(guard).toContain('FROM dbo.UserPreferredTechnology AS p')
+    expect(guard).toMatch(/p\.UserObjectId = @objectId AND p\.CommunityId = s\.Id/)
+    expect(guard).toMatch(/p\.UserObjectId = @objectId AND p\.TechnologyId = s\.Id/)
+  })
+
+  it('referme XACT_ABORT après le commit, sur les deux écritures', () => {
+    // C'est un réglage de *connexion*, et la connexion est mutualisée : laissé actif, il suit le
+    // pool dans toutes les requêtes suivantes. `eventsRepo` a établi la convention.
+    for (const query of [REPLACE_PREFERENCES_QUERY, DELETE_PREFERENCES_QUERY]) {
+      expect(query.indexOf('SET XACT_ABORT OFF')).toBeGreaterThan(query.indexOf('COMMIT TRANSACTION'))
+    }
   })
 
   it('refuse un compte sans ligne miroir plutôt que d’enregistrer dans le vide', () => {

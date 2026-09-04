@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { Check, ChevronDown, Star } from 'lucide-react'
@@ -38,6 +38,29 @@ export interface PreferencesBarProps {
 type Confirmation = 'created' | 'updated'
 
 /**
+ * Les refus, du point de vue de ce que l'utilisateur peut en faire.
+ *
+ * `stale` et `unmirrored` ne se réparent pas en réessayant : le référentiel a bougé pour l'un,
+ * la session n'a pas de ligne miroir pour l'autre (l'API répond alors `ACCOUNT_NOT_MIRRORED`,
+ * qu'un `me/session` réussi est seul à lever). Les confondre avec une panne passagère
+ * enverrait marteler un bouton qui ne passera jamais.
+ */
+type FailureKind = 'stale' | 'unmirrored' | 'transient'
+
+const FAILURE_MESSAGES: Record<FailureKind, string> = {
+  stale: 'Une entrée de votre sélection n’existe plus. Rechargez la page pour repartir de ce qui est proposé.',
+  unmirrored: 'Votre compte n’est pas encore initialisé côté LeHub. Reconnectez-vous, puis réessayez.',
+  transient: 'Vos préférences n’ont pas pu être enregistrées. Réessayez dans un instant.',
+}
+
+function failureKind(error: unknown): FailureKind {
+  if (!(error instanceof ApiError)) return 'transient'
+  if (error.code === 'PREFERENCE_REFERENCE_UNKNOWN') return 'stale'
+  if (error.code === 'ACCOUNT_NOT_MIRRORED') return 'unmirrored'
+  return 'transient'
+}
+
+/**
  * La barre « Mes préférences », sous session uniquement.
  *
  * Trois états **dérivés** et jamais stockés : sans préférence enregistrée elle propose
@@ -70,6 +93,24 @@ export function PreferencesBar({
 
   const narrow = useMediaQuery(NARROW_MEDIA_QUERY)
   const footerOverlap = useFooterOverlap(narrow)
+
+  /**
+   * Stable, et c'est ce qui compte : passée en flèche anonyme, elle changeait d'identité à chaque
+   * rendu de la barre — donc à chaque case cochée — et le minuteur de la confirmation se
+   * réarmait, la laissant à l'écran tant que l'utilisateur continuait de régler ses filtres.
+   */
+  const dismissConfirmation = useCallback(() => {
+    setConfirmation(null)
+  }, [])
+
+  /**
+   * « Revenir » démonte le bouton qui vient d'être actionné : sans ce déplacement, le focus
+   * retomberait sur `<body>`. Même geste que sur le chemin d'enregistrement, pour la même raison.
+   */
+  function restore() {
+    onRestore()
+    statusRef.current?.focus()
+  }
 
   const applied = savedSelection !== null && sameFilterSelection(savedSelection, selection)
   const diverging = savedSelection !== null && !applied
@@ -130,12 +171,9 @@ export function PreferencesBar({
         return
       }
       // La sélection courante n'est pas perdue : la barre reste en divergence, et le message dit
-      // quoi faire plutôt que ce qui a cassé.
-      setFailure(
-        error instanceof ApiError && error.code === 'PREFERENCE_REFERENCE_UNKNOWN'
-          ? 'Une entrée de votre sélection n’existe plus. Rechargez la page pour repartir de ce qui est proposé.'
-          : 'Vos préférences n’ont pas pu être enregistrées. Réessayez dans un instant.',
-      )
+      // quoi faire plutôt que ce qui a cassé. « Réessayez » est réservé à ce qu'un nouvel essai
+      // peut effectivement réparer — le proposer sur un refus définitif ferait boucler.
+      setFailure(FAILURE_MESSAGES[failureKind(error)])
     } finally {
       setPending(false)
     }
@@ -252,7 +290,7 @@ export function PreferencesBar({
                 <Button
                   variant="outline"
                   disabled={pending}
-                  onClick={onRestore}
+                  onClick={restore}
                   className="min-h-11 min-w-0 flex-1 rounded-full px-[18px] text-sm lg:flex-none"
                 >
                   Revenir
@@ -269,12 +307,7 @@ export function PreferencesBar({
         </Collapsible.Content>
 
         {confirmation !== null && (
-          <PreferencesToast
-            kind={confirmation}
-            onDismiss={() => {
-              setConfirmation(null)
-            }}
-          />
+          <PreferencesToast kind={confirmation} onDismiss={dismissConfirmation} />
         )}
       </section>
     </Collapsible.Root>

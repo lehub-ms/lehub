@@ -189,6 +189,11 @@ export async function createTechnology(
  * supprime rien tant que l'entrée n'est pas archivée. Une constante vaut mieux qu'une branche —
  * elle s'assertionne, et il n'y a pas de chemin où on a oublié de l'ajouter.
  *
+ * Même lot, mais **pas** même transaction : ce sont deux instructions en validation implicite.
+ * Une purge qui échoue laisse donc l'entrée archivée et encore suivie. C'est exactement l'état
+ * que #195 affiche, et `preferencesRepo` le rend inoffensif en continuant d'accepter à
+ * l'enregistrement une entrée archivée déjà présente dans la sélection.
+ *
  * La réactivation ne restaure pas les préférences supprimées : conséquence assumée, la sélection
  * se refait sur la page Évènements.
  */

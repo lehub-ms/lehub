@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@lehub/shared/auth/useAuth'
 import { getMyPreferences, type EventPreferences } from '@/lib/api'
 
@@ -27,6 +27,9 @@ export interface EventPreferencesHandle {
   applySaved: (preferences: EventPreferences) => void
 }
 
+/** Au-delà, la page cesse d'attendre les préférences et s'ouvre sans filtre. */
+const PREFERENCES_TIMEOUT_MS = 8000
+
 type Settled = { owner: string } & ({ preferences: EventPreferences } | { error: unknown })
 
 /**
@@ -54,17 +57,33 @@ export function useEventPreferences(): EventPreferencesHandle {
     if (!authenticated) return
 
     let cancelled = false
+    const settle = (value: Settled) => {
+      if (!cancelled) setSettled(value)
+    }
 
     getMyPreferences()
       .then((preferences) => {
-        if (!cancelled) setSettled({ owner, preferences })
+        settle({ owner, preferences })
       })
       .catch((error: unknown) => {
-        if (!cancelled) setSettled({ owner, error })
+        settle({ owner, error })
       })
+
+    /**
+     * La page entière attend cette réponse (#192 retient la peinture jusqu'à ce que la sélection
+     * soit connue). `apiFetch` ne pose aucun délai maximal, donc une requête qui ne retombe
+     * jamais — une connexion qui pend, pas un rejet — laisserait un visiteur connecté sur des
+     * squelettes indéfiniment, sur une page par ailleurs publique. Passé ce délai, on abandonne
+     * les préférences et la page s'ouvre sans filtre : c'est exactement le repli que la Story
+     * demande sur échec, appliqué à l'échec qui ne se déclare pas.
+     */
+    const timeout = setTimeout(() => {
+      settle({ owner, error: new Error('preferences-timeout') })
+    }, PREFERENCES_TIMEOUT_MS)
 
     return () => {
       cancelled = true
+      clearTimeout(timeout)
     }
   }, [authenticated, owner])
 
@@ -75,16 +94,23 @@ export function useEventPreferences(): EventPreferencesHandle {
     [owner],
   )
 
-  // Ce qui a été lu pour quelqu'un d'autre ne vaut pas pour celui-ci.
-  const current = settled?.owner === owner ? settled : null
+  const state = useMemo<EventPreferencesState>(() => {
+    // Ce qui a été lu pour quelqu'un d'autre ne vaut pas pour celui-ci.
+    const current = settled?.owner === owner ? settled : null
 
-  // Une session encore en cours de restauration se lit comme un chargement, et non comme une
-  // absence de session : c'est ce qui empêche la page de s'ouvrir sans filtre avant de se
-  // rétracter une fois la session revenue.
-  if (auth.status === 'loading') return { state: { status: 'loading' }, applySaved }
-  if (!authenticated) return { state: { status: 'anonymous' }, applySaved }
-  if (current === null) return { state: { status: 'loading' }, applySaved }
-  if ('error' in current) return { state: { status: 'error' }, applySaved }
+    // Une session encore en cours de restauration se lit comme un chargement, et non comme une
+    // absence de session : c'est ce qui empêche la page de s'ouvrir sans filtre avant de se
+    // rétracter une fois la session revenue.
+    if (auth.status === 'loading') return { status: 'loading' }
+    if (auth.status !== 'authenticated') return { status: 'anonymous' }
+    if (current === null) return { status: 'loading' }
+    if ('error' in current) return { status: 'error' }
 
-  return { state: { status: 'ready', preferences: current.preferences }, applySaved }
+    return { status: 'ready', preferences: current.preferences }
+  }, [auth.status, owner, settled])
+
+  // Mémoïsé, et pas par confort : `EventsPage` liste cet état parmi les dépendances de trois
+  // `useMemo`. Un objet neuf à chaque rendu les rendait tous inopérants — dont celui qui
+  // reconstruit la table des noms sur l'intégralité des options.
+  return useMemo(() => ({ state, applySaved }), [state, applySaved])
 }

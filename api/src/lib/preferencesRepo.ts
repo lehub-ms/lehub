@@ -9,7 +9,13 @@ import { getPool } from './sqlClient'
  * Ce module est le seul à écrire `dbo.UserPreferredCommunity` et `dbo.UserPreferredTechnology`,
  * et le seul à écrire `dbo.[User].CalendarToken` — à une exception près, la purge à l'archivage
  * d'une entrée de référentiel, qui vit dans `communitiesRepo` / `technologiesRepo` parce qu'elle
- * doit tenir dans la même transaction que le changement de statut.
+ * doit partir dans le même aller-retour que le changement de statut.
+ *
+ * Ce lot n'est pas transactionnel, et c'est assumé : si la purge échoue après l'archivage,
+ * l'entrée reste suivie par des comptes alors qu'elle n'est plus proposée. Cet état est celui
+ * que #195 décrit et affiche (« entrée archivée pas encore purgée »), et l'enregistrement
+ * continue de fonctionner — voir la garde de `REPLACE_PREFERENCES_QUERY`, qui tolère une entrée
+ * archivée **déjà enregistrée** précisément pour ne pas transformer cette situation en impasse.
  *
  * L'invariant qui compte, et que les tests assertionnent sur le texte SQL lui-même : le jeton est
  * frappé au **premier** enregistrement et jamais aux suivants. C'est `COALESCE(CalendarToken,
@@ -86,17 +92,25 @@ ${SELECT_PREFERRED_REFS}
 `
 
 /**
- * Le remplacement intégral, en un seul aller-retour et une seule transaction.
+ * Le remplacement intégral, en un seul aller-retour.
  *
  * `XACT_ABORT ON` : une erreur d'exécution au milieu du lot annule tout plutôt que de laisser la
  * transaction ouverte sur une moitié d'écriture. Les deux DELETE et les deux INSERT tiennent donc
  * ensemble — c'est ce qui donne « la dernière écriture gagne, sans ligne orpheline ni état
  * intermédiaire lisible » de #191 : un lecteur concurrent attend les verrous et obtient
- * l'ensemble précédent, jamais un ensemble à moitié remplacé.
+ * l'ensemble précédent, jamais un ensemble à moitié remplacé. Il est refermé après le commit
+ * parce que c'est un réglage de **connexion**, et que la connexion est mutualisée — le
+ * raisonnement complet est dans `eventsRepo`, qui a établi la convention.
  *
- * La validation précède l'écriture *dans la même transaction*, ce qui interdit l'écriture
- * partielle qu'un contrôle préalable en deux requêtes rendrait possible : entre les deux, une
- * entrée peut être archivée.
+ * La validation précède le `BEGIN TRANSACTION` plutôt que de le suivre : rien n'est écrit puis
+ * défait, donc « sans écriture partielle » ne dépend pas du rollback.
+ *
+ * **Une entrée archivée déjà enregistrée reste acceptée.** Refuser tout ce qui n'est pas
+ * `active` paraissait naturel, mais #195 décrit et affiche l'entrée archivée pas encore purgée :
+ * une fois dans la sélection, elle revient à chaque lecture, et un refus la rendrait
+ * inexpugnable — plus aucun enregistrement ne passerait tant que l'utilisateur n'aurait pas tout
+ * réinitialisé. La garde refuse donc l'inconnu et l'archivé *qu'on n'avait pas déjà*, ce qui
+ * couvre le seul cas qu'elle vise : cocher une entrée qui vient de disparaître.
  *
  * Le compte est vérifié en premier. Un jeton parfaitement valide dont la ligne miroir n'a pas
  * encore été écrite (`me/session` jamais appelé) ferait autrement échouer les clés étrangères en
@@ -108,6 +122,7 @@ SET XACT_ABORT ON;
 
 DECLARE @submittedCommunities TABLE (Id UNIQUEIDENTIFIER PRIMARY KEY);
 DECLARE @submittedTechnologies TABLE (Id UNIQUEIDENTIFIER PRIMARY KEY);
+DECLARE @unknown TABLE (Id UNIQUEIDENTIFIER, Dimension NVARCHAR(20));
 
 INSERT INTO @submittedCommunities (Id)
 SELECT DISTINCT CAST(value AS UNIQUEIDENTIFIER) FROM OPENJSON(@communityIds);
@@ -115,23 +130,31 @@ SELECT DISTINCT CAST(value AS UNIQUEIDENTIFIER) FROM OPENJSON(@communityIds);
 INSERT INTO @submittedTechnologies (Id)
 SELECT DISTINCT CAST(value AS UNIQUEIDENTIFIER) FROM OPENJSON(@technologyIds);
 
+INSERT INTO @unknown (Id, Dimension)
+SELECT s.Id, 'community' FROM @submittedCommunities AS s
+WHERE NOT EXISTS (
+  SELECT 1 FROM dbo.Community AS c
+  WHERE c.Id = s.Id
+    AND (c.Status = 'active'
+         OR EXISTS (SELECT 1 FROM dbo.UserPreferredCommunity AS p
+                    WHERE p.UserObjectId = @objectId AND p.CommunityId = s.Id))
+)
+UNION ALL
+SELECT s.Id, 'technology' FROM @submittedTechnologies AS s
+WHERE NOT EXISTS (
+  SELECT 1 FROM dbo.Technology AS t
+  WHERE t.Id = s.Id
+    AND (t.Status = 'active'
+         OR EXISTS (SELECT 1 FROM dbo.UserPreferredTechnology AS p
+                    WHERE p.UserObjectId = @objectId AND p.TechnologyId = s.Id))
+);
+
 IF NOT EXISTS (SELECT 1 FROM dbo.[User] WHERE ExternalIdObjectId = @objectId)
   SELECT 'account-not-found' AS Outcome;
-ELSE IF EXISTS (
-    SELECT 1 FROM @submittedCommunities AS s
-    WHERE NOT EXISTS (SELECT 1 FROM dbo.Community WHERE Id = s.Id AND Status = 'active')
-  ) OR EXISTS (
-    SELECT 1 FROM @submittedTechnologies AS s
-    WHERE NOT EXISTS (SELECT 1 FROM dbo.Technology WHERE Id = s.Id AND Status = 'active')
-  )
+ELSE IF EXISTS (SELECT 1 FROM @unknown)
 BEGIN
   SELECT 'unknown-reference' AS Outcome;
-
-  SELECT s.Id, 'community' AS Dimension FROM @submittedCommunities AS s
-  WHERE NOT EXISTS (SELECT 1 FROM dbo.Community WHERE Id = s.Id AND Status = 'active')
-  UNION ALL
-  SELECT s.Id, 'technology' FROM @submittedTechnologies AS s
-  WHERE NOT EXISTS (SELECT 1 FROM dbo.Technology WHERE Id = s.Id AND Status = 'active');
+  SELECT Id, Dimension FROM @unknown;
 END
 ELSE
 BEGIN
@@ -151,6 +174,7 @@ BEGIN
   WHERE ExternalIdObjectId = @objectId;
 
   COMMIT TRANSACTION;
+  SET XACT_ABORT OFF;
 
   SELECT 'saved' AS Outcome;
 ${SELECT_PREFERRED_REFS}
@@ -178,6 +202,7 @@ DELETE FROM dbo.UserPreferredTechnology WHERE UserObjectId = @objectId;
 UPDATE dbo.[User] SET CalendarToken = NULL WHERE ExternalIdObjectId = @objectId;
 
 COMMIT TRANSACTION;
+SET XACT_ABORT OFF;
 `
 
 function mapRef(media: MediaConfig) {
