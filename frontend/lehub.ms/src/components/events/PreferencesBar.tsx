@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { Check, ChevronDown, Star } from 'lucide-react'
 import { Button } from '@lehub/shared/components/Button'
@@ -176,7 +177,10 @@ export function PreferencesBar({
         )}
 
         <Collapsible.Content className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          {/* En colonne tant qu'on est à l'étroit, en ligne au large. Une seule ligne partagée
+              sous 1024px écrase le texte à quelques dizaines de pixels — les puces s'y coupent
+              lettre par lettre et le titre passe à la ligne au milieu d'un mot. */}
+          <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5">
             {/* Seuls le titre et le résumé sont annoncés : la barre entière se re-rend à chaque
                 changement de case, et une région live posée dessus rejouerait tout à chaque fois. */}
             <div
@@ -185,7 +189,9 @@ export function PreferencesBar({
               role="status"
               aria-live="polite"
               aria-atomic="true"
-              className="min-w-0 flex-1 outline-none"
+              // `min-w-[240px]` au large : sans plancher, un bouton d'action large réduit la
+              // colonne de texte jusqu'à la rendre illisible.
+              className="min-w-0 outline-none lg:min-w-[240px] lg:flex-1"
             >
               <p className="flex flex-wrap items-center gap-2 font-heading text-base font-bold text-ink">
                 {!diverging && <Star aria-hidden="true" className="size-[17px] shrink-0 fill-primary text-primary" />}
@@ -196,7 +202,7 @@ export function PreferencesBar({
                     : 'Filtres modifiés'}
                 {applied && <span className="text-sm font-normal text-ink-muted">appliquées</span>}
                 {diverging && (
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-[5px] text-xs font-semibold text-primary">
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-primary/10 px-3 py-[5px] text-xs font-semibold whitespace-nowrap text-primary">
                     non enregistré
                   </span>
                 )}
@@ -227,13 +233,15 @@ export function PreferencesBar({
                 ))}
             </div>
 
-            <div className="flex shrink-0 flex-wrap gap-2.5">
+            {/* À l'étroit les deux actions se partagent la largeur ; au large elles reprennent
+                leur taille propre et cessent de pousser la colonne de texte. */}
+            <div className="flex flex-wrap gap-2.5 lg:shrink-0">
               {!applied && (
                 <Button
                   variant="primary"
                   disabled={pending}
                   onClick={() => void save()}
-                  className="min-h-11 rounded-full bg-cta px-[18px] text-sm shadow-none hover:bg-cta-dark"
+                  className="min-h-11 min-w-0 flex-1 rounded-full bg-cta px-[18px] text-sm shadow-none hover:bg-cta-dark lg:flex-none"
                 >
                   {savedSelection === null
                     ? 'Enregistrer mes préférences'
@@ -245,7 +253,7 @@ export function PreferencesBar({
                   variant="outline"
                   disabled={pending}
                   onClick={onRestore}
-                  className="min-h-11 rounded-full px-[18px] text-sm"
+                  className="min-h-11 min-w-0 flex-1 rounded-full px-[18px] text-sm lg:flex-none"
                 >
                   Revenir
                 </Button>
@@ -290,7 +298,9 @@ function DiffChip({
   return (
     <li
       className={cn(
-        'inline-flex items-center rounded-full border px-[11px] py-1 text-xs font-semibold',
+        // `whitespace-nowrap` : une puce se replie **entre** puces, jamais à l'intérieur d'un
+        // nom. Sans lui, « Azure User Group France » se casse en quatre lignes d'un mot.
+        'inline-flex items-center rounded-full border px-[11px] py-1 text-xs font-semibold whitespace-nowrap',
         operation === 'added'
           ? 'border-primary/22 bg-white/75 text-primary'
           : 'border-ink-muted/28 bg-white/75 text-ink-muted line-through',
@@ -324,9 +334,17 @@ const TOAST_DURATION_MS = 6000
 /**
  * La confirmation.
  *
- * En bas au large, **en haut sous 1024px** — là où l'encart fixe des préférences la
- * recouvrirait (#194). Non interactive : elle s'annonce, elle ne capture ni le focus ni le
- * pointeur, et elle s'efface d'elle-même.
+ * **Portée dans `document.body`, et c'est indispensable** : la barre rend `glass-strong`, donc
+ * `backdrop-filter`, et une propriété de filtre fait de l'élément un bloc conteneur pour ses
+ * descendants `position: fixed`. Rendu à l'intérieur de la barre, ce `fixed` se plaçait par
+ * rapport à elle — la confirmation apparaissait au milieu de la page, posée sur l'encart.
+ *
+ * En haut à droite au large, centrée en haut à l'étroit. La maquette la posait en bas au centre
+ * sur grand écran ; le placement retenu est celui demandé par le mainteneur, et il est dû en
+ * retour au projet Claude Design. En haut dans les deux cas de toute façon sous 1024px, là où
+ * l'encart fixe la recouvrirait (#194).
+ *
+ * Non interactive : elle s'annonce, ne capture ni le focus ni le pointeur, et s'efface seule.
  */
 function PreferencesToast({ kind, onDismiss }: { kind: Confirmation; onDismiss: () => void }) {
   const { title, detail } = CONFIRMATIONS[kind]
@@ -338,10 +356,10 @@ function PreferencesToast({ kind, onDismiss }: { kind: Confirmation; onDismiss: 
     }
   }, [onDismiss])
 
-  return (
+  return createPortal(
     <div
       role="status"
-      className="pointer-events-none fixed top-[84px] left-1/2 z-[320] flex max-w-[min(440px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-[14px] border border-primary/18 bg-white/96 px-[18px] py-3.5 shadow-[0_12px_40px_rgb(0_95_184/0.18)] backdrop-blur-[20px] lg:top-auto lg:bottom-7"
+      className="pointer-events-none fixed top-[84px] left-1/2 z-[320] flex max-w-[min(440px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-[14px] border border-primary/18 bg-white/96 px-[18px] py-3.5 shadow-[0_12px_40px_rgb(0_95_184/0.18)] backdrop-blur-[20px] lg:top-28 lg:right-6 lg:left-auto lg:translate-x-0"
     >
       <span className="mt-px flex size-[26px] shrink-0 items-center justify-center rounded-full bg-primary-xs text-primary">
         <Check aria-hidden="true" className="size-[18px]" strokeWidth={2.2} />
@@ -350,6 +368,7 @@ function PreferencesToast({ kind, onDismiss }: { kind: Confirmation; onDismiss: 
         <p className="font-heading text-[0.9375rem] font-bold text-ink">{title}</p>
         <p className="mt-0.5 text-[0.8125rem] leading-normal text-ink-muted">{detail}</p>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

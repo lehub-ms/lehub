@@ -248,6 +248,24 @@ describe('barre de préférences — revenir et enregistrer', () => {
     expect(screen.getByText(/Aucun réabonnement nécessaire/)).not.toBeNull()
   })
 
+  it('rend la confirmation hors de la barre, pas dedans', async () => {
+    // La barre rend `glass-strong`, donc `backdrop-filter` — et une propriété de filtre fait de
+    // l'élément un bloc conteneur pour ses descendants `position: fixed`. Rendue à l'intérieur,
+    // la confirmation se plaçait par rapport à la barre et atterrissait au milieu de la page.
+    stubApi({ preferences: { saved: true, communities: [PARIS], technologies: [] } })
+    renderAt('/evenements')
+
+    await waitFor(() => {
+      expect(within(bar()).getByText('Mes préférences')).not.toBeNull()
+    })
+
+    await toggle(/community 2/i)
+    await user.click(within(bar()).getByRole('button', { name: 'Mettre à jour mes préférences' }))
+
+    const toast = await screen.findByText('Préférences mises à jour')
+    expect(bar().contains(toast)).toBe(false)
+  })
+
   it('enregistre une sélection vidée, qui vaut « tous les évènements »', async () => {
     // Tout décocher alors que des préférences existent est une divergence légitime et
     // enregistrable — pas une demande de suppression.
