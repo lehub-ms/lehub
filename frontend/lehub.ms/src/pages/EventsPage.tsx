@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { CalendarX, SearchX } from 'lucide-react'
 import { EmptyState } from '@lehub/shared/components/EmptyState'
 import { ErrorState } from '@lehub/shared/components/ErrorState'
@@ -6,7 +7,9 @@ import { EventCard } from '@/components/events/EventCard'
 import { EventCardSkeleton } from '@/components/events/EventCardSkeleton'
 import { EventFilterDrawer } from '@/components/events/EventFilterDrawer'
 import { EventFilterPanel } from '@/components/events/EventFilterPanel'
+import { PreferencesBar } from '@/components/events/PreferencesBar'
 import { useEventPreferences } from '@/hooks/useEventPreferences'
+import { PATHS } from '@/lib/navigation'
 import { useUpcomingEvents } from '@/hooks/useUpcomingEvents'
 import {
   applyEventFilters,
@@ -28,6 +31,7 @@ function countLabel(count: number): string {
 const NO_EVENTS: EventSummary[] = []
 
 export function EventsPage() {
+  const navigate = useNavigate()
   const upcoming = useUpcomingEvents()
   const preferences = useEventPreferences()
   const preferencesState = preferences.state
@@ -82,6 +86,29 @@ export function EventsPage() {
    */
   const ready = upcoming.status === 'success' && preferencesState.status !== 'loading'
 
+  /**
+   * Les noms dont l'écart a besoin : ceux du filtrage, **complétés par ceux de la sélection
+   * enregistrée**.
+   *
+   * Une entrée archivée quitte les options mais peut encore être enregistrée. Sans ce
+   * complément, l'écart l'annoncerait par un identifiant nu au moment où on la retire.
+   */
+  const names = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const option of [...options.communities, ...options.technologies]) {
+      map.set(option.id, option.name)
+    }
+    if (preferencesState.status === 'ready') {
+      for (const ref of [
+        ...preferencesState.preferences.communities,
+        ...preferencesState.preferences.technologies,
+      ]) {
+        map.set(ref.id, ref.name)
+      }
+    }
+    return map
+  }, [options, preferencesState])
+
   function resetFilters() {
     setOverride(EMPTY_FILTER_SELECTION)
   }
@@ -121,6 +148,23 @@ export function EventsPage() {
           />
         )}
       </div>
+
+      {/* Pleine largeur, au-dessus de la grille — et avant elle dans le DOM, pour que l'ordre de
+          focus suive l'ordre visuel au large comme il suivra l'ancrage en bas sur mobile. */}
+      {ready && preferencesState.status === 'ready' && (
+        <PreferencesBar
+          savedSelection={preferencesState.preferences.saved ? savedSelection : null}
+          selection={selection}
+          names={names}
+          onRestore={() => {
+            setOverride(null)
+          }}
+          onSaved={preferences.applySaved}
+          onSessionExpired={() => {
+            void navigate(PATHS.signIn, { state: { from: PATHS.events } })
+          }}
+        />
+      )}
 
       <div className="mt-10 flex items-start gap-8">
         <div className="min-w-0 flex-1">

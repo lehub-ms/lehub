@@ -70,6 +70,86 @@ export function activeFilterCount(selection: EventFilterSelection): number {
 }
 
 /**
+ * Deux sélections portent-elles le même ensemble d'entrées ?
+ *
+ * Ensembliste, et c'est tout l'intérêt : cocher A puis B, ou B puis A, donne la même sélection,
+ * et la barre de préférences ne doit pas y voir une divergence. Une comparaison de tableaux
+ * position par position en verrait une à chaque fois.
+ */
+function sameIds(a: string[], b: string[]): boolean {
+  const left = new Set(a)
+  const right = new Set(b)
+  return left.size === right.size && [...left].every((id) => right.has(id))
+}
+
+export function sameFilterSelection(a: EventFilterSelection, b: EventFilterSelection): boolean {
+  return (
+    sameIds(a.communityIds, b.communityIds) && sameIds(a.technologyIds, b.technologyIds)
+  )
+}
+
+/** Une entrée de l'écart, nommée — un compte dirait qu'il y a une différence, pas laquelle. */
+export interface FilterDiffEntry {
+  id: string
+  name: string
+  dimension: 'community' | 'technology'
+}
+
+export interface FilterDiff {
+  added: FilterDiffEntry[]
+  removed: FilterDiffEntry[]
+}
+
+/**
+ * Ce qui a été ajouté et ce qui a été retiré depuis la sélection enregistrée.
+ *
+ * `names` résout un identifiant en nom. Il reçoit les options du filtrage **complétées par les
+ * entrées enregistrées**, parce qu'une entrée retirée peut être archivée : elle n'est plus
+ * proposée nulle part, et sans ce complément l'écart l'annoncerait par un identifiant nu.
+ */
+export function diffFilterSelection(
+  saved: EventFilterSelection,
+  current: EventFilterSelection,
+  names: ReadonlyMap<string, string>,
+): FilterDiff {
+  const entries = (
+    ids: string[],
+    against: string[],
+    dimension: FilterDiffEntry['dimension'],
+  ): FilterDiffEntry[] => {
+    const other = new Set(against)
+    return [...new Set(ids)]
+      .filter((id) => !other.has(id))
+      .map((id) => ({ id, name: names.get(id) ?? id, dimension }))
+  }
+
+  return {
+    added: [
+      ...entries(current.communityIds, saved.communityIds, 'community'),
+      ...entries(current.technologyIds, saved.technologyIds, 'technology'),
+    ],
+    removed: [
+      ...entries(saved.communityIds, current.communityIds, 'community'),
+      ...entries(saved.technologyIds, current.technologyIds, 'technology'),
+    ],
+  }
+}
+
+/** « 3 communautés · 2 technologies », ou ce que vaut une sélection vide. */
+export function summarizeSelection(selection: EventFilterSelection): string {
+  const parts: string[] = []
+  const communities = new Set(selection.communityIds).size
+  const technologies = new Set(selection.technologyIds).size
+
+  if (communities > 0) parts.push(`${communities} communauté${communities > 1 ? 's' : ''}`)
+  if (technologies > 0) parts.push(`${technologies} technologie${technologies > 1 ? 's' : ''}`)
+
+  // Une sélection vide se *dit*, elle ne se laisse pas deviner d'un résumé absent : enregistrer
+  // « tous les évènements » est un choix, et la barre doit l'énoncer comme tel.
+  return parts.length === 0 ? 'Tous les évènements — aucun filtre' : parts.join(' · ')
+}
+
+/**
  * La sélection enregistrée, telle que l'API la rend : des entrées complètes, pas des
  * identifiants nus.
  *
