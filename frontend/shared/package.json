@@ -21,6 +21,7 @@
     "./components/LinkButton": "./src/components/LinkButton.tsx",
     "./components/EmptyState": "./src/components/EmptyState.tsx",
     "./components/ErrorState": "./src/components/ErrorState.tsx",
+    "./components/RequireSession": "./src/components/RequireSession.tsx",
     "./*": "./src/*.ts"
   },
   "scripts": {

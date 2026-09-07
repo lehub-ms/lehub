@@ -66,13 +66,11 @@ export function AccountMenu({ className, onNavigate }: { className?: string; onN
           sideOffset={8}
           className="z-[400] min-w-[12.5rem] rounded-xl border border-slate-900/12 bg-white p-1.5 shadow-[0_10px_30px_rgb(0_0_0/0.12)]"
         >
-          {/* #103 livrera la page. En attendant, l'entrée est là comme la story l'exige,
-              sans mener à une 404 — même arbitrage que le CTA de la page d'accueil avant
-              que l'inscription n'existe. */}
-          <DropdownMenu.Item disabled className={cn(ITEM, 'text-ink-muted data-disabled:cursor-default')}>
-            <UserRound aria-hidden="true" className="size-4" />
-            Mon profil
-            <span className="sr-only">— bientôt disponible</span>
+          <DropdownMenu.Item asChild className={ITEM}>
+            <Link to={PATHS.profile} onClick={onNavigate}>
+              <UserRound aria-hidden="true" className="size-4" />
+              Mon profil
+            </Link>
           </DropdownMenu.Item>
 
           {managesSomething ? (

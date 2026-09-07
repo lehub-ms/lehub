@@ -176,6 +176,33 @@ export async function createTechnology(
   return { ok: true, technology: mapAdminTechnology(media)(row) }
 }
 
+/**
+ * Archiver une technologie la retire des préférences de tous les comptes (#191).
+ *
+ * Une préférence ne doit pas survivre à ce que l'utilisateur ne peut plus ni voir dans ses
+ * filtres, ni retirer lui-même : elle continuerait d'alimenter son agenda depuis un écran qui ne
+ * la montre plus. C'est le pendant exact de la règle de #155 sur les rattachements d'évènements —
+ * sauf que là, l'attachement passé doit survivre, et ici la préférence future ne le doit pas.
+ *
+ * Le fragment se garde lui-même sur le statut plutôt que d'être ajouté au coup par coup selon le
+ * patch : posé **après** l'UPDATE, il lit le statut que celui-ci vient d'écrire, donc il ne
+ * supprime rien tant que l'entrée n'est pas archivée. Une constante vaut mieux qu'une branche —
+ * elle s'assertionne, et il n'y a pas de chemin où on a oublié de l'ajouter.
+ *
+ * Même lot, mais **pas** même transaction : ce sont deux instructions en validation implicite.
+ * Une purge qui échoue laisse donc l'entrée archivée et encore suivie. C'est exactement l'état
+ * que #195 affiche, et `preferencesRepo` le rend inoffensif en continuant d'accepter à
+ * l'enregistrement une entrée archivée déjà présente dans la sélection.
+ *
+ * La réactivation ne restaure pas les préférences supprimées : conséquence assumée, la sélection
+ * se refait sur la page Évènements.
+ */
+export const PURGE_TECHNOLOGY_PREFERENCES = `
+DELETE FROM dbo.UserPreferredTechnology
+WHERE TechnologyId = @id
+  AND EXISTS (SELECT 1 FROM dbo.Technology WHERE Id = @id AND Status = 'archived');
+`
+
 /** The only place a request key becomes a column name. See the community repository. */
 const UPDATABLE_COLUMNS = {
   name: { column: 'Name', type: sql.NVarChar(200) },
@@ -207,7 +234,9 @@ export async function updateTechnology(
 
   let rows: AdminTechnologyRow[]
   try {
-    const result = await request.query<AdminTechnologyRow>(`${update}${SELECT_ADMIN_TECHNOLOGY}`)
+    const result = await request.query<AdminTechnologyRow>(
+      `${update}${PURGE_TECHNOLOGY_PREFERENCES}${SELECT_ADMIN_TECHNOLOGY}`,
+    )
     rows = result.recordset
   } catch (error) {
     if (isUniqueViolation(error)) return { ok: false, error: 'name-taken' }

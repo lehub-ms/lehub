@@ -108,10 +108,23 @@ describe('menu compte de la navigation', () => {
 
     const menu = await screen.findByRole('menu')
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    // Le premier élément est désactivé : le clavier atterrit donc sur le suivant.
+    // Le clavier atterrit sur le premier élément. Il fut un temps désactivé, en attendant que
+    // la page de profil existe (#195) ; il mène désormais quelque part.
     await waitFor(() =>
-      expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: /se déconnecter/i })),
+      expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: /mon profil/i })),
     )
+  })
+
+  it('mène à la page de profil', async () => {
+    stubSignedIn()
+    const { router } = renderAt(PATHS.home)
+
+    await user.click(await screen.findByRole('button', { name: /ada lovelace/i }))
+    await user.click(await screen.findByRole('menuitem', { name: /mon profil/i }))
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(PATHS.profile)
+    })
   })
 
   it('ramène à « Me connecter » à la déconnexion', async () => {

@@ -12,7 +12,12 @@ export const PATHS = {
   signUp: '/inscription',
   signIn: '/connexion',
   resetPassword: '/mot-de-passe-oublie',
+  /** Hors NAV_ITEMS comme les chemins d'authentification : on y arrive par le menu compte. */
+  profile: '/profil',
 } as const
+
+/** L'ancre du récapitulatif des préférences sur le profil (#195). */
+export const PREFERENCES_ANCHOR = 'mes-preferences'
 
 /**
  * L'adresse du backoffice, proposée depuis le menu compte aux seuls comptes habilités (#137).

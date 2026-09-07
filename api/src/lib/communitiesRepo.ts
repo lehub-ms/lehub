@@ -251,6 +251,20 @@ async function nameHoldingSlug(slug: string): Promise<string | null> {
  * from "absent". Only keys of this record ever reach the statement, and every value stays a
  * typed parameter, so nothing a caller sends is ever concatenated into SQL.
  */
+/**
+ * Archiver une communauté la retire des préférences de tous les comptes (#191).
+ *
+ * Le raisonnement complet est dans `technologiesRepo`, sur son propre
+ * `PURGE_TECHNOLOGY_PREFERENCES` : une préférence ne doit pas survivre à ce que l'utilisateur ne
+ * peut plus ni voir dans ses filtres, ni retirer lui-même. Comme lui, ce fragment se garde sur le
+ * statut et se pose après l'UPDATE.
+ */
+export const PURGE_COMMUNITY_PREFERENCES = `
+DELETE FROM dbo.UserPreferredCommunity
+WHERE CommunityId = @id
+  AND EXISTS (SELECT 1 FROM dbo.Community WHERE Id = @id AND Status = 'archived');
+`
+
 const UPDATABLE_COLUMNS = {
   name: { column: 'Name', type: sql.NVarChar(200) },
   slug: { column: 'Slug', type: sql.NVarChar(SLUG_COLUMN_LENGTH) },
@@ -285,7 +299,9 @@ export async function updateCommunity(
 
   let rows: AdminCommunityRow[]
   try {
-    const result = await request.query<AdminCommunityRow>(`${update}${SELECT_ADMIN_COMMUNITY}`)
+    const result = await request.query<AdminCommunityRow>(
+      `${update}${PURGE_COMMUNITY_PREFERENCES}${SELECT_ADMIN_COMMUNITY}`,
+    )
     rows = result.recordset
   } catch (error) {
     if (isUniqueViolation(error)) return refuseDuplicate(error, patch.slug)

@@ -1,43 +1,8 @@
-import type { ReactNode } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router'
-import { useAuth } from '@lehub/shared/auth/useAuth'
+import { createRequireSession } from '@lehub/shared/components/RequireSession'
 import { PATHS } from '@/lib/navigation'
 
 /**
- * La garde du backoffice, posée une fois sur la route qui porte toutes les autres.
- *
- * C'est ce qui rend une route non protégée impossible par construction plutôt que par
- * vigilance : ajouter un écran, c'est l'ajouter sous cette garde, et il n'y a pas d'autre
- * endroit où l'ajouter. Seules la connexion et la réinitialisation vivent en dehors.
- *
- * Elle ne décide rien sur le fond : l'API refuse à l'identique toute requête d'une session
- * absente ou non habilitée (#109). Ce composant évite seulement de faire découvrir ses
- * limites à l'utilisateur par un message d'erreur.
+ * La garde du backoffice. Le raisonnement vit dans le socle, avec la fabrique — les deux
+ * applications posent la même garde, et seule l'adresse de connexion les distingue.
  */
-export function RequireSession(): ReactNode {
-  const { state } = useAuth()
-  const location = useLocation()
-
-  // Pendant la restauration on n'affiche rien plutôt que le mauvais des deux états : montrer
-  // l'écran de connexion à quelqu'un qui a une session valide, le temps qu'elle se rétablisse,
-  // le renverrait s'authentifier sans raison.
-  if (state.status === 'loading') return null
-
-  if (state.status === 'anonymous') {
-    // La destination voyage dans l'état de navigation, pas dans l'URL : elle n'a pas à être
-    // partageable, et elle repasse par `safeRedirect` avant d'être suivie.
-    //
-    // Le fragment en fait partie. Aucune route du backoffice n'en porte aujourd'hui, mais le
-    // laisser tomber ici serait une perte silencieuse le jour où l'une en portera — et il
-    // coûte trois caractères tant qu'il est vide.
-    return (
-      <Navigate
-        to={PATHS.signIn}
-        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
-        replace
-      />
-    )
-  }
-
-  return <Outlet />
-}
+export const RequireSession = createRequireSession(PATHS.signIn)

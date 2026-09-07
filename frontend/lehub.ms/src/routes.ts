@@ -1,10 +1,12 @@
 import type { RouteObject } from 'react-router'
+import { RequireSession } from '@/components/RequireSession'
 import { RootLayout } from '@/components/RootLayout'
 import { PATHS } from '@/lib/navigation'
 import { HomePage } from '@/pages/HomePage'
 import { EventsPage } from '@/pages/EventsPage'
 import { LeHubPage } from '@/pages/LeHubPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { SignInPage } from '@/pages/SignInPage'
 import { SignUpPage } from '@/pages/SignUpPage'
@@ -28,6 +30,12 @@ export const routes: RouteObject[] = [
       { path: PATHS.signUp, caseSensitive: true, Component: SignUpPage },
       { path: PATHS.signIn, caseSensitive: true, Component: SignInPage },
       { path: PATHS.resetPassword, caseSensitive: true, Component: ResetPasswordPage },
+      {
+        // Le seul écran du site public qui appartient à un compte, donc la seule route sous
+        // garde. Le reste est l'agenda, qui est public par définition.
+        Component: RequireSession,
+        children: [{ path: PATHS.profile, caseSensitive: true, Component: ProfilePage }],
+      },
       { path: '*', Component: NotFoundPage },
     ],
   },
